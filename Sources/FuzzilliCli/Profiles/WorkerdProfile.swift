@@ -18,9 +18,10 @@ let workerdProfile = Profile(
     processArgs: { randomize in ["fuzzilli"] },
 
 
-    processEnv: [:],
+    processEnv: ["ASAN_OPTIONS" : "allocator_may_return_null=1:abort_on_error=1:symbolize=false:redzone=128", "UBSAN_OPTIONS" : "abort_on_error=1:symbolize=false:redzone=128"],
 
-    maxExecsBeforeRespawn: 1000,
+
+    maxExecsBeforeRespawn: 10000,
 
     timeout: 250,
 
@@ -38,8 +39,13 @@ let workerdProfile = Profile(
 
         // Check that common crash types are detected.
         ("fuzzilli('FUZZILLI_CRASH', 0)", .shouldCrash),
+        ("fuzzilli('FUZZILLI_CRASH', 1)", .shouldCrash),
         ("fuzzilli('FUZZILLI_CRASH', 2)", .shouldCrash),
         ("fuzzilli('FUZZILLI_CRASH', 3)", .shouldCrash),
+        ("fuzzilli('FUZZILLI_CRASH', 4)", .shouldCrash),
+        // doesn't crash in workerd
+        //("fuzzilli('FUZZILLI_CRASH', 5)", .shouldCrash),
+        ("fuzzilli('FUZZILLI_CRASH', 6)", .shouldCrash),
     ],
 
     additionalCodeGenerators: [],

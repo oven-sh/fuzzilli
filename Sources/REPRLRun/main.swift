@@ -56,16 +56,27 @@ func runREPRLTests() {
     var numFailures = 0
 
     func expect_success(_ code: String) {
-        if execute(code).status != 0 {
+        let result = execute(code)
+        if result.status != 0 {
             print("Execution of \"\(code)\" failed")
+            print("Status: \(result.status)")
+            print("========== Stdout ==========\n\(String(cString: reprl_fetch_stdout(ctx)))")
+            print("========== Stderr ==========\n\(String(cString: reprl_fetch_stderr(ctx)))")
             numFailures += 1
+        } else {
+            print("✓ \(code)")
         }
     }
 
     func expect_failure(_ code: String) {
-        if execute(code).status == 0 {
+        let result = execute(code)
+        if result.status == 0 {
             print("Execution of \"\(code)\" unexpectedly succeeded")
+            print("========== Stdout ==========\n\(String(cString: reprl_fetch_stdout(ctx)))")
+            print("========== Stderr ==========\n\(String(cString: reprl_fetch_stderr(ctx)))")
             numFailures += 1
+        } else {
+            print("✓ \(code) (expected failure)")
         }
     }
 
@@ -94,10 +105,17 @@ func runREPRLTests() {
 }
 
 // Check whether REPRL works at all
-if execute("").status != 0 {
+print("Testing if REPRL works by executing empty script...")
+let initialResult = execute("")
+if initialResult.status != 0 {
     print("Script execution failed, REPRL support does not appear to be working")
+    print("Status: \(initialResult.status)")
+    print("========== Fuzzout ==========\n\(String(cString: reprl_fetch_fuzzout(ctx)))")
+    print("========== Stdout ==========\n\(String(cString: reprl_fetch_stdout(ctx)))")
+    print("========== Stderr ==========\n\(String(cString: reprl_fetch_stderr(ctx)))")
     exit(1)
 }
+print("Empty script executed successfully!")
 
 // Run a couple of tests now
 runREPRLTests()

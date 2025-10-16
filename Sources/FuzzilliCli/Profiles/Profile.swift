@@ -54,4 +54,5 @@ let profiles = [
     "serenity": serenityProfile,
     "njs": njsProfile,
     "workerd": workerdProfile,
+    "bun": bunProfile,
 ]

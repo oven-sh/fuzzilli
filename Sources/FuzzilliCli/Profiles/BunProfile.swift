@@ -22,7 +22,7 @@ let bunProfile = Profile(
 
     maxExecsBeforeRespawn: 1000,
 
-    timeout: 500,
+    timeout: 2100,
 
     codePrefix: """
                 """,

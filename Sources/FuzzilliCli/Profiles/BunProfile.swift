@@ -23,6 +23,55 @@ public extension ILType {
         withProperties: [],
         withMethods: ["update", "digest", "copy"]
     )
+
+    // BunTranspiler - Code transpilation/parsing
+    static let bunTranspiler = ILType.object(
+        ofGroup: "Transpiler",
+        withProperties: [],
+        withMethods: ["transformSync", "scan", "scanImports"]
+    )
+
+    // BunPasswordHasher - Password hashing namespace
+    static let bunPasswordHasher = ILType.object(
+        ofGroup: "PasswordHasher",
+        withProperties: [],
+        withMethods: ["hashSync", "verifySync"]
+    )
+
+    // BunGlob - Pattern matching
+    static let bunGlob = ILType.object(
+        ofGroup: "Glob",
+        withProperties: [],
+        withMethods: ["match"]
+    )
+
+    // HTMLRewriter Element - HTML element manipulation
+    static let htmlRewriterElement = ILType.object(
+        ofGroup: "HTMLRewriterElement",
+        withProperties: ["tagName", "namespaceURI", "attributes", "removed", "selfClosing", "canHaveContent"],
+        withMethods: ["getAttribute", "setAttribute", "hasAttribute", "removeAttribute", "setInnerContent", "append", "prepend", "before", "after", "remove", "removeAndKeepContent", "onEndTag"]
+    )
+
+    // HTMLRewriter Text - Text node manipulation
+    static let htmlRewriterText = ILType.object(
+        ofGroup: "HTMLRewriterText",
+        withProperties: ["text", "removed"],
+        withMethods: ["before", "after", "replace", "remove"]
+    )
+
+    // HTMLRewriter Comment - Comment node manipulation
+    static let htmlRewriterComment = ILType.object(
+        ofGroup: "HTMLRewriterComment",
+        withProperties: ["text", "removed"],
+        withMethods: ["before", "after", "replace", "remove"]
+    )
+
+    // HTMLRewriter - HTML transformation with CSS selectors
+    static let htmlRewriter = ILType.object(
+        ofGroup: "HTMLRewriter",
+        withProperties: [],
+        withMethods: ["on", "onDocument", "transform"]
+    )
 }
 
 // MARK: - Bun ObjectGroup Definitions
@@ -35,6 +84,104 @@ public let bunCryptoHasherGroup = ObjectGroup(
         "update": [.jsAnything, .opt(.string)] => .bunCryptoHasher,
         "digest": [.opt(.string)] => (.object() | .string),
         "copy":   [] => .bunCryptoHasher,
+    ]
+)
+
+public let bunTranspilerGroup = ObjectGroup(
+    name: "Transpiler",
+    instanceType: .bunTranspiler,
+    properties: [:],
+    methods: [
+        "transformSync": [.string, .opt(.string)] => .string,
+        "scan":          [.string] => .object(),
+        "scanImports":   [.string] => .jsArray,
+    ]
+)
+
+public let bunPasswordHasherGroup = ObjectGroup(
+    name: "PasswordHasher",
+    instanceType: .bunPasswordHasher,
+    properties: [:],
+    methods: [
+        "hashSync":   [.string, .opt(.object())] => .string,
+        "verifySync": [.string, .string] => .boolean,
+    ]
+)
+
+public let bunGlobGroup = ObjectGroup(
+    name: "Glob",
+    instanceType: .bunGlob,
+    properties: [:],
+    methods: [
+        "match": [.string] => .boolean,
+    ]
+)
+
+public let htmlRewriterElementGroup = ObjectGroup(
+    name: "HTMLRewriterElement",
+    instanceType: .htmlRewriterElement,
+    properties: [
+        "tagName":       .string,
+        "namespaceURI":  .string,
+        "attributes":    .object(),
+        "removed":       .boolean,
+        "selfClosing":   .boolean,
+        "canHaveContent": .boolean,
+    ],
+    methods: [
+        "getAttribute":         [.string] => .jsAnything,
+        "setAttribute":         [.string, .string] => .htmlRewriterElement,
+        "hasAttribute":         [.string] => .boolean,
+        "removeAttribute":      [.string] => .htmlRewriterElement,
+        "setInnerContent":      [.string] => .htmlRewriterElement,
+        "append":               [.string, .opt(.object())] => .htmlRewriterElement,
+        "prepend":              [.string, .opt(.object())] => .htmlRewriterElement,
+        "before":               [.string, .opt(.object())] => .htmlRewriterElement,
+        "after":                [.string, .opt(.object())] => .htmlRewriterElement,
+        "remove":               [] => .htmlRewriterElement,
+        "removeAndKeepContent": [] => .htmlRewriterElement,
+        "onEndTag":             [.function()] => .undefined,
+    ]
+)
+
+public let htmlRewriterTextGroup = ObjectGroup(
+    name: "HTMLRewriterText",
+    instanceType: .htmlRewriterText,
+    properties: [
+        "text":    .string,
+        "removed": .boolean,
+    ],
+    methods: [
+        "before":  [.string, .opt(.object())] => .htmlRewriterText,
+        "after":   [.string, .opt(.object())] => .htmlRewriterText,
+        "replace": [.string, .opt(.object())] => .htmlRewriterText,
+        "remove":  [] => .htmlRewriterText,
+    ]
+)
+
+public let htmlRewriterCommentGroup = ObjectGroup(
+    name: "HTMLRewriterComment",
+    instanceType: .htmlRewriterComment,
+    properties: [
+        "text":    .string,
+        "removed": .boolean,
+    ],
+    methods: [
+        "before":  [.string, .opt(.object())] => .htmlRewriterComment,
+        "after":   [.string, .opt(.object())] => .htmlRewriterComment,
+        "replace": [.string, .opt(.object())] => .htmlRewriterComment,
+        "remove":  [] => .htmlRewriterComment,
+    ]
+)
+
+public let htmlRewriterGroup = ObjectGroup(
+    name: "HTMLRewriter",
+    instanceType: .htmlRewriter,
+    properties: [:],
+    methods: [
+        "on":         [.string, .object()] => .htmlRewriter,
+        "onDocument": [.object()] => .htmlRewriter,
+        "transform":  [.string] => .string,
     ]
 )
 
@@ -92,6 +239,9 @@ let bunProfile = Profile(
 
         // Bun constructors
         "CryptoHasher"      : .constructor([.string, .opt(.jsAnything)] => .bunCryptoHasher),
+        "Transpiler"        : .constructor([.opt(.object())] => .bunTranspiler),
+        "Glob"              : .constructor([.string, .opt(.object())] => .bunGlob),
+        "HTMLRewriter"      : .constructor([] => .htmlRewriter),
 
         // Bun utility methods (non-blocking, non-IO)
         "Bun.hash"          : .function([.jsAnything, .opt(.integer)] => .integer),
@@ -115,12 +265,25 @@ let bunProfile = Profile(
         // Comparison
         "Bun.deepEquals"    : .function([.jsAnything, .jsAnything, .opt(.boolean)] => .boolean),
 
+        // Semver utilities
+        "Bun.semver.satisfies" : .function([.string, .string] => .boolean),
+        "Bun.semver.order"     : .function([.string, .string] => .integer),
+
         // UUID generation
         "Bun.randomUUIDv7"  : .function([.opt(.string), .opt(.integer)] => .string),
 
         // Path utilities
         "Bun.fileURLToPath" : .function([.string] => .string),
         "Bun.pathToFileURL" : .function([.string] => .string),
+        "Bun.which"         : .function([.string, .opt(.object())] => .jsAnything),
+        "Bun.resolveSync"   : .function([.string, .string] => .string),
+
+        // Promise inspection
+        "Bun.peek"          : .function([.plain(.jsPromise)] => .jsAnything),
+        "Bun.peek.status"   : .function([.plain(.jsPromise)] => .string),
+
+        // Password hashing
+        "Bun.password"      : .bunPasswordHasher,
 
         // Timing
         "Bun.nanoseconds"   : .function([] => .integer),
@@ -142,6 +305,13 @@ let bunProfile = Profile(
 
     additionalObjectGroups: [
         bunCryptoHasherGroup,
+        bunTranspilerGroup,
+        bunPasswordHasherGroup,
+        bunGlobGroup,
+        htmlRewriterGroup,
+        htmlRewriterElementGroup,
+        htmlRewriterTextGroup,
+        htmlRewriterCommentGroup,
     ],
 
     optionalPostProcessor: nil

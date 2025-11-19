@@ -14,6 +14,32 @@
 
 import Fuzzilli
 
+// MARK: - Bun Type Definitions
+
+public extension ILType {
+    // BunCryptoHasher - Incremental hashing utility
+    static let bunCryptoHasher = ILType.object(
+        ofGroup: "CryptoHasher",
+        withProperties: [],
+        withMethods: ["update", "digest", "copy"]
+    )
+}
+
+// MARK: - Bun ObjectGroup Definitions
+
+public let bunCryptoHasherGroup = ObjectGroup(
+    name: "CryptoHasher",
+    instanceType: .bunCryptoHasher,
+    properties: [:],
+    methods: [
+        "update": [.jsAnything, .opt(.string)] => .bunCryptoHasher,
+        "digest": [.opt(.string)] => (.object() | .string),
+        "copy":   [] => .bunCryptoHasher,
+    ]
+)
+
+// MARK: - Bun Profile
+
 let bunProfile = Profile(
     processArgs: { randomize in ["fuzzilli"] },
 
@@ -22,7 +48,7 @@ let bunProfile = Profile(
 
     maxExecsBeforeRespawn: 1000,
 
-    timeout: 500,
+    timeout: 2500,
 
     codePrefix: """
                 """,
@@ -64,11 +90,59 @@ let bunProfile = Profile(
         "Buffer"            : .constructor([.jsAnything] => .object()),
         "global"            : .object(),
 
+        // Bun constructors
+        "CryptoHasher"      : .constructor([.string, .opt(.jsAnything)] => .bunCryptoHasher),
+
+        // Bun utility methods (non-blocking, non-IO)
+        "Bun.hash"          : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.wyhash"   : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.crc32"    : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.adler32"  : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.cityHash32" : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.cityHash64" : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.xxHash32"   : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.xxHash64"   : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.xxHash3"    : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.murmur32v3" : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.murmur64v2" : .function([.jsAnything, .opt(.integer)] => .integer),
+
+        // String utilities
+        "Bun.escapeHTML"    : .function([.string] => .string),
+        "Bun.stringWidth"   : .function([.string, .opt(.object())] => .integer),
+        "Bun.stripANSI"     : .function([.string] => .string),
+        "Bun.inspect"       : .function([.jsAnything, .opt(.object())] => .string),
+
+        // Comparison
+        "Bun.deepEquals"    : .function([.jsAnything, .jsAnything, .opt(.boolean)] => .boolean),
+
+        // UUID generation
+        "Bun.randomUUIDv7"  : .function([.opt(.string), .opt(.integer)] => .string),
+
+        // Path utilities
+        "Bun.fileURLToPath" : .function([.string] => .string),
+        "Bun.pathToFileURL" : .function([.string] => .string),
+
+        // Timing
+        "Bun.nanoseconds"   : .function([] => .integer),
+        "Bun.sleepSync"     : .function([.number] => .undefined),
+
+        // Compression (synchronous)
+        "Bun.gzipSync"      : .function([.jsAnything, .opt(.object())] => .object()),
+        "Bun.gunzipSync"    : .function([.jsAnything] => .object()),
+        "Bun.deflateSync"   : .function([.jsAnything, .opt(.object())] => .object()),
+        "Bun.inflateSync"   : .function([.jsAnything] => .object()),
+
+        // Bun metadata properties
+        "Bun.version"       : .string,
+        "Bun.revision"      : .string,
+
         // Fuzzilli integration
         "fuzzilli"          : .function([.string, .jsAnything] => .undefined),
     ],
 
-    additionalObjectGroups: [],
+    additionalObjectGroups: [
+        bunCryptoHasherGroup,
+    ],
 
     optionalPostProcessor: nil
 )

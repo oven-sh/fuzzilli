@@ -23,7 +23,7 @@ let duktapeProfile = Profile(
 
     maxExecsBeforeRespawn: 1000,
 
-    timeout: 250,
+    timeout: Timeout.value(250),
 
     codePrefix: """
                 """,
@@ -47,7 +47,7 @@ let duktapeProfile = Profile(
     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),
 
     disabledCodeGenerators: [],
-    
+
     disabledMutators: [],
 
     additionalBuiltins: [
@@ -62,6 +62,8 @@ let duktapeProfile = Profile(
     ],
 
     additionalObjectGroups: [],
+
+    additionalEnumerations: [],
 
     optionalPostProcessor: nil
 )

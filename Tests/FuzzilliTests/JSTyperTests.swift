@@ -1708,6 +1708,53 @@ class JSTyperTests: XCTestCase {
 
     }
 
+    func testTemporalRelativeTo() {
+        var foundZDT = false
+        var foundDT = false
+        var foundDate = false
+        var foundString = false
+        // Test that relativeTo arguments are correctly generated
+        // Annoyingly, we may generate undefined/.jsAnything here since the field may not exist.
+        // We just call this a large number of times until we find everything.
+        for i in 1..<100 {
+            let fuzzer = makeMockFuzzer()
+            let b = fuzzer.makeBuilder()
+            let temporalBuiltin = b.createNamedVariable(forBuiltin: "Temporal")
+            let durationBuiltin = b.getProperty("Duration", of: temporalBuiltin)
+            let duration = b.callMethod("from", on: durationBuiltin, withArgs: [b.loadString("P10D")])
+            XCTAssert(b.type(of: duration).Is(.jsTemporalDuration))
+            let signature = chooseUniform(from: b.methodSignatures(of: "round", on: duration))
+            let args = b.findOrGenerateArguments(forSignature: signature)
+            let relativeTo = b.getProperty("relativeTo", of: args[0])
+            let type = b.type(of: relativeTo)
+            if type.Is(.string) {
+                foundString = true
+            } else if type.Is(.jsTemporalZonedDateTime) {
+                XCTAssertEqual(type.group, "Temporal.ZonedDateTime")
+                foundZDT = true
+            } else if type.Is(.jsTemporalPlainDateTime) {
+                XCTAssertEqual(type.group, "Temporal.PlainDateTime")
+                foundDT = true
+            } else if type.Is(.jsTemporalPlainDate) {
+                XCTAssertEqual(type.group, "Temporal.PlainDate")
+                foundDate = true
+            } else {
+                // If we got here, it must be because we never generated a relativeTo
+                // argument
+                let obj = b.type(of: args[0])
+                XCTAssert(!obj.properties.contains("relativeTo"))
+            }
+
+            // We don't want to run the test for 100 iterations, we only
+            // want to run it for ~20 to ensure enough paths get tested,
+            // and only if we do not generate all paths do we wish to run it more.
+            if foundZDT && foundString && foundDate && foundDT && i > 20 {
+                break
+            }
+        }
+        XCTAssert(foundZDT && foundString && foundDate && foundDT)
+    }
+
     func testWebAssemblyBuiltins() {
         let fuzzer = makeMockFuzzer()
         let b = fuzzer.makeBuilder()
@@ -1763,11 +1810,21 @@ class JSTyperTests: XCTestCase {
         let tagPrototype = b.getProperty("prototype", of: wasmTagConstructor)
         // WebAssembly.Tag.prototype doesn't have any properties or methods.
         XCTAssertEqual(b.type(of: tagPrototype), .object(ofGroup: "WasmTag.prototype"))
+
+        let wasmExceptionConstructor = b.getProperty("Exception", of: wasm)
+        let wasmException = b.construct(wasmExceptionConstructor) // In theory this needs arguments.
+        XCTAssert(b.type(of: wasmException).Is(.object(ofGroup: "WebAssembly.Exception")))
+        let isResult = b.callMethod("is", on: wasmException, withArgs: [realWasmTag])
+        XCTAssertEqual(b.type(of: isResult), .boolean)
+        let exceptionPrototype = b.getProperty("prototype", of: wasmExceptionConstructor)
+        XCTAssert(b.type(of: exceptionPrototype).Is(ObjectGroup.jsWebAssemblyExceptionPrototype.instanceType))
+        let exceptionIs = b.getProperty("is", of: exceptionPrototype)
+        XCTAssert(b.type(of: exceptionIs).Is(.unboundFunction([.plain(ObjectGroup.jsWasmTag.instanceType)] => ILType.boolean, receiver: .object(ofGroup: "WebAssembly.Exception"))))
     }
 
     func testProducingGenerators() {
         // Make a simple object
-        let mockEnum = ILType.enumeration(ofName: "mockField", withValues: ["mockValue"]);
+        let mockEnum = ILType.enumeration(ofName: "MockEnum", withValues: ["mockValue"]);
         let mockObject = ObjectGroup(
             name: "MockObject",
             instanceType: nil,
@@ -1780,17 +1837,28 @@ class JSTyperTests: XCTestCase {
         // Some things to keep track of how the generator was called
         var callCount = 0
         var returnedVar: Variable? = nil
+        var generatedEnum: Variable? = nil
         // A simple generator
-        func generate(builder: ProgramBuilder) -> Variable {
+        func generateObject(builder: ProgramBuilder) -> Variable {
             callCount += 1
-            let val = builder.loadString("mockValue")
+            let val = builder.loadEnum(mockEnum)
+            generatedEnum = val
             let variable = builder.createObject(with: ["mockField": val])
             returnedVar = variable
             return variable
         }
+
+        let mockNamedString = ILType.namedString(ofName: "NamedString");
+        func generateString() -> String {
+            callCount += 1
+            return "mockStringValue"
+        }
+
         let fuzzer = makeMockFuzzer()
         fuzzer.environment.registerObjectGroup(mockObject)
-        fuzzer.environment.addProducingGenerator(forType: mockObject.instanceType, with: generate)
+        fuzzer.environment.registerEnumeration(mockEnum)
+        fuzzer.environment.addProducingGenerator(forType: mockObject.instanceType, with: generateObject)
+        fuzzer.environment.addNamedStringGenerator(forType: mockNamedString, with: generateString)
         let b = fuzzer.makeBuilder()
         b.buildPrefix()
 
@@ -1800,5 +1868,40 @@ class JSTyperTests: XCTestCase {
         XCTAssertEqual(callCount, 1)
         // Test that the returned variable matches the generated one
         XCTAssertEqual(variable, returnedVar)
+
+
+        // Try to get it to invoke the string generator
+        let variable2 = b.findOrGenerateType(mockNamedString)
+        // Test that the generator was invoked
+        XCTAssertEqual(callCount, 2)
+
+        // Test that the returned variable gets typed correctly
+        XCTAssert(b.type(of: variable2).Is(mockNamedString))
+        XCTAssertEqual(b.type(of: variable2).group, "NamedString")
+
+        // We already generated a mockEnum, look for it.
+        let foundEnum = b.randomVariable(ofType: mockEnum)!
+        // Test that it picked up the existing generated variable.
+        XCTAssertEqual(generatedEnum, foundEnum)
+
+        // Test that the returned variable gets typed correctly.
+        XCTAssert(b.type(of: foundEnum).Is(mockEnum))
+        XCTAssertEqual(b.type(of: foundEnum).group, "MockEnum")
+    }
+
+    func testFindConstructor() {
+        for ctor in ["TemporalPlainMonthDayConstructor", "DateConstructor", "PromiseConstructor", "SymbolConstructor", "TemporalZonedDateTimeConstructor"] {
+            let fuzzer = makeMockFuzzer()
+            let b = fuzzer.makeBuilder()
+            let temporalBuiltin = b.createNamedVariable(forBuiltin: "Temporal")
+            let dateCtor = b.getProperty("PlainDate", of: temporalBuiltin)
+            let requestedCtor = fuzzer.environment.type(ofGroup: ctor)
+            let result = b.findOrGenerateType(requestedCtor)
+
+            // The typer should not pick up the PlainDateConstructor we have in scope,
+            // it should instead get the ctor from the global
+            XCTAssert(result != dateCtor)
+            XCTAssert(b.type(of: result).Is(requestedCtor))
+        }
     }
 }

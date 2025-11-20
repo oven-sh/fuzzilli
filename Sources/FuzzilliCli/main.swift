@@ -35,7 +35,9 @@ Options:
     --logLevel=level             : The log level to use. Valid values: "verbose", "info", "warning", "error", "fatal" (default: "info").
     --maxIterations=n            : Run for the specified number of iterations (default: unlimited).
     --maxRuntimeInHours=n        : Run for the specified number of hours (default: unlimited).
-    --timeout=n                  : Timeout in ms after which to interrupt execution of programs (default depends on the profile).
+    --timeout=n                  : Timeout in ms after which to interrupt execution of programs (default depends
+                                   on the profile). Or provide an interval like --timeout=200,400. The actual
+                                   timeout in this interval will be determined by the start-up tests.
     --minMutationsPerSample=n    : Discard samples from the corpus only after they have been mutated at least this many times (default: 25).
     --minCorpusSize=n            : Keep at least this many samples in the corpus regardless of the number of times
                                    they have been mutated (default: 1000).
@@ -132,7 +134,6 @@ let engineName = args["--engine"] ?? "mutation"
 let corpusName = args["--corpus"] ?? "basic"
 let maxIterations = args.int(for: "--maxIterations") ?? -1
 let maxRuntimeInHours = args.int(for: "--maxRuntimeInHours") ?? -1
-let timeout = args.int(for: "--timeout") ?? profile.timeout
 let minMutationsPerSample = args.int(for: "--minMutationsPerSample") ?? 25
 let minCorpusSize = args.int(for: "--minCorpusSize") ?? 1000
 let maxCorpusSize = args.int(for: "--maxCorpusSize") ?? Int.max
@@ -157,6 +158,33 @@ let additionalArguments = args["--additionalArguments"] ?? ""
 let tag = args["--tag"]
 let enableWasm = args.has("--wasm")
 let forDifferentialFuzzing = args.has("--forDifferentialFuzzing")
+
+var timeout : Timeout
+if let raw_timeout = args.string(for: "--timeout") {
+    if raw_timeout.contains(",") {
+        let parts = raw_timeout.split(separator: ",")
+        guard parts.count == 2 else {
+            configError("Timeout intervals must be specified by two boundaries, e.g. --timeout=200,400")
+        }
+        guard let lower = UInt32(parts[0]) else {
+            configError("The lower bound for --timeout must be an integer")
+        }
+        guard let upper = UInt32(parts[1]) else {
+            configError("The upper bound for --timeout must be an integer")
+        }
+        guard lower <= upper else {
+            configError("The --timeout=lower,upper boundaries must adhere to lower <= upper")
+        }
+        timeout = Timeout.interval(lower, upper)
+    } else {
+        guard let int_timeout = UInt32(raw_timeout) else {
+            configError("The value for --timeout must be an integer or interval")
+        }
+        timeout = Timeout.value(int_timeout)
+    }
+} else {
+    timeout = profile.timeout
+}
 
 guard numJobs >= 1 else {
     configError("Must have at least 1 job")
@@ -312,7 +340,7 @@ if swarmTesting {
     logger.info("Weight | CodeGenerator")
 }
 
-let disabledGenerators = Set(profile.disabledCodeGenerators)
+let disableCodeGenerators = Set(profile.disabledCodeGenerators)
 let additionalCodeGenerators = profile.additionalCodeGenerators
 
 let codeGeneratorsToUse = if enableWasm {
@@ -324,14 +352,14 @@ let codeGeneratorsToUse = if enableWasm {
 
 let standardCodeGenerators: [(CodeGenerator, Int)] = codeGeneratorsToUse.map {
     guard let weight = codeGeneratorWeights[$0.name] else {
-        logger.fatal("Missing weight for code generator \($0.name) in CodeGeneratorWeights.swift")
+        logger.fatal("Missing weight for CodeGenerator \($0.name) in CodeGeneratorWeights.swift")
     }
     return ($0, weight)
 }
 var codeGenerators: WeightedList<CodeGenerator> = WeightedList<CodeGenerator>([])
 
 for (generator, var weight) in (additionalCodeGenerators + standardCodeGenerators) {
-    if disabledGenerators.contains(generator.name) {
+    if disableCodeGenerators.contains(generator.name) {
         continue
     }
 
@@ -459,12 +487,15 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
     }
 
     // The environment containing available builtins, property names, and method names.
-    let environment = JavaScriptEnvironment(additionalBuiltins: profile.additionalBuiltins, additionalObjectGroups: profile.additionalObjectGroups)
+    let environment = JavaScriptEnvironment(additionalBuiltins: profile.additionalBuiltins, additionalObjectGroups: profile.additionalObjectGroups, additionalEnumerations: profile.additionalEnumerations)
     if !profile.additionalBuiltins.isEmpty {
         logger.verbose("Loaded additional builtins from profile: \(profile.additionalBuiltins.map { $0.key })")
     }
     if !profile.additionalObjectGroups.isEmpty {
         logger.verbose("Loaded additional ObjectGroups from profile: \(profile.additionalObjectGroups.map { $0.name })")
+    }
+    if !profile.additionalEnumerations.isEmpty {
+        logger.verbose("Loaded additional Enumerations from profile: \(profile.additionalEnumerations.map { $0.group! })")
     }
 
     // A lifter to translate FuzzIL programs to JavaScript.
@@ -507,7 +538,7 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
 
 // The configuration of the main fuzzer instance.
 let mainConfig = Configuration(arguments: CommandLine.arguments,
-                               timeout: UInt32(timeout),
+                               timeout: timeout.maxTimeout(),
                                logLevel: logLevel,
                                startupTests: profile.startupTests,
                                minimizationLimit: minimizationLimit,
@@ -554,7 +585,11 @@ fuzzer.sync {
                 logger.info("You can recover the old corpus by moving it to \(path + "/corpus").")
             }
         }
-        exit(reason.toExitCode())
+        let code = reason.toExitCode()
+        if (code != 0) {
+            print("Aborting execution after a fatal error.")
+        }
+        exit(code)
     }
 
     // Store samples to disk if requested.
@@ -633,7 +668,7 @@ fuzzer.sync {
 
     // Initialize the fuzzer, and run startup tests
     fuzzer.initialize()
-    fuzzer.runStartupTests()
+    timeout = fuzzer.runStartupTests(with: timeout)
 
     // Start the main fuzzing job.
     fuzzer.start(runUntil: exitCondition)
@@ -642,7 +677,7 @@ fuzzer.sync {
 // Add thread worker instances if requested
 // Worker instances use a slightly different configuration, mostly just a lower log level.
 let workerConfig = Configuration(arguments: CommandLine.arguments,
-                                 timeout: UInt32(timeout),
+                                 timeout: timeout.maxTimeout(),
                                  logLevel: .warning,
                                  startupTests: profile.startupTests,
                                  minimizationLimit: minimizationLimit,

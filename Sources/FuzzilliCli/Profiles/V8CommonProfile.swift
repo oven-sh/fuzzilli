@@ -96,7 +96,7 @@ public let TurbofanVerifyTypeGenerator = CodeGenerator("TurbofanVerifyTypeGenera
     b.eval("%VerifyType(%@)", with: [v])
 }
 
-public let WorkerGenerator = RecursiveCodeGenerator("WorkerGenerator") { b in
+public let WorkerGenerator = CodeGenerator("WorkerGenerator") { b in
     let workerSignature = Signature(withParameterCount: Int.random(in: 0...3))
 
     // TODO(cffsmith): currently Fuzzilli does not know that this code is sent
@@ -110,11 +110,11 @@ public let WorkerGenerator = RecursiveCodeGenerator("WorkerGenerator") { b in
 
         // Generate a random onmessage handler for incoming messages.
         let onmessageFunction = b.buildPlainFunction(with: .parameters(n: 1)) { args in
-            b.buildRecursive(block: 1, of: 2)
+            b.buildRecursive(n: Int.random(in: 2...5))
         }
         b.setProperty("onmessage", of: this, to: onmessageFunction)
 
-        b.buildRecursive(block: 2, of: 2)
+        b.buildRecursive(n: Int.random(in: 3...10))
     }
     let workerConstructor = b.createNamedVariable(forBuiltin: "Worker")
 
@@ -133,6 +133,14 @@ public let WasmStructGenerator = CodeGenerator("WasmStructGenerator") { b in
 
 public let WasmArrayGenerator = CodeGenerator("WasmArrayGenerator") { b in
     b.eval("%WasmArray()", hasOutput: true);
+}
+
+public let SharedObjectGenerator = CodeGenerator("SharedObjectGenerator", inputs: .one) { b, v in
+    b.eval("%ShareObject(%@)", with: [v], hasOutput: true);
+}
+
+public let PretenureAllocationSiteGenerator = CodeGenerator("PretenureAllocationSiteGenerator", inputs: .required(.object())) { b, obj in
+    b.eval("%PretenureAllocationSite(%@)", with: [obj]);
 }
 
 public let MapTransitionFuzzer = ProgramTemplate("MapTransitionFuzzer") { b in
@@ -169,37 +177,33 @@ public let MapTransitionFuzzer = ProgramTemplate("MapTransitionFuzzer") { b in
     }
 
     // Temporarily overwrite the active code generators with the following generators...
-    let primitiveValueGenerator = ValueGenerator("PrimitiveValue") { b, n in
-        for _ in 0..<n {
-            // These should roughly correspond to the supported property representations of the engine.
-            withEqualProbability({
-                b.loadInt(b.randomInt())
-            }, {
-                b.loadFloat(b.randomFloat())
-            }, {
-                b.loadString(b.randomString())
-            })
-        }
+    let primitiveCodeGenerator = CodeGenerator("PrimitiveValue", produces: [.primitive]) { b in
+        // These should roughly correspond to the supported property representations of the engine.
+        withEqualProbability({
+            b.loadInt(b.randomInt())
+        }, {
+            b.loadFloat(b.randomFloat())
+        }, {
+            b.loadString(b.randomString())
+        })
     }
-    let createObjectGenerator = ValueGenerator("CreateObject") { b, n in
-        for _ in 0..<n {
-            let (properties, values) = randomProperties(in: b)
-            let obj = b.createObject(with: Dictionary(uniqueKeysWithValues: zip(properties, values)))
-            assert(b.type(of: obj).Is(objType))
-        }
+    let createObjectGenerator = CodeGenerator("CreateObject", produces: [.object()]) { b in
+        let (properties, values) = randomProperties(in: b)
+        let obj = b.createObject(with: Dictionary(uniqueKeysWithValues: zip(properties, values)))
+        assert(b.type(of: obj).Is(objType))
     }
-    let objectMakerGenerator = ValueGenerator("ObjectMaker") { b, n in
+    let objectMakerGenerator = CodeGenerator("ObjectMaker") { b in
         let f = b.buildPlainFunction(with: b.randomParameters()) { args in
             let (properties, values) = randomProperties(in: b)
             let o = b.createObject(with: Dictionary(uniqueKeysWithValues: zip(properties, values)))
             b.doReturn(o)
         }
-        for _ in 0..<n {
+        for _ in 0..<3 {
             let obj = b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
             assert(b.type(of: obj).Is(objType))
         }
     }
-    let objectConstructorGenerator = ValueGenerator("ObjectConstructor") { b, n in
+    let objectConstructorGenerator = CodeGenerator("ObjectConstructor") { b in
         let c = b.buildConstructor(with: b.randomParameters()) { args in
             let this = args[0]
             let (properties, values) = randomProperties(in: b)
@@ -207,12 +211,12 @@ public let MapTransitionFuzzer = ProgramTemplate("MapTransitionFuzzer") { b in
                 b.setProperty(p, of: this, to: v)
             }
         }
-        for _ in 0..<n {
+        for _ in 0..<3 {
             let obj = b.construct(c, withArgs: b.randomArguments(forCalling: c))
             assert(b.type(of: obj).Is(objType))
         }
     }
-    let objectClassGenerator = ValueGenerator("ObjectClassGenerator") { b, n in
+    let objectClassGenerator = CodeGenerator("ObjectClassGenerator") { b in
         let superclass = b.hasVisibleVariables && probability(0.5) ? b.randomVariable(ofType: .constructor()) : nil
         let (properties, values) = randomProperties(in: b)
         let cls = b.buildClassDefinition(withSuperclass: superclass) { cls in
@@ -220,7 +224,7 @@ public let MapTransitionFuzzer = ProgramTemplate("MapTransitionFuzzer") { b in
                 cls.addInstanceProperty(p, value: v)
             }
         }
-        for _ in 0..<n {
+        for _ in 0..<3 {
             let obj = b.construct(cls)
             assert(b.type(of: obj).Is(objType))
         }
@@ -240,7 +244,7 @@ public let MapTransitionFuzzer = ProgramTemplate("MapTransitionFuzzer") { b in
         assert(b.type(of: obj).Is(objType))
         b.configureProperty(chooseUniform(from: propertyNames), of: obj, usingFlags: PropertyFlags.random(), as: .value(b.randomJsVariable()))
     }
-    let functionDefinitionGenerator = RecursiveCodeGenerator("FunctionDefinition") { b in
+    let functionDefinitionGenerator = CodeGenerator("FunctionDefinition") { b in
         // We use either a randomly generated signature or a fixed on that ensures we use our object type frequently.
         var parameters = b.randomParameters()
         let haveVisibleObjects = b.visibleVariables.contains(where: { b.type(of: $0).Is(objType) })
@@ -249,33 +253,37 @@ public let MapTransitionFuzzer = ProgramTemplate("MapTransitionFuzzer") { b in
         }
 
         let f = b.buildPlainFunction(with: parameters) { params in
-            b.buildRecursive()
+            b.buildRecursive(n: Int.random(in: 3...10))
             b.doReturn(b.randomJsVariable())
         }
 
         for _ in 0..<3 {
-            b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+            let (arguments, matches) = b.randomArguments(forCallingGuardableFunction: f)
+            b.callFunction(f, withArgs: arguments, guard: !matches)
         }
     }
     let functionCallGenerator = CodeGenerator("FunctionCall", inputs: .required(.function())) { b, f in
         assert(b.type(of: f).Is(.function()))
-        let rval = b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+        let (arguments, matches) = b.randomArguments(forCallingGuardableFunction: f)
+        let rval = b.callFunction(f, withArgs: arguments, guard: !matches)
     }
     let constructorCallGenerator = CodeGenerator("ConstructorCall", inputs: .required(.constructor())) { b, c in
         assert(b.type(of: c).Is(.constructor()))
-        let rval = b.construct(c, withArgs: b.randomArguments(forCalling: c))
+        let (arguments, matches) = b.randomArguments(forCallingGuardableFunction: c)
+        let rval = b.construct(c, withArgs: arguments, guard: !matches)
      }
     let functionJitCallGenerator = CodeGenerator("FunctionJitCall", inputs: .required(.function())) { b, f in
         assert(b.type(of: f).Is(.function()))
         let args = b.randomArguments(forCalling: f)
         b.buildRepeatLoop(n: 100) { _ in
-            b.callFunction(f, withArgs: args)
+            let (arguments, matches) = b.randomArguments(forCallingGuardableFunction: f)
+            b.callFunction(f, withArgs: arguments, guard: !matches)
         }
     }
 
     let prevCodeGenerators = b.fuzzer.codeGenerators
     b.fuzzer.setCodeGenerators(WeightedList<CodeGenerator>([
-        (primitiveValueGenerator,     2),
+        (primitiveCodeGenerator,     2),
         (createObjectGenerator,       1),
         (objectMakerGenerator,        1),
         (objectConstructorGenerator,  1),
@@ -290,7 +298,7 @@ public let MapTransitionFuzzer = ProgramTemplate("MapTransitionFuzzer") { b in
         (functionJitCallGenerator,    2)
     ]))
 
-    // ... run some of the ValueGenerators to create some initial objects ...
+    // ... run some of the CodeGenerators to create some initial objects ...
     b.buildPrefix()
     // ... and generate a bunch of code.
     b.build(n: 100, by: .generating)
@@ -641,4 +649,320 @@ public let FastApiCallFuzzer = ProgramTemplate("FastApiCallFuzzer") { b in
     b.callFunction(f, withArgs: args)
 
     b.build(n: 10)
+}
+
+// Configure V8 invocation arguments. `forSandbox` is used by the V8SandboxProfile. As the sandbox
+// fuzzer does not crash on regular assertions, most validation flags do not make sense in that
+// configuraiton.
+public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
+    var args = [
+        "--expose-gc",
+        "--expose-externalize-string",
+        "--omit-quit",
+        "--allow-natives-syntax",
+        "--fuzzing",
+        "--jit-fuzzing",
+        "--future",
+        "--harmony",
+        "--experimental-fuzzing",
+        "--js-staging",
+        "--wasm-staging",
+        "--wasm-fast-api",
+        "--expose-fast-api",
+        "--wasm-test-streaming", // WebAssembly.compileStreaming & WebAssembly.instantiateStreaming()
+    ]
+    if forSandbox {
+        args.append("--sandbox-fuzzing")
+        // This is so that we get an ASan splat directly in the reproducer file.
+        args.append("--disable-in-process-stack-traces")
+    }
+
+    guard randomize else { return args }
+
+    //
+    // Existing features that should sometimes be disabled.
+    //
+    if probability(0.1) {
+        args.append("--no-turbofan")
+        if probability(0.5) {
+            args.append("--maglev-as-top-tier")
+        }
+    }
+
+    if probability(0.1) {
+        args.append("--no-maglev")
+    }
+
+    if probability(0.1) {
+        args.append("--no-sparkplug")
+    }
+
+    if probability(0.1) {
+        args.append("--no-short-builtin-calls")
+    }
+
+    // Disabling Liftoff enables "direct" coverage for the optimizing compiler, though some
+    // features (like speculative inlining) require a combination of Liftoff and Turbofan.
+    // Note that this flag only affects WebAssembly.
+    if probability(0.5) {
+        args.append("--no-liftoff")
+        if probability(0.3) && !forSandbox {
+            args.append("--wasm-assert-types")
+        }
+    }
+
+    // This greatly helps the fuzzer to decide inlining wasm functions into each other when
+    // %WasmTierUpFunction() is used as in most cases the call counts will be way too low to
+    // align with V8's current inlining heuristics (which uses absolute call counts as a
+    // deciding factor).
+    if probability(0.5) {
+        args.append("--wasm-inlining-ignore-call-counts")
+    }
+
+    //
+    // Future features that should sometimes be enabled.
+    //
+    if probability(0.1) {
+        args.append("--minor-ms")
+    }
+
+    // Enable the shared heap.
+    if probability(0.25) {
+        // Either use the shared-string-table (needed for JS shared structs) or only allow
+        // shared strings (needed for shared Wasm objects).
+        args.append(Bool.random() ? "--shared-string-table" : "--shared-strings")
+    }
+
+    if !args.contains("--no-maglev") {
+        if probability(0.25) {
+            args.append("--maglev-future")
+        }
+        if probability(0.1) {
+            args.append("--maglev-assert")
+        }
+        if probability(0.05) {
+            args.append("--maglev-assert-stack-size")
+        }
+        if probability(0.2) {
+            args.append("--maglev-non-eager-inlining")
+            if probability(0.4) { // TODO: @tacet decrease this probability to max 0.2
+                args.append("--max-maglev-inlined-bytecode-size-small=0")
+            }
+        }
+    }
+
+    if probability(0.1) {
+        args.append("--turboshaft-typed-optimizations")
+    }
+
+    if probability(0.5) {
+        args.append("--turbolev")
+        if probability(0.82) {
+            args.append("--turbolev-future")
+            if probability(0.3) { // TODO: @tacet change to 0.15
+                args.append("--max-inlined-bytecode-size-small=0")
+            }
+        }
+    }
+
+    if probability(0.1) {
+        args.append("--turboshaft-wasm-in-js-inlining")
+    }
+
+    if probability(0.1) {
+        args.append("--harmony-struct")
+    }
+
+    if probability(0.1) {
+        args.append("--efficiency-mode")
+    }
+
+    if probability(0.1) {
+        args.append("--battery-saver-mode")
+    }
+
+    if probability(0.1) {
+        args.append("--stress-scavenger-conservative-object-pinning-random")
+    }
+
+    if probability(0.1) {
+        args.append("--precise-object-pinning")
+    }
+
+    if probability(0.1) {
+        args.append("--scavenger-chaos-mode")
+        let threshold = Int.random(in: 0...100)
+        args.append("--scavenger-chaos-mode-threshold=\(threshold)")
+    }
+
+    if probability(0.1) {
+        let stackSize = Int.random(in: 54...863)
+        args.append("--stack-size=\(stackSize)")
+    }
+
+    // Temporarily enable the three flags below with high probability to
+    // stress-test JSPI.
+    // Lower the probabilities once we have enough coverage.
+    if (probability(0.5)) {
+        let stackSwitchingSize = Int.random(in: 1...300)
+        args.append("--wasm-stack-switching-stack-size=\(stackSwitchingSize)")
+    }
+    if (probability(0.5)) {
+        args.append("--experimental-wasm-growable-stacks")
+    }
+    if (probability(0.5)) {
+        args.append("--stress-wasm-stack-switching")
+    }
+
+    if probability(0.5) {
+        args.append("--proto-assign-seq-opt")
+    }
+
+    //
+    // Sometimes enable additional verification/stressing logic (which may be fairly expensive).
+    //
+    if !forSandbox {
+        if probability(0.1) {
+            args.append("--verify-heap")
+        }
+        if probability(0.1) {
+            args.append("--turbo-verify")
+        }
+        if probability(0.1) {
+            args.append("--turbo-verify-allocation")
+        }
+        if probability(0.1) {
+            args.append("--assert-types")
+        }
+        if probability(0.1) {
+            args.append("--turboshaft-assert-types")
+        }
+        if probability(0.2) {
+            args.append("--turboshaft-verify-load-elimination")
+        }
+        if probability(0.1) {
+            args.append("--turboshaft-verify-reductions")
+        }
+    }
+
+    if probability(0.1) {
+        args.append("--deopt-every-n-times=\(chooseUniform(from: [100, 250, 500, 1000, 2500, 5000, 10000]))")
+    }
+    if probability(0.1) {
+        args.append("--stress-ic")
+    }
+    if probability(0.1) {
+        args.append("--optimize-on-next-call-optimizes-to-maglev")
+    }
+
+    //
+    // A gc-stress session with some fairly expensive flags.
+    //
+    if probability(0.1) {
+        if probability(0.4) {
+            args.append("--stress-marking=\(Int.random(in: 1...100))")
+        }
+        if probability(0.4) {
+            args.append("--stress-scavenge=\(Int.random(in: 1...100))")
+        }
+        if probability(0.5) {
+            args.append("--stress-flush-code")
+            args.append("--flush-bytecode")
+        }
+        if probability(0.5) {
+            args.append("--wasm-code-gc")
+            args.append("--stress-wasm-code-gc")
+        }
+        if probability(0.5) {
+            args.append("--stress-wasm-memory-moving")
+        }
+        if probability(0.4) {
+            args.append(chooseUniform(
+                from: ["--gc-interval=\(Int.random(in: 100...10000))",
+                        "--random-gc-interval=\(Int.random(in: 1000...10000))"]))
+        }
+        if probability(0.4) {
+            args.append("--concurrent-recompilation-queue-length=\(Int.random(in: 4...64))")
+            args.append("--concurrent-recompilation-delay=\(Int.random(in: 1...500))")
+        }
+        if probability(0.6) {
+            args.append(chooseUniform(
+                from: ["--stress-compaction", "--stress-compaction-random"]))
+        }
+    }
+
+    //
+    // More exotic configuration changes.
+    //
+    if probability(0.05) {
+        func chooseBooleanFlag(_ flag: String) {
+            assert(!flag.starts(with: "--"))
+            args.append(probability(0.5) ? "--\(flag)" : "--no-\(flag)")
+        }
+
+        if probability(0.5) { args.append("--stress-gc-during-compilation") }
+        if probability(0.5) { args.append("--lazy-new-space-shrinking") }
+        if probability(0.5) { args.append("--stress-wasm-memory-moving") }
+        if probability(0.5) { args.append("--stress-background-compile") }
+        if probability(0.5) { args.append("--parallel-compile-tasks-for-lazy") }
+        if probability(0.5) { args.append("--parallel-compile-tasks-for-eager-toplevel") }
+
+        chooseBooleanFlag("always-sparkplug")
+        chooseBooleanFlag("always-osr")
+        chooseBooleanFlag("concurrent-osr")
+        chooseBooleanFlag("force-slow-path")
+
+        // Maglev related flags
+        chooseBooleanFlag("maglev-inline-api-calls")
+        chooseBooleanFlag("maglev-inlining")
+        chooseBooleanFlag("maglev-loop-peeling")
+        chooseBooleanFlag("maglev-optimistic-peeled-loops")
+        chooseBooleanFlag("maglev-pretenure-store-values")
+        chooseBooleanFlag("maglev-poly-calls")
+        chooseBooleanFlag("maglev-truncation")
+        chooseBooleanFlag("maglev-cse")
+        chooseBooleanFlag("maglev-range-analysis")
+        chooseBooleanFlag("maglev-escape-analysis")
+        chooseBooleanFlag("maglev-licm")
+        chooseBooleanFlag("maglev-untagged-phis")
+
+        // Compiler related flags
+        chooseBooleanFlag("turbo-move-optimization")
+        chooseBooleanFlag("turbo-jt") // jump threading
+        chooseBooleanFlag("turbo-loop-peeling")
+        chooseBooleanFlag("turbo-loop-variable")
+        chooseBooleanFlag("turbo-loop-rotation")
+        chooseBooleanFlag("turbo-cf-optimization")
+        chooseBooleanFlag("turbo-escape")
+        chooseBooleanFlag("turbo-allocation-folding")
+        chooseBooleanFlag("turbo-instruction-scheduling")
+        chooseBooleanFlag("turbo-stress-instruction-scheduling")
+        chooseBooleanFlag("turbo-store-elimination")
+        chooseBooleanFlag("turbo-rewrite-far-jumps")
+        chooseBooleanFlag("turbo-optimize-apply")
+        chooseBooleanFlag("turbo-load-elimination")
+        chooseBooleanFlag("turbo-inlining")
+        chooseBooleanFlag("turbo-splitting")
+        args.append(chooseUniform(from: ["--no-enable-sse3", "--no-enable-ssse3", "--no-enable-sse4-1", "--no-enable-sse4-2", "--no-enable-avx", "--no-enable-avx2"]))
+
+        chooseBooleanFlag("turboshaft-loop-unrolling")
+        chooseBooleanFlag("turboshaft-load-elimination")
+        chooseBooleanFlag("turboshaft-string-concat-escape-analysis")
+
+        // Wasm related flags
+        chooseBooleanFlag("wasm-loop-peeling")
+        chooseBooleanFlag("turboshaft-wasm-load-elimination")
+        chooseBooleanFlag("wasm-loop-unrolling")
+        chooseBooleanFlag("wasm-inlining")
+        chooseBooleanFlag("wasm-opt")
+        chooseBooleanFlag("wasm-deopt")
+        chooseBooleanFlag("wasm-enforce-bounds-checks")
+        chooseBooleanFlag("wasm-math-intrinsics")
+        chooseBooleanFlag("wasm-bulkmem-inlining")
+        chooseBooleanFlag("wasm-lazy-compilation")
+        chooseBooleanFlag("wasm-lazy-validation")
+        chooseBooleanFlag("wasm-simd-ssse3-codegen")
+    }
+
+    return args
 }

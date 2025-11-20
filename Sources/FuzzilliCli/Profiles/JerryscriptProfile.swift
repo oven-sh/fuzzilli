@@ -23,7 +23,7 @@ let jerryscriptProfile = Profile(
 
     maxExecsBeforeRespawn: 1000,
 
-    timeout: 250,
+    timeout: Timeout.value(250),
 
     codePrefix: """
                 """,
@@ -47,7 +47,7 @@ let jerryscriptProfile = Profile(
     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),
 
     disabledCodeGenerators: [],
-    
+
     disabledMutators: [],
 
     additionalBuiltins: [
@@ -58,6 +58,8 @@ let jerryscriptProfile = Profile(
     ],
 
     additionalObjectGroups: [],
+
+    additionalEnumerations: [],
 
     optionalPostProcessor: nil
 )

@@ -18,8 +18,8 @@ struct Profile {
     let processArgs: (_ randomize: Bool) -> [String]
     let processEnv: [String : String]
     let maxExecsBeforeRespawn: Int
-    // Timeout is in milliseconds.
-    let timeout: Int
+    // Timeout either by value or interval in milliseconds.
+    let timeout: Timeout
     let codePrefix: String
     let codeSuffix: String
     let ecmaVersion: ECMAScriptVersion
@@ -35,6 +35,7 @@ struct Profile {
 
     let additionalBuiltins: [String: ILType]
     let additionalObjectGroups: [ObjectGroup]
+    let additionalEnumerations: [ILType]
 
     // An optional post-processor that is executed for every sample generated for fuzzing and can modify it.
     let optionalPostProcessor: FuzzingPostProcessor?

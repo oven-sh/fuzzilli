@@ -1,4 +1,4 @@
-// swift-tools-version:5.3
+// swift-tools-version:5.7
 //
 // Copyright 2019 Google LLC
 //
@@ -19,13 +19,17 @@ import PackageDescription
 let package = Package(
     name: "Fuzzilli",
     platforms: [
-        .macOS(.v11),
+        .macOS(.v13),
     ],
     products: [
         .library(name: "Fuzzilli",targets: ["Fuzzilli"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.31.0"),
+        .package(
+          url: "https://github.com/apple/swift-collections.git",
+          .upToNextMinor(from: "1.2.0")
+        ),
     ],
     targets: [
         .target(name: "libsocket",
@@ -42,6 +46,7 @@ let package = Package(
         .target(name: "Fuzzilli",
                 dependencies: [
                     .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+                    .product(name: "Collections", package: "swift-collections"),
                     "libsocket",
                     "libreprl",
                     "libcoverage"],
@@ -56,13 +61,13 @@ let package = Package(
                     .copy("Protobuf/ast.proto"),
                     .copy("Compiler/Parser")]),
 
-        .target(name: "REPRLRun",
+        .executableTarget(name: "REPRLRun",
                 dependencies: ["libreprl"]),
 
-        .target(name: "FuzzilliCli",
+        .executableTarget(name: "FuzzilliCli",
                 dependencies: ["Fuzzilli"]),
 
-        .target(name: "FuzzILTool",
+        .executableTarget(name: "FuzzILTool",
                 dependencies: ["Fuzzilli"]),
 
         .testTarget(name: "FuzzilliTests",

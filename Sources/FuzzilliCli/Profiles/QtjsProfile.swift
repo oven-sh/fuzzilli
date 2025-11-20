@@ -31,7 +31,7 @@ let qtjsProfile = Profile(
 
     maxExecsBeforeRespawn: 1000,
 
-    timeout: 250,
+    timeout: Timeout.value(250),
 
     codePrefix: """
                 """,
@@ -64,6 +64,8 @@ let qtjsProfile = Profile(
     ],
 
     additionalObjectGroups: [],
+
+    additionalEnumerations: [],
 
     optionalPostProcessor: nil
 )

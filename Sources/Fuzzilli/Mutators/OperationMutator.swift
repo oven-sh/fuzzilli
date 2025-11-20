@@ -50,8 +50,55 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = LoadBigInt(value: b.randomInt())
         case .loadFloat(_):
             newOp = LoadFloat(value: b.randomFloat())
-        case .loadString(_):
-            newOp = LoadString(value: b.randomString())
+        case .loadString(let op):
+            if let customName = op.customName {
+                // Half the time we want to just hit the regular path
+                if Bool.random() {
+                    if let type = b.fuzzer.environment.getEnum(ofName: customName) {
+                        newOp = LoadString(value: chooseUniform(from: type.enumValues), customName: customName)
+                        break
+                    } else if let gen = b.fuzzer.environment.getNamedStringGenerator(ofName: customName) {
+                        newOp = LoadString(value: gen(), customName: customName)
+                        break
+                    }
+                }
+            }
+            let charSetAlNum = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+            // TODO(mliedtke): Should we also use some more esoteric characters in initial string
+            // creation, e.g. ProgramBuilder.randomString?
+            let charSetExtended = charSetAlNum + Array("-_.,!?<>()[]{}`´^\\/|+#*=;:'~^²\t°ß¿ 🤯🙌🏿\u{202D}")
+            let randomIndex = {(s: String) in
+                s.index(s.startIndex, offsetBy: Int.random(in: 0..<s.count))
+            }
+            let randomCharacter = {
+                // Add an overweight to the alpha-numeric characters.
+                (Bool.random() ? charSetAlNum : charSetExtended).randomElement()!
+            }
+            // With a 50% chance create a new string, otherwise perform a modification on the
+            // existing string. Modifying the string can be especially interesting for
+            // decoders for RegEx, base64, hex, ...
+            let newString = op.value.isEmpty || Bool.random() ? b.randomString() : withEqualProbability(
+                {
+                    // Replace a single character.
+                    var result = op.value
+                    let index = randomIndex(result)
+                    result.replaceSubrange(index..<result.index(index, offsetBy: 1), with: String(randomCharacter()))
+                    return result
+                }, {
+                    // Insert a single character.
+                    var result = op.value
+                    result.insert(randomCharacter(), at: randomIndex(result))
+                    return result
+                }, {
+                    // Remove a single character.
+                    var result = op.value
+                    result.remove(at: randomIndex(result))
+                    return result
+                }
+            )
+            // Note: This explicitly discards customName since we may have created a string that no longer
+            // matches the original schema.
+            newOp = LoadString(value: newString)
         case .loadRegExp(let op):
             newOp = withEqualProbability({
                 let (pattern, flags) = b.randomRegExpPatternAndFlags()
@@ -483,6 +530,10 @@ public class OperationMutator: BaseInstructionMutator {
              .beginClassConstructor(_),
              .endClassConstructor(_),
              .classAddInstanceComputedProperty(_),
+             .beginClassInstanceComputedMethod(_),
+             .endClassInstanceComputedMethod(_),
+             .beginClassStaticComputedMethod(_),
+             .endClassStaticComputedMethod(_),
              .endClassInstanceMethod(_),
              .endClassInstanceGetter(_),
              .endClassInstanceSetter(_),
@@ -582,6 +633,8 @@ public class OperationMutator: BaseInstructionMutator {
              .explore(_),
              .probe(_),
              .fixup(_),
+             .createNamedDisposableVariable(_),
+             .createNamedAsyncDisposableVariable(_),
              .loadDisposableVariable(_),
              .loadAsyncDisposableVariable(_),
              .void(_),
@@ -658,6 +711,7 @@ public class OperationMutator: BaseInstructionMutator {
              .wasmEndTypeGroup(_),
              .wasmDefineArrayType(_),
              .wasmDefineStructType(_),
+             .wasmDefineSignatureType(_),
              .wasmDefineForwardOrSelfReference(_),
              .wasmResolveForwardReference(_),
              .wasmArrayNewFixed(_),
@@ -670,9 +724,13 @@ public class OperationMutator: BaseInstructionMutator {
              .wasmRefIsNull(_),
              .wasmRefI31(_),
              .wasmAnyConvertExtern(_),
-             .wasmExternConvertAny(_):
-             assert(!instr.isOperationMutable)
-             fatalError("Unexpected Operation")
+             .wasmExternConvertAny(_),
+             .wasmDefineElementSegment(_),
+             .wasmDropElementSegment(_),
+             .wasmTableInit(_),
+             .wasmTableCopy(_):
+             let mutability = instr.isOperationMutable ? "mutable" : "immutable"
+             fatalError("Unexpected operation \(instr.op.opcode), marked as \(mutability)")
         }
 
         // This assert is here to prevent subtle bugs if we ever decide to add flags that are "alive" during program building / mutation.

@@ -23,6 +23,7 @@
 //        a variable of type .object() as input because only that can have methods. Also, when generating function
 //        calls it can be necessary to find variables of the types that the function expects as arguments. This task
 //        is solved by defining a "Is a" relationship between types which can then be used to find suitable variables.
+//        Notice that the relationship is not symmetric. Think of it as "Is contained by" or <=.
 //     2. to determine possible actions that can be performed on a value. E.g. when having a reference to something
 //        that is known to be a function, a function call can be performed. Also, the method call code generator will
 //        want to know the available methods that it can call on an object, which it can query from the type system.
@@ -161,6 +162,15 @@ public struct ILType: Hashable {
         return ILType(definiteType: .string, ext: ext)
     }
 
+    /// Constructs an named string: this is a string that typically has some complex format.
+    ///
+    /// Most code will treat these as strings, but the JavaScriptEnvironment can register
+    /// producingGenerators for them so they can be generated more intelligently.
+    public static func namedString(ofName name: String) -> ILType {
+        let ext = TypeExtension(group: name, properties: Set(), methods: Set(), signature: nil, wasmExt: nil)
+        return ILType(definiteType: .string, ext: ext)
+    }
+
     /// An object for which it is not known what properties or methods it has, if any.
     public static let unknownObject: ILType = .object()
 
@@ -212,6 +222,12 @@ public struct ILType: Hashable {
         return ILType(definiteType: .wasmDataSegment, ext: typeExtension)
     }
 
+    public static func  wasmElementSegment(segmentLength: Int? = nil) -> ILType {
+        let maybeWasmExtention = segmentLength.map { WasmElementSegmentType(segmentLength: $0) }
+        let typeExtension = TypeExtension(group: "WasmElementSegment", properties: Set(), methods: Set(), signature: nil, wasmExt: maybeWasmExtention)
+        return ILType(definiteType: .wasmElementSegment, ext: typeExtension)
+    }
+
     public static func wasmTable(wasmTableType: WasmTableType) -> ILType {
         return .object(ofGroup: "WasmTable", withProperties: ["length"], withMethods: ["get", "grow", "set"], withWasmType: wasmTableType)
     }
@@ -236,6 +252,7 @@ public struct ILType: Hashable {
     public static let wasmFuncRef = ILType.wasmRef(.Abstract(.WasmFunc), nullability: true)
     public static let wasmExnRef = ILType.wasmRef(.Abstract(.WasmExn), nullability: true)
     public static let wasmI31Ref = ILType.wasmRef(.Abstract(.WasmI31), nullability: true)
+    public static let wasmRefI31 = ILType.wasmRef(.Abstract(.WasmI31), nullability: false)
     public static let wasmAnyRef = ILType.wasmRef(.Abstract(.WasmAny), nullability: true)
     public static let wasmRefAny = ILType.wasmRef(.Abstract(.WasmAny), nullability: false)
     public static let wasmNullRef = ILType.wasmRef(.Abstract(.WasmNone), nullability: true)
@@ -244,7 +261,6 @@ public struct ILType: Hashable {
     public static let wasmEqRef = ILType.wasmRef(.Abstract(.WasmEq), nullability: true)
     public static let wasmStructRef = ILType.wasmRef(.Abstract(.WasmStruct), nullability: true)
     public static let wasmArrayRef = ILType.wasmRef(.Abstract(.WasmArray), nullability: true)
-    public static let wasmRefI31 = ILType.wasmRef(.Abstract(.WasmI31), nullability: false)
     public static let wasmSimd128 = ILType(definiteType: .wasmSimd128)
     public static let wasmGenericRef = ILType(definiteType: .wasmRef)
 
@@ -308,7 +324,7 @@ public struct ILType: Hashable {
         return !(lhs == rhs)
     }
 
-    /// Returns true if this type subsumes the given type, i.e. every instance of other is also an instance of this type.
+    /// Returns true if other type subsumes this type, i.e. every instance of this is also an instance of other type.
     public func Is(_ other: ILType) -> Bool {
         return other.subsumes(self)
     }
@@ -477,8 +493,12 @@ public struct ILType: Hashable {
         return Is(.constructor()) ? ext?.signature : nil
     }
 
-    public var isEnumeration : Bool {
-        return Is(.string) && ext != nil
+    public var isEnumeration: Bool {
+        return Is(.string) && ext != nil && !ext!.properties.isEmpty
+    }
+
+    public var isEnumerationOrNamedString: Bool {
+        return Is(.string) && ext != nil && group != nil
     }
 
     public var group: String? {
@@ -516,6 +536,14 @@ public struct ILType: Hashable {
 
     public var isWasmDataSegmentType: Bool {
         return wasmDataSegmentType != nil
+    }
+
+    public var wasmElementSegmentType: WasmElementSegmentType? {
+        return ext?.wasmExt as? WasmElementSegmentType
+    }
+
+    public var isWasmElementSegmentType: Bool {
+        return wasmElementSegmentType != nil
     }
 
 
@@ -1082,6 +1110,8 @@ extension ILType: CustomStringConvertible {
             return ".exceptionLabel"
         case .wasmDataSegment:
             return ".wasmDataSegment"
+        case .wasmElementSegment:
+            return ".wasmElementSegment"
         default:
             break
         }
@@ -1157,6 +1187,7 @@ struct BaseType: OptionSet, Hashable {
     static let wasmPackedI16 = BaseType(rawValue: 1 << 23)
 
     static let wasmDataSegment = BaseType(rawValue: 1 << 24)
+    static let wasmElementSegment = BaseType(rawValue: 1 << 25)
 
     static let jsAnything    = BaseType([.undefined, .integer, .float, .string, .boolean, .object, .function, .constructor, .unboundFunction, .bigint, .regexp, .iterable])
 
@@ -1659,6 +1690,30 @@ public class WasmDataSegmentType: WasmTypeExtension {
     }
 }
 
+public class WasmElementSegmentType: WasmTypeExtension {
+    let segmentLength: Int
+    private(set) var isDropped: Bool
+
+    override func isEqual(to other: WasmTypeExtension) -> Bool {
+        guard let other = other as? WasmElementSegmentType else { return false }
+        return self.segmentLength == other.segmentLength && self.isDropped == other.isDropped
+    }
+
+    override public func hash(into hasher: inout Hasher) {
+        hasher.combine(segmentLength)
+        hasher.combine(isDropped)
+    }
+
+    init(segmentLength: Int) {
+        self.segmentLength = segmentLength
+        self.isDropped = false
+    }
+
+    public func markAsDropped() {
+        self.isDropped = true
+    }
+}
+
 public class WasmTableType: WasmTypeExtension {
     public struct IndexInTableAndWasmSignature: Hashable {
         let indexInTable: Int
@@ -2036,6 +2091,25 @@ class WasmTypeDescription: Hashable, CustomStringConvertible {
 
     public var description: String {
         return format(abbreviate: false)
+    }
+}
+
+class WasmSignatureTypeDescription: WasmTypeDescription {
+    var signature: WasmSignature
+
+    init(signature: WasmSignature, typeGroupIndex: Int) {
+        self.signature = signature
+        super.init(typeGroupIndex: typeGroupIndex, superType: .WasmFunc)
+    }
+
+    override func format(abbreviate: Bool) -> String {
+        let abbreviated = "\(super.format(abbreviate: abbreviate)) Func"
+        if abbreviate {
+            return abbreviated
+        }
+        let paramTypes = signature.parameterTypes.map {$0.abbreviated}.joined(separator: ", ")
+        let outputTypes = signature.outputTypes.map {$0.abbreviated}.joined(separator: ", ")
+        return "\(abbreviated)[[\(paramTypes)] => [\(outputTypes)]]"
     }
 }
 

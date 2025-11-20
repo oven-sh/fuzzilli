@@ -195,7 +195,7 @@ let bunProfile = Profile(
 
     maxExecsBeforeRespawn: 1000,
 
-    timeout: 2500,
+    timeout: Timeout.value(2500),
 
     codePrefix: """
                 """,
@@ -313,6 +313,8 @@ let bunProfile = Profile(
         htmlRewriterTextGroup,
         htmlRewriterCommentGroup,
     ],
+
+    additionalEnumerations: [],
 
     optionalPostProcessor: nil
 )

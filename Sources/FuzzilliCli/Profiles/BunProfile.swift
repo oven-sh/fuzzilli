@@ -72,6 +72,20 @@ public extension ILType {
         withProperties: [],
         withMethods: ["on", "onDocument", "transform"]
     )
+
+    // BunTOML - TOML parser
+    static let bunTOML = ILType.object(
+        ofGroup: "BunTOML",
+        withProperties: [],
+        withMethods: ["parse"]
+    )
+
+    // BunYAML - YAML parser/stringifier
+    static let bunYAML = ILType.object(
+        ofGroup: "BunYAML",
+        withProperties: [],
+        withMethods: ["parse", "stringify"]
+    )
 }
 
 // MARK: - Bun ObjectGroup Definitions
@@ -185,6 +199,25 @@ public let htmlRewriterGroup = ObjectGroup(
     ]
 )
 
+public let bunTOMLGroup = ObjectGroup(
+    name: "BunTOML",
+    instanceType: .bunTOML,
+    properties: [:],
+    methods: [
+        "parse": [.string] => .jsAnything,
+    ]
+)
+
+public let bunYAMLGroup = ObjectGroup(
+    name: "BunYAML",
+    instanceType: .bunYAML,
+    properties: [:],
+    methods: [
+        "parse":     [.string] => .jsAnything,
+        "stringify": [.jsAnything, .opt(.jsAnything), .opt(.jsAnything)] => .string,
+    ]
+)
+
 // MARK: - Bun Profile
 
 let bunProfile = Profile(
@@ -237,6 +270,21 @@ let bunProfile = Profile(
         // Common Node.js globals that Bun provides
         "process"           : .object(),
         "Buffer"            : .constructor([.jsAnything] => .object()),
+        // Buffer.from(array | arrayBuffer | buffer | string | object, [offsetOrEncoding], [length])
+        "Buffer.from"       : .function([.jsAnything, .opt(.jsAnything), .opt(.integer)] => .object()),
+        // Buffer.alloc(size[, fill[, encoding]])
+        "Buffer.alloc"      : .function([.integer, .opt(.jsAnything), .opt(.string)] => .object()),
+        "Buffer.allocUnsafe" : .function([.integer] => .object()),
+        "Buffer.allocUnsafeSlow" : .function([.integer] => .object()),
+        "Buffer.isBuffer"   : .function([.jsAnything] => .boolean),
+        "Buffer.isEncoding" : .function([.string] => .boolean),
+        // Buffer.byteLength(string | buffer | arrayBuffer | ..., [encoding])
+        "Buffer.byteLength" : .function([.jsAnything, .opt(.string)] => .integer),
+        "Buffer.compare"    : .function([.object(), .object()] => .integer),
+        // Buffer.concat(list[, totalLength])
+        "Buffer.concat"     : .function([.object(), .opt(.integer)] => .object()),
+        // Buffer.copyBytesFrom(view[, offset[, length]])
+        "Buffer.copyBytesFrom" : .function([.object(), .opt(.integer), .opt(.integer)] => .object()),
         "global"            : .object(),
 
         // Bun constructors
@@ -244,6 +292,26 @@ let bunProfile = Profile(
         "Transpiler"        : .constructor([.opt(.object())] => .bunTranspiler),
         "Glob"              : .constructor([.string, .opt(.object())] => .bunGlob),
         "HTMLRewriter"      : .constructor([] => .htmlRewriter),
+
+        // Bun hash constructors (shortcuts for specific algorithms)
+        "Bun.MD4"           : .constructor([] => .bunCryptoHasher),
+        "Bun.MD5"           : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA1"          : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA224"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA256"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA384"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA512"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA512_256"    : .constructor([] => .bunCryptoHasher),
+
+        // Static hash methods on hash constructors
+        "Bun.MD4.hash"      : .function([.jsAnything, .opt(.string)] => .jsAnything),
+        "Bun.MD5.hash"      : .function([.jsAnything, .opt(.string)] => .jsAnything),
+        "Bun.SHA1.hash"     : .function([.jsAnything, .opt(.string)] => .jsAnything),
+        "Bun.SHA224.hash"   : .function([.jsAnything, .opt(.string)] => .jsAnything),
+        "Bun.SHA256.hash"   : .function([.jsAnything, .opt(.string)] => .jsAnything),
+        "Bun.SHA384.hash"   : .function([.jsAnything, .opt(.string)] => .jsAnything),
+        "Bun.SHA512.hash"   : .function([.jsAnything, .opt(.string)] => .jsAnything),
+        "Bun.SHA512_256.hash" : .function([.jsAnything, .opt(.string)] => .jsAnything),
 
         // Bun utility methods (non-blocking, non-IO)
         "Bun.hash"          : .function([.jsAnything, .opt(.integer)] => .integer),
@@ -263,9 +331,12 @@ let bunProfile = Profile(
         "Bun.stringWidth"   : .function([.string, .opt(.object())] => .integer),
         "Bun.stripANSI"     : .function([.string] => .string),
         "Bun.inspect"       : .function([.jsAnything, .opt(.object())] => .string),
+        "Bun.color"         : .function([.string, .opt(.string)] => .jsAnything),
+        "Bun.shellEscape"   : .function([.string] => .string),
 
         // Comparison
         "Bun.deepEquals"    : .function([.jsAnything, .jsAnything, .opt(.boolean)] => .boolean),
+        "Bun.deepMatch"     : .function([.jsAnything, .jsAnything] => .boolean),
 
         // Semver utilities
         "Bun.semver.satisfies" : .function([.string, .string] => .boolean),
@@ -273,6 +344,7 @@ let bunProfile = Profile(
 
         // UUID generation
         "Bun.randomUUIDv7"  : .function([.opt(.string), .opt(.integer)] => .string),
+        "Bun.randomUUIDv5"  : .function([.string, .string, .opt(.string)] => .string),
 
         // Path utilities
         "Bun.fileURLToPath" : .function([.string] => .string),
@@ -296,10 +368,29 @@ let bunProfile = Profile(
         "Bun.gunzipSync"    : .function([.jsAnything] => .object()),
         "Bun.deflateSync"   : .function([.jsAnything, .opt(.object())] => .object()),
         "Bun.inflateSync"   : .function([.jsAnything] => .object()),
+        "Bun.zstdCompressSync"   : .function([.jsAnything, .opt(.object())] => .object()),
+        "Bun.zstdDecompressSync" : .function([.jsAnything] => .object()),
 
         // Bun metadata properties
         "Bun.version"       : .string,
         "Bun.revision"      : .string,
+        "Bun.enableANSIColors" : .boolean,
+        "Bun.isMainThread"  : .boolean,
+
+        // Buffer utilities
+        "Bun.concatArrayBuffers" : .function([.object(), .opt(.integer), .opt(.boolean)] => .object()),
+        "Bun.indexOfLine"   : .function([.object(), .opt(.integer)] => .integer),
+        "Bun.allocUnsafe"   : .function([.integer] => .object()),
+
+        // SHA function
+        "Bun.sha"           : .function([.jsAnything, .opt(.string)] => .object()),
+
+        // Memory management
+        "Bun.shrink"        : .function([] => .undefined),
+
+        // Parsers
+        "Bun.TOML"          : .bunTOML,
+        "Bun.YAML"          : .bunYAML,
 
         // Fuzzilli integration
         "fuzzilli"          : .function([.string, .jsAnything] => .undefined),
@@ -314,6 +405,8 @@ let bunProfile = Profile(
         htmlRewriterElementGroup,
         htmlRewriterTextGroup,
         htmlRewriterCommentGroup,
+        bunTOMLGroup,
+        bunYAMLGroup,
     ],
 
     optionalPostProcessor: nil

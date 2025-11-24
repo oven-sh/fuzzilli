@@ -224,7 +224,11 @@ let bunProfile = Profile(
     processArgs: { randomize in ["fuzzilli"] },
 
 
-    processEnv: ["ASAN_OPTIONS" : "allocator_may_return_null=1:abort_on_error=1:symbolize=false:redzone=128:detect_leaks=0", "UBSAN_OPTIONS" : "abort_on_error=1:symbolize=false:redzone=128", "BUN_DEBUG_QUIET_LOGS" : "1"],
+    processEnv: [
+        "ASAN_OPTIONS": "allow_user_segv_handler=1:allocator_may_return_null=1:abort_on_error=1:symbolize=false:redzone=128:detect_leaks=0",
+        "UBSAN_OPTIONS": "abort_on_error=1:symbolize=false:redzone=128",
+        "BUN_DEBUG_QUIET_LOGS": "1",
+    ],
 
     maxExecsBeforeRespawn: 1000,
 

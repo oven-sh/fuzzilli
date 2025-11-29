@@ -969,7 +969,7 @@ let bunProfile = Profile(
 
     codePrefix: """
                 delete globalThis.Loader;
-                Bun.generateHeapSnapshot = console.profile = console.profileEnd = () => {};
+                Bun.generateHeapSnapshot = console.profile = console.profileEnd = process.abort = () => {};
                 """,
 
     codeSuffix: """

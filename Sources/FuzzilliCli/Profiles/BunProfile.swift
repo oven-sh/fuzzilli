@@ -108,6 +108,14 @@ public extension ILType {
         withProperties: [],
         withMethods: ["parse", "stringify"]
     )
+
+    // BunHashConstructor - Hash algorithm constructors (Bun.MD4, Bun.SHA256, etc.)
+    // These are constructor objects that also have a static .hash method
+    static let bunHashConstructor = ILType.object(
+        ofGroup: "BunHashConstructor",
+        withProperties: [],
+        withMethods: ["hash"]
+    )
 }
 
 // MARK: - Bun ObjectGroup Definitions
@@ -242,6 +250,17 @@ public let bunYAMLGroup = ObjectGroup(
     ]
 )
 
+// ObjectGroup for hash constructors (Bun.MD4, Bun.SHA256, etc.)
+// These are constructor functions that also have a static .hash method
+public let bunHashConstructorGroup = ObjectGroup(
+    name: "BunHashConstructor",
+    instanceType: .bunHashConstructor,
+    properties: [:],
+    methods: [
+        "hash": [.jsAnything, .opt(.string)] => .jsAnything,
+    ]
+)
+
 // Options object for hash operations
 public let bunHashOptions = ObjectGroup(
     name: "BunHashOptions",
@@ -266,6 +285,66 @@ public let bunColorOptions = ObjectGroup(
 // MARK: - Bun Web API Types
 
 public extension ILType {
+    // Buffer type
+    static let bunBuffer = ILType.object(
+        ofGroup: "Buffer",
+        withProperties: ["length", "byteLength", "byteOffset", "buffer"],
+        withMethods: ["toString", "toJSON", "equals", "compare", "copy", "slice", "subarray",
+                      "write", "writeBigInt64BE", "writeBigInt64LE", "writeBigUInt64BE", "writeBigUInt64LE",
+                      "writeDoubleBE", "writeDoubleLE", "writeFloatBE", "writeFloatLE",
+                      "writeInt8", "writeInt16BE", "writeInt16LE", "writeInt32BE", "writeInt32LE",
+                      "writeUInt8", "writeUInt16BE", "writeUInt16LE", "writeUInt32BE", "writeUInt32LE",
+                      "readBigInt64BE", "readBigInt64LE", "readBigUInt64BE", "readBigUInt64LE",
+                      "readDoubleBE", "readDoubleLE", "readFloatBE", "readFloatLE",
+                      "readInt8", "readInt16BE", "readInt16LE", "readInt32BE", "readInt32LE",
+                      "readUInt8", "readUInt16BE", "readUInt16LE", "readUInt32BE", "readUInt32LE",
+                      "swap16", "swap32", "swap64", "fill", "indexOf", "lastIndexOf", "includes"]
+    )
+
+    // TextEncoder type
+    static let bunTextEncoder = ILType.object(
+        ofGroup: "TextEncoder",
+        withProperties: ["encoding"],
+        withMethods: ["encode", "encodeInto"]
+    )
+
+    // TextDecoder type
+    static let bunTextDecoder = ILType.object(
+        ofGroup: "TextDecoder",
+        withProperties: ["encoding", "fatal", "ignoreBOM"],
+        withMethods: ["decode"]
+    )
+
+    // URL type
+    static let bunURL = ILType.object(
+        ofGroup: "URL",
+        withProperties: ["href", "origin", "protocol", "username", "password", "host", "hostname",
+                         "port", "pathname", "search", "searchParams", "hash"],
+        withMethods: ["toString", "toJSON"]
+    )
+
+    // URLSearchParams type
+    static let bunURLSearchParams = ILType.object(
+        ofGroup: "URLSearchParams",
+        withProperties: ["size"],
+        withMethods: ["append", "delete", "get", "getAll", "has", "set", "sort", "toString",
+                      "entries", "keys", "values", "forEach"]
+    )
+
+    // FormData type
+    static let bunFormData = ILType.object(
+        ofGroup: "FormData",
+        withProperties: [],
+        withMethods: ["append", "delete", "get", "getAll", "has", "set", "entries", "keys", "values", "forEach"]
+    )
+
+    // Blob type
+    static let bunBlob = ILType.object(
+        ofGroup: "Blob",
+        withProperties: ["size", "type"],
+        withMethods: ["slice", "stream", "text", "arrayBuffer"]
+    )
+
     // Fetch/Request/Response types
     static let bunHeaders = ILType.object(
         ofGroup: "Headers",
@@ -352,6 +431,173 @@ public let bunResponseGroup = ObjectGroup(
         "formData":    [] => .jsPromise,
         "json":        [] => .jsPromise,
         "text":        [] => .jsPromise,
+    ]
+)
+
+public let bunBufferGroup = ObjectGroup(
+    name: "Buffer",
+    instanceType: .bunBuffer,
+    properties: [
+        "length":     .integer,
+        "byteLength": .integer,
+        "byteOffset": .integer,
+        "buffer":     .object(),
+    ],
+    methods: [
+        "toString":         [.opt(.string), .opt(.integer), .opt(.integer)] => .string,
+        "toJSON":           [] => .object(),
+        "equals":           [.object()] => .boolean,
+        "compare":          [.object(), .opt(.integer), .opt(.integer), .opt(.integer), .opt(.integer)] => .integer,
+        "copy":             [.object(), .opt(.integer), .opt(.integer), .opt(.integer)] => .integer,
+        "slice":            [.opt(.integer), .opt(.integer)] => .bunBuffer,
+        "subarray":         [.opt(.integer), .opt(.integer)] => .bunBuffer,
+        "write":            [.string, .opt(.integer), .opt(.integer), .opt(.string)] => .integer,
+        "fill":             [.jsAnything, .opt(.integer), .opt(.integer), .opt(.string)] => .bunBuffer,
+        "indexOf":          [.jsAnything, .opt(.integer), .opt(.string)] => .integer,
+        "lastIndexOf":      [.jsAnything, .opt(.integer), .opt(.string)] => .integer,
+        "includes":         [.jsAnything, .opt(.integer), .opt(.string)] => .boolean,
+        "swap16":           [] => .bunBuffer,
+        "swap32":           [] => .bunBuffer,
+        "swap64":           [] => .bunBuffer,
+        "readInt8":         [.opt(.integer)] => .integer,
+        "readUInt8":        [.opt(.integer)] => .integer,
+        "readInt16BE":      [.opt(.integer)] => .integer,
+        "readInt16LE":      [.opt(.integer)] => .integer,
+        "readUInt16BE":     [.opt(.integer)] => .integer,
+        "readUInt16LE":     [.opt(.integer)] => .integer,
+        "readInt32BE":      [.opt(.integer)] => .integer,
+        "readInt32LE":      [.opt(.integer)] => .integer,
+        "readUInt32BE":     [.opt(.integer)] => .integer,
+        "readUInt32LE":     [.opt(.integer)] => .integer,
+        "readFloatBE":      [.opt(.integer)] => .float,
+        "readFloatLE":      [.opt(.integer)] => .float,
+        "readDoubleBE":     [.opt(.integer)] => .float,
+        "readDoubleLE":     [.opt(.integer)] => .float,
+        "readBigInt64BE":   [.opt(.integer)] => .bigint,
+        "readBigInt64LE":   [.opt(.integer)] => .bigint,
+        "readBigUInt64BE":  [.opt(.integer)] => .bigint,
+        "readBigUInt64LE":  [.opt(.integer)] => .bigint,
+        "writeInt8":        [.integer, .opt(.integer)] => .integer,
+        "writeUInt8":       [.integer, .opt(.integer)] => .integer,
+        "writeInt16BE":     [.integer, .opt(.integer)] => .integer,
+        "writeInt16LE":     [.integer, .opt(.integer)] => .integer,
+        "writeUInt16BE":    [.integer, .opt(.integer)] => .integer,
+        "writeUInt16LE":    [.integer, .opt(.integer)] => .integer,
+        "writeInt32BE":     [.integer, .opt(.integer)] => .integer,
+        "writeInt32LE":     [.integer, .opt(.integer)] => .integer,
+        "writeUInt32BE":    [.integer, .opt(.integer)] => .integer,
+        "writeUInt32LE":    [.integer, .opt(.integer)] => .integer,
+        "writeFloatBE":     [.float, .opt(.integer)] => .integer,
+        "writeFloatLE":     [.float, .opt(.integer)] => .integer,
+        "writeDoubleBE":    [.float, .opt(.integer)] => .integer,
+        "writeDoubleLE":    [.float, .opt(.integer)] => .integer,
+        "writeBigInt64BE":  [.bigint, .opt(.integer)] => .integer,
+        "writeBigInt64LE":  [.bigint, .opt(.integer)] => .integer,
+        "writeBigUInt64BE": [.bigint, .opt(.integer)] => .integer,
+        "writeBigUInt64LE": [.bigint, .opt(.integer)] => .integer,
+    ]
+)
+
+public let bunTextEncoderGroup = ObjectGroup(
+    name: "TextEncoder",
+    instanceType: .bunTextEncoder,
+    properties: [
+        "encoding": .string,
+    ],
+    methods: [
+        "encode":     [.opt(.string)] => .object(),  // Returns Uint8Array
+        "encodeInto": [.string, .object()] => .object(),  // Returns {read, written}
+    ]
+)
+
+public let bunTextDecoderGroup = ObjectGroup(
+    name: "TextDecoder",
+    instanceType: .bunTextDecoder,
+    properties: [
+        "encoding":  .string,
+        "fatal":     .boolean,
+        "ignoreBOM": .boolean,
+    ],
+    methods: [
+        "decode": [.opt(.object()), .opt(.object())] => .string,
+    ]
+)
+
+public let bunURLGroup = ObjectGroup(
+    name: "URL",
+    instanceType: .bunURL,
+    properties: [
+        "href":         .string,
+        "origin":       .string,
+        "protocol":     .string,
+        "username":     .string,
+        "password":     .string,
+        "host":         .string,
+        "hostname":     .string,
+        "port":         .string,
+        "pathname":     .string,
+        "search":       .string,
+        "searchParams": .bunURLSearchParams,
+        "hash":         .string,
+    ],
+    methods: [
+        "toString": [] => .string,
+        "toJSON":   [] => .string,
+    ]
+)
+
+public let bunURLSearchParamsGroup = ObjectGroup(
+    name: "URLSearchParams",
+    instanceType: .bunURLSearchParams,
+    properties: [
+        "size": .integer,
+    ],
+    methods: [
+        "append":  [.string, .string] => .undefined,
+        "delete":  [.string, .opt(.string)] => .undefined,
+        "get":     [.string] => (.string | .undefined),
+        "getAll":  [.string] => .jsArray,
+        "has":     [.string, .opt(.string)] => .boolean,
+        "set":     [.string, .string] => .undefined,
+        "sort":    [] => .undefined,
+        "toString": [] => .string,
+        "entries": [] => .object(),
+        "keys":    [] => .object(),
+        "values":  [] => .object(),
+        "forEach": [.function()] => .undefined,
+    ]
+)
+
+public let bunFormDataGroup = ObjectGroup(
+    name: "FormData",
+    instanceType: .bunFormData,
+    properties: [:],
+    methods: [
+        "append":  [.string, .jsAnything, .opt(.string)] => .undefined,
+        "delete":  [.string] => .undefined,
+        "get":     [.string] => .jsAnything,
+        "getAll":  [.string] => .jsArray,
+        "has":     [.string] => .boolean,
+        "set":     [.string, .jsAnything, .opt(.string)] => .undefined,
+        "entries": [] => .object(),
+        "keys":    [] => .object(),
+        "values":  [] => .object(),
+        "forEach": [.function()] => .undefined,
+    ]
+)
+
+public let bunBlobGroup = ObjectGroup(
+    name: "Blob",
+    instanceType: .bunBlob,
+    properties: [
+        "size": .integer,
+        "type": .string,
+    ],
+    methods: [
+        "slice":       [.opt(.integer), .opt(.integer), .opt(.string)] => .bunBlob,
+        "stream":      [] => .object(),
+        "text":        [] => .jsPromise,
+        "arrayBuffer": [] => .jsPromise,
     ]
 )
 
@@ -723,6 +969,7 @@ let bunProfile = Profile(
 
     codePrefix: """
                 delete globalThis.Loader;
+                Bun.generateHeapSnapshot = console.profile = console.profileEnd = () => {};
                 """,
 
     codeSuffix: """
@@ -765,7 +1012,7 @@ let bunProfile = Profile(
 
         // Common Node.js globals that Bun provides
         "process"           : .object(),
-        "Buffer"            : .constructor([.jsAnything] => .object()),
+        "Buffer"            : .constructor([.jsAnything] => .bunBuffer),
 
         // Web APIs
         "fetch"             : .function([.jsAnything, .opt(.object())] => .jsPromise),
@@ -775,29 +1022,29 @@ let bunProfile = Profile(
         "Response.json"     : .function([.jsAnything, .opt(.object())] => .bunResponse),
         "Response.redirect" : .function([.string, .opt(.integer)] => .bunResponse),
         "Response.error"    : .function([] => .bunResponse),
-        "URL"               : .constructor([.string, .opt(.string)] => .object()),
-        "URLSearchParams"   : .constructor([.opt(.jsAnything)] => .object()),
-        "FormData"          : .constructor([] => .object()),
-        "Blob"              : .constructor([.opt(.object()), .opt(.object())] => .object()),
-        "TextEncoder"       : .constructor([] => .object()),
-        "TextDecoder"       : .constructor([.opt(.string), .opt(.object())] => .object()),
+        "URL"               : .constructor([.string, .opt(.string)] => .bunURL),
+        "URLSearchParams"   : .constructor([.opt(.jsAnything)] => .bunURLSearchParams),
+        "FormData"          : .constructor([] => .bunFormData),
+        "Blob"              : .constructor([.opt(.object()), .opt(.object())] => .bunBlob),
+        "TextEncoder"       : .constructor([] => .bunTextEncoder),
+        "TextDecoder"       : .constructor([.opt(.string), .opt(.object())] => .bunTextDecoder),
         "atob"              : .function([.string] => .string),
         "btoa"              : .function([.string] => .string),
         // Buffer.from(array | arrayBuffer | buffer | string | object, [offsetOrEncoding], [length])
-        "Buffer.from"       : .function([.jsAnything, .opt(.jsAnything), .opt(.integer)] => .object()),
+        "Buffer.from"       : .function([.jsAnything, .opt(.jsAnything), .opt(.integer)] => .bunBuffer),
         // Buffer.alloc(size[, fill[, encoding]])
-        "Buffer.alloc"      : .function([.integer, .opt(.jsAnything), .opt(.string)] => .object()),
-        "Buffer.allocUnsafe" : .function([.integer] => .object()),
-        "Buffer.allocUnsafeSlow" : .function([.integer] => .object()),
+        "Buffer.alloc"      : .function([.integer, .opt(.jsAnything), .opt(.string)] => .bunBuffer),
+        "Buffer.allocUnsafe" : .function([.integer] => .bunBuffer),
+        "Buffer.allocUnsafeSlow" : .function([.integer] => .bunBuffer),
         "Buffer.isBuffer"   : .function([.jsAnything] => .boolean),
         "Buffer.isEncoding" : .function([.string] => .boolean),
         // Buffer.byteLength(string | buffer | arrayBuffer | ..., [encoding])
         "Buffer.byteLength" : .function([.jsAnything, .opt(.string)] => .integer),
-        "Buffer.compare"    : .function([.object(), .object()] => .integer),
+        "Buffer.compare"    : .function([.plain(.bunBuffer), .plain(.bunBuffer)] => .integer),
         // Buffer.concat(list[, totalLength])
-        "Buffer.concat"     : .function([.object(), .opt(.integer)] => .object()),
+        "Buffer.concat"     : .function([.object(), .opt(.integer)] => .bunBuffer),
         // Buffer.copyBytesFrom(view[, offset[, length]])
-        "Buffer.copyBytesFrom" : .function([.object(), .opt(.integer), .opt(.integer)] => .object()),
+        "Buffer.copyBytesFrom" : .function([.object(), .opt(.integer), .opt(.integer)] => .bunBuffer),
         "global"            : .object(),
 
         // Bun constructors
@@ -807,24 +1054,15 @@ let bunProfile = Profile(
         "HTMLRewriter"      : .constructor([] => .htmlRewriter),
 
         // Bun hash constructors (shortcuts for specific algorithms)
-        "Bun.MD4"           : .constructor([] => .bunCryptoHasher),
-        "Bun.MD5"           : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA1"          : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA224"        : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA256"        : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA384"        : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA512"        : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA512_256"    : .constructor([] => .bunCryptoHasher),
-
-        // Static hash methods on hash constructors
-        "Bun.MD4.hash"      : .function([.jsAnything, .opt(.string)] => .jsAnything),
-        "Bun.MD5.hash"      : .function([.jsAnything, .opt(.string)] => .jsAnything),
-        "Bun.SHA1.hash"     : .function([.jsAnything, .opt(.string)] => .jsAnything),
-        "Bun.SHA224.hash"   : .function([.jsAnything, .opt(.string)] => .jsAnything),
-        "Bun.SHA256.hash"   : .function([.jsAnything, .opt(.string)] => .jsAnything),
-        "Bun.SHA384.hash"   : .function([.jsAnything, .opt(.string)] => .jsAnything),
-        "Bun.SHA512.hash"   : .function([.jsAnything, .opt(.string)] => .jsAnything),
-        "Bun.SHA512_256.hash" : .function([.jsAnything, .opt(.string)] => .jsAnything),
+        // These are constructor objects with a static .hash method
+        "Bun.MD4"           : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
+        "Bun.MD5"           : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
+        "Bun.SHA1"          : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
+        "Bun.SHA224"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
+        "Bun.SHA256"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
+        "Bun.SHA384"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
+        "Bun.SHA512"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
+        "Bun.SHA512_256"    : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
 
         // Bun utility methods (non-blocking, non-IO)
         "Bun.hash"          : .function([.jsAnything, .opt(.integer)] => .integer),
@@ -920,11 +1158,19 @@ let bunProfile = Profile(
         htmlRewriterCommentGroup,
         bunTOMLGroup,
         bunYAMLGroup,
+        bunHashConstructorGroup,
         bunHashOptions,
         bunColorOptions,
         bunHeadersGroup,
         bunRequestGroup,
         bunResponseGroup,
+        bunBufferGroup,
+        bunTextEncoderGroup,
+        bunTextDecoderGroup,
+        bunURLGroup,
+        bunURLSearchParamsGroup,
+        bunFormDataGroup,
+        bunBlobGroup,
     ],
 
     optionalPostProcessor: nil

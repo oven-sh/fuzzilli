@@ -240,8 +240,11 @@ public struct Code: Collection {
                 }
             }
 
-            guard instr.op.requiredContext.isSubset(of: contextAnalyzer.context) else {
-                throw FuzzilliError.codeVerificationError("operation \(instr.op.name) inside an invalid context")
+            // Allow top-level await
+            if !(instr.op is Await) {
+                guard instr.op.requiredContext.isSubset(of: contextAnalyzer.context) else {
+                    throw FuzzilliError.codeVerificationError("operation \(instr.op.name) inside an invalid context")
+                }
             }
 
             // Ensure that the instruction exists in the right context

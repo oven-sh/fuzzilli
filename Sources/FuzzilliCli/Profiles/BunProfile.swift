@@ -634,7 +634,7 @@ public let BunBufferEncodingGenerator = CodeGenerator("BunBufferEncodingGenerato
 }
 
 // Helper to generate random color strings
-fileprivate func randomColorString() -> String {
+private func randomColorString() -> String {
     let r = Int.random(in: 0...255)
     let g = Int.random(in: 0...255)
     let b = Int.random(in: 0...255)
@@ -695,7 +695,7 @@ public let BunColorGenerator = CodeGenerator("BunColorGenerator") { b in
 }
 
 // Helper to generate safe URLs for fuzzing (no actual network I/O)
-fileprivate func randomSafeUrl() -> String {
+private func randomSafeUrl() -> String {
     switch Int.random(in: 0...7) {
     case 0:  // data: URL with text (pre-encoded)
         return "data:text/plain,Hello%20World%20\(Int.random(in: 0...1000))"
@@ -725,7 +725,7 @@ fileprivate func randomSafeUrl() -> String {
 }
 
 // Helper to create random body for Request/Response
-fileprivate func createRandomBody(_ b: ProgramBuilder) -> Variable {
+private func createRandomBody(_ b: ProgramBuilder) -> Variable {
     switch Int.random(in: 0...8) {
     case 0:  // String body (plain text)
         return b.loadString("Hello World \(Int.random(in: 0...1000))")
@@ -853,14 +853,12 @@ public let BunFetchGenerator = CodeGenerator("BunFetchGenerator") { b in
         b.callMethod("clone", on: request)
 
         // Try to read body
-        if Bool.random() {
-            b.callMethod("text", on: request)
-        } else if Bool.random() {
-            b.callMethod("json", on: request)
-        } else if Bool.random() {
-            b.callMethod("arrayBuffer", on: request)
-        } else if Bool.random() {
-            b.callMethod("blob", on: request)
+        switch Int.random(in: 0...4) {
+        case 0: b.callMethod("text", on: request)
+        case 1: b.callMethod("json", on: request)
+        case 2: b.callMethod("arrayBuffer", on: request)
+        case 3: b.callMethod("blob", on: request)
+        default: break
         }
     }
 
@@ -1171,6 +1169,13 @@ let bunProfile = Profile(
         bunURLSearchParamsGroup,
         bunFormDataGroup,
         bunBlobGroup,
+    ],
+
+    additionalEnumerations: [
+        .bufferEncodingEnum,
+        .hashAlgorithmEnum,
+        .digestFormatEnum,
+        .colorFormatEnum,
     ],
 
     optionalPostProcessor: nil

@@ -1210,9 +1210,9 @@ public class JavaScriptCompiler {
             fatalError("V8IntrinsicIdentifiers must be handled as part of their surrounding CallExpression")
 
         case .awaitExpression(let awaitExpression):
-                // Await is also allowed at the top level of a module
-                let argument = try compileExpression(awaitExpression.argument)
-                return emit(Await(), withInputs: [argument]).output
+            // Await is also allowed at the top level of a module
+            let argument = try compileExpression(awaitExpression.argument)
+            return emit(Await(), withInputs: [argument]).output
         }
     }
 

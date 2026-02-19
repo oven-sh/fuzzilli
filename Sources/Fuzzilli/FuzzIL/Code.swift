@@ -240,8 +240,9 @@ public struct Code: Collection {
                 }
             }
 
-            // Allow top-level await
-            if !(instr.op is Await) {
+            // Allow top-level await (Bun and other runtimes support await outside async functions)
+            let isAllowedAwait = instr.op is Await && contextAnalyzer.context.contains(.asyncFunction) == false
+            if !isAllowedAwait {
                 guard instr.op.requiredContext.isSubset(of: contextAnalyzer.context) else {
                     throw FuzzilliError.codeVerificationError("operation \(instr.op.name) inside an invalid context")
                 }

@@ -864,7 +864,7 @@ public let bunCookieMapGroup = ObjectGroup(
     instanceType: .bunCookieMap,
     properties: [:],
     methods: [
-        "get":     [.string] => .bunCookie | .undefined,
+        "get":     [.string] => .jsAnything,
         "set":     [.string, .string, .opt(.object())] => .undefined,
         "delete":  [.string] => .boolean,
         "has":     [.string] => .boolean,

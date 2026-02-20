@@ -37,7 +37,7 @@ fileprivate struct SandboxFuzzingPostProcessor: FuzzingPostProcessor {
             }
         }
 
-        b.adopting(from: program) {
+        b.adopting() {
             for instr in program.code {
                 b.adopt(instr)
 
@@ -51,16 +51,63 @@ fileprivate struct SandboxFuzzingPostProcessor: FuzzingPostProcessor {
     }
 }
 
+let BytecodeFuzzer = ProgramTemplate("BytecodeFuzzer") { b in
+    b.buildPrefix()
+
+    // Generate some random code to produce some values
+    b.build(n: 10)
+
+    // Create a random function
+    let f = b.buildPlainFunction(with: b.randomParameters()) { args in
+        b.build(n: 25)
+    }
+
+    // Invoke the function once to trigger bytecode compilation
+    b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+
+    // Get the Bytecode object
+    let bytecodeObj = b.eval("%GetBytecode(%@)", with: [f], hasOutput: true)!
+
+    // Wrap the bytecode in a Uint8Array
+    let bytecode = b.getProperty("bytecode", of: bytecodeObj)
+    let Uint8Array = b.createNamedVariable(forBuiltin: "Uint8Array")
+    let u8 = b.construct(Uint8Array, withArgs: [bytecode])
+
+    // Mutate the bytecode
+    let numMutations = Int.random(in: 1...3)
+    for _ in 0..<numMutations {
+        let index = Int64.random(in: 0..<200)
+        let newByte: Variable
+        if probability(0.5) {
+            let bit = b.loadInt(1 << Int.random(in: 0..<8))
+            let oldByte = b.getElement(index, of: u8)
+            newByte = b.binary(oldByte, bit, with: .Xor)
+        } else {
+            newByte = b.loadInt(Int64.random(in: 0..<256))
+        }
+        b.setElement(index, of: u8, to: newByte)
+    }
+
+    // Install the mutated bytecode
+    b.eval("%InstallBytecode(%@, %@)", with: [f, bytecodeObj])
+
+    // Execute the new bytecode
+    b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+}
+
 let v8SandboxProfile = Profile(
     processArgs: { randomize in
         v8ProcessArgs(randomize: randomize, forSandbox: true)
     },
 
+    processArgsReference: nil,
+
     // ASan options.
     // - abort_on_error=true: We need asan to exit in a way that's detectable for Fuzzilli as a crash
+    // - handle_sigill=true: It seems by default ASAN doesn't handle SIGILL, but we want that to have stack traces
     // - symbolize=false: Symbolization can tak a _very_ long time (> 1s), which may cause crashing samples to time out before the stack trace has been captured (in which case Fuzzilli will discard the sample)
     // - redzone=128: This value is used by Clusterfuzz for reproducing testcases so we should use the same value
-    processEnv: ["ASAN_OPTIONS" : "abort_on_error=1:symbolize=false:redzone=128", "UBSAN_OPTIONS" : "abort_on_error=1:symbolize=false:redzone=128"],
+    processEnv: ["ASAN_OPTIONS" : "abort_on_error=1:handle_sigill=1:symbolize=false:redzone=128", "UBSAN_OPTIONS" : "abort_on_error=1:symbolize=false:redzone=128"],
 
     maxExecsBeforeRespawn: 1000,
 
@@ -457,6 +504,10 @@ let v8SandboxProfile = Profile(
         ("fuzzilli('FUZZILLI_CRASH', 4)", .shouldCrash),
         // This should crash with an ASan-detectable out-of-bounds write.
         ("fuzzilli('FUZZILLI_CRASH', 6)", .shouldCrash),
+        // This should crash due to calling abort_with_sandbox_violation().
+        ("fuzzilli('FUZZILLI_CRASH', 9)", .shouldCrash),
+        // This should crash due to executing an invalid machine code instruction.
+        ("fuzzilli('FUZZILLI_CRASH', 11)", .shouldCrash),
 
         // Crashes that are not sandbox violations and so should be filtered out by the crash filter.
         // This triggers an IMMEDIATE_CRASH.
@@ -465,6 +516,8 @@ let v8SandboxProfile = Profile(
         ("fuzzilli('FUZZILLI_CRASH', 1)", .shouldNotCrash),
         // This triggers a std::vector OOB access that should be caught by the libc++ hardening.
         ("fuzzilli('FUZZILLI_CRASH', 5)", .shouldNotCrash),
+        // This triggers a `ud 2` which might for example be used for release asserts and so should be ignored.
+        ("fuzzilli('FUZZILLI_CRASH', 10)", .shouldNotCrash),
     ],
 
     additionalCodeGenerators: [
@@ -482,6 +535,7 @@ let v8SandboxProfile = Profile(
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([
+        (BytecodeFuzzer, 2)
     ]),
 
     disabledCodeGenerators: [],

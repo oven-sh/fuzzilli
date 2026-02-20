@@ -106,7 +106,7 @@ public class ExplorationMutator: RuntimeAssistedMutator {
         // For that reason, we keep a stack of variables that still need to be explored. A variable in that stack is explored
         // when its entry is popped from the stack, which happens when the block end instruction is emitted.
         var pendingExploreStack = Stack<Variable?>()
-        b.adopting(from: program) {
+        b.adopting() {
             for instr in program.code {
                 b.adopt(instr)
 
@@ -205,7 +205,7 @@ public class ExplorationMutator: RuntimeAssistedMutator {
         }
 
         // Now build the real program by replacing every Explore operation with the operation(s) that it actually performed at runtime.
-        b.adopting(from: instrumentedProgram) {
+        b.adopting() {
             for instr in instrumentedProgram.code {
                 if let op = instr.op as? Explore {
                     if let entry = actions[op.id], let action = entry {

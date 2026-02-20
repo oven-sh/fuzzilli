@@ -651,6 +651,124 @@ class MinimizerTests: XCTestCase {
         XCTAssertEqual(expectedProgram, actualProgram)
     }
 
+    func testInliningWithSemiConditionalReturn() {
+        /*
+          Show that inlining with conditional returns migth not be
+          semantically equivalent.
+
+          Input:
+          function f1() {
+            if (true) {
+              return 1;
+            }
+            return 2;
+          }
+          let v1 = f1();
+          {result: v1}
+
+          Is inlined to:
+          var v1 = undefined;
+          if (true) {
+            v1 = 1;
+          }
+          v1 = 2;
+
+          {result: 2}
+        */
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        let b = fuzzer.makeBuilder()
+
+        // Build input program to be minimized.
+        var a1 = b.loadBool(true)
+        var a2 = b.loadInt(1)
+        var a3 = b.loadInt(2)
+        b.loadString("unused")
+        let f = b.buildPlainFunction(with: .parameters(n: 0)) { args in
+            b.buildIf(a1, ifBody: {
+                b.doReturn(a2)
+            })
+            b.doReturn(a3)
+        }
+
+        var r = b.callFunction(f, withArgs: [])
+        var o = b.createObject(with: [:])
+        evaluator.nextInstructionIsImportant(in: b)
+        b.setProperty("result", of: o, to: r)
+
+        let originalProgram = b.finalize()
+
+        // Need to keep various things alive, see also the comment in testBasicInlining
+        evaluator.operationIsImportant(LoadInteger.self)
+        evaluator.operationIsImportant(LoadBoolean.self)
+        evaluator.operationIsImportant(BeginIf.self)
+        evaluator.operationIsImportant(Reassign.self)
+        evaluator.keepReturnsInFunctions = true
+
+        // Build expected output program.
+        a1 = b.loadBool(true)
+        a2 = b.loadInt(1)
+        a3 = b.loadInt(2)
+        r = b.loadUndefined()
+        b.buildIf(a1, ifBody: {
+            b.reassign(r, to: a2)
+        })
+        b.reassign(r, to: a3)
+        o = b.createObject(with: [:])
+        b.setProperty("result", of: o, to: a3)
+
+        let expectedProgram = b.finalize()
+
+        // Perform minimization and check that the two programs are equal.
+        let actualProgram = minimize(originalProgram, with: fuzzer)
+        XCTAssertEqual(expectedProgram, actualProgram)
+    }
+
+    // Ensure we don't crash when a candidate function is also used as a
+    // disposable variable.
+    func testInliningWithDisposableVariable() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        let b = fuzzer.makeBuilder()
+
+        // Build input program to be minimized.
+        let a1 = b.loadBool(true)
+
+        // The function to be inlined.
+        let f = b.buildPlainFunction(with: .parameters(n: 0)) { args in
+            b.doReturn(a1)
+        }
+
+        // The call and result.
+        evaluator.nextInstructionIsImportant(in: b)
+        let r = b.callFunction(f, withArgs: [])
+        let o = b.createObject(with: [:])
+        evaluator.nextInstructionIsImportant(in: b)
+        b.setProperty("result", of: o, to: r)
+
+        // Another function with a disposable variable refering
+        // to the first function.
+        evaluator.nextInstructionIsImportant(in: b)
+        b.buildPlainFunction(with: .parameters(n: 0)) { args in
+            evaluator.nextInstructionIsImportant(in: b)
+            b.loadDisposableVariable(f)
+            b.doReturn(a1)
+        }
+
+        let originalProgram = b.finalize()
+
+        // Need to keep various things alive, see also the comment in testBasicInlining
+        evaluator.operationIsImportant(LoadBoolean.self)
+        evaluator.operationIsImportant(Reassign.self)
+        evaluator.keepReturnsInFunctions = true
+
+        // Perform minimization and check that the two programs are equal.
+        // We expect the no changes as the inlining candidate was used as
+        // a disposable variable.
+        let actualProgram = minimize(originalProgram, with: fuzzer)
+        XCTAssertEqual(originalProgram, actualProgram)
+    }
+
     func testMultiInlining() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
@@ -1432,8 +1550,9 @@ class MinimizerTests: XCTestCase {
         try runWasmMinimization { evaluator, b in
             return b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
-                    evaluator.nextInstructionIsImportant(in: b)
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
+                    // Mark the try instruction as important (the next instruction is the signature).
+                    evaluator.instructionNIsImportant(in: b, n: 2)
+                    function.wasmBuildLegacyTryVoid { label in
                         let val = function.consti64(42)
                         evaluator.nextInstructionIsImportant(in: b)
                         function.wasmReturn(val)
@@ -1447,7 +1566,7 @@ class MinimizerTests: XCTestCase {
         } minified: { b in
             return b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
+                    function.wasmBuildLegacyTryVoid { label in
                         function.wasmReturn(function.consti64(42))
                     }
                     return [function.consti32(-1)]
@@ -1464,18 +1583,18 @@ class MinimizerTests: XCTestCase {
                 let irrelevantTag = wasmModule.addTag(parameterTypes: [])
                 wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
                     evaluator.nextInstructionIsImportant(in: b)
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
-                        evaluator.nextInstructionIsImportant(in: b)
-                        function.WasmBuildThrow(tag: tag, inputs: [])
-                        evaluator.nextInstructionIsImportant(in: b)
-                        function.WasmBuildLegacyCatch(tag: tag) { label, exception, args in
-                            let val = function.consti64(42)
+                    function.wasmBuildLegacyTryVoid(body: { label in
                             evaluator.nextInstructionIsImportant(in: b)
-                            function.wasmReturn(val)
-                        }
-                        function.WasmBuildLegacyCatch(tag: irrelevantTag) { label, exception, args in
-                        }
-                    }
+                            function.WasmBuildThrow(tag: tag, inputs: [])
+                            // Mark teh first catch as important.
+                            evaluator.nextInstructionIsImportant(in: b)
+                        }, catchClauses: [
+                            (tag: tag, body: { _, _, _ in
+                                let val = function.consti64(42)
+                                evaluator.nextInstructionIsImportant(in: b)
+                                function.wasmReturn(val)
+                            }),
+                            (tag: irrelevantTag, body: { _, _, _ in })])
                     return [function.consti32(-1)]
                 }
             }
@@ -1484,12 +1603,12 @@ class MinimizerTests: XCTestCase {
             return b.buildWasmModule { wasmModule in
                 let tag = wasmModule.addTag(parameterTypes: [])
                 wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
-                        function.WasmBuildThrow(tag: tag, inputs: [])
-                        function.WasmBuildLegacyCatch(tag: tag) { label, exception, args in
+                    function.wasmBuildLegacyTryVoid(
+                        body: { label in
+                            function.WasmBuildThrow(tag: tag, inputs: [])
+                        }, catchClauses: [(tag: tag, body: { _, _, _ in
                             function.wasmReturn(function.consti64(42))
-                        }
-                    }
+                        })])
                     return [function.consti32(-1)]
                 }
             }
@@ -1502,14 +1621,11 @@ class MinimizerTests: XCTestCase {
             return b.buildWasmModule { wasmModule in
                 let tag = wasmModule.addTag(parameterTypes: [])
                 wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
-                        let val = function.consti64(42)
-                            evaluator.nextInstructionIsImportant(in: b)
-                            function.wasmReturn(val)
-                        function.WasmBuildLegacyCatch(tag: tag) { label, exception, args in
-                            function.wasmUnreachable()
-                        }
-                    }
+                    function.wasmBuildLegacyTryVoid(body: { label in
+                            let val = function.consti64(42)
+                                evaluator.nextInstructionIsImportant(in: b)
+                                function.wasmReturn(val)
+                        }, catchClauses: [(tag: tag, body: { _, _, _ in function.wasmUnreachable() })])
                     return [function.consti32(-1)]
                 }
             }
@@ -1530,12 +1646,9 @@ class MinimizerTests: XCTestCase {
             return b.buildWasmModule { wasmModule in
                 let tag = wasmModule.addTag(parameterTypes: [])
                 wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
-                            function.wasmReturn(function.consti64(123))
-                        function.WasmBuildLegacyCatch(tag: tag) { label, exception, args in
-                            function.wasmUnreachable()
-                        }
-                    }
+                    function.wasmBuildLegacyTryVoid(
+                        body: { _ in function.wasmReturn(function.consti64(123)) },
+                        catchClauses: [(tag: tag, body: { _, _, _ in function.wasmUnreachable() })])
                     evaluator.nextInstructionIsImportant(in: b)
                     return [function.consti64(42)]
                 }
@@ -1554,10 +1667,10 @@ class MinimizerTests: XCTestCase {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => []) { function, label, args in
-                    function.wasmBuildIfElse(args[0], hint: .None) {
+                    function.wasmBuildIfElse(args[0], signature: [] => []) { _, _ in
                         evaluator.nextInstructionIsImportant(in: b)
                         function.consti64(43)
-                    } elseBody: {
+                    } elseBody: {  _, _ in
                         evaluator.nextInstructionIsImportant(in: b)
                         function.consti64(42)
                     }
@@ -1829,7 +1942,7 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    // Don't minimize the block fi the label is used by an important instruction.
+    // Don't minimize the block if the label is used by an important instruction.
     func testWasmBlockMinimizationLabelUsed() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
@@ -2008,6 +2121,55 @@ class MinimizerTests: XCTestCase {
 
     }
 
+    func testWasmTypeGroupTypeOnlyUsedInDependency() throws {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        let b = fuzzer.makeBuilder()
+
+        // Build input program to be minimized.
+        do {
+            let typeGroup = b.wasmDefineTypeGroup {
+                // This signature is only used by the structType which is exposed from this type
+                // group and then used in the struct.new_default inside the wasm function. Still,
+                // due to this indirect usage it must still be kept alive.
+                let signature = b.wasmDefineSignatureType(signature: [.wasmi32] => [.wasmi32], indexTypes: [])
+                let structType = b.wasmDefineStructType(fields: [.init(type: .wasmRef(.Index(), nullability: true), mutability: true)], indexTypes: [signature])
+                return [signature, structType]
+            }
+
+            b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmAnyRef()]) { function, label, args in
+                    evaluator.nextInstructionIsImportant(in: b)
+                    return [function.wasmStructNewDefault(structType: typeGroup[1])]
+                }
+            }
+        }
+        let originalProgram = b.finalize()
+
+        // Build expected output program.
+        do {
+            let typeGroup = b.wasmDefineTypeGroup {
+                let signature = b.wasmDefineSignatureType(signature: [.wasmi32] => [.wasmi32], indexTypes: [])
+                let structType = b.wasmDefineStructType(fields: [.init(type: .wasmRef(.Index(), nullability: true), mutability: true)], indexTypes: [signature])
+                return [signature, structType]
+            }
+
+            b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmAnyRef()]) { function, label, args in
+                    return [function.wasmStructNewDefault(structType: typeGroup[1])]
+                }
+            }
+        }
+        let expectedProgram = b.finalize()
+
+        // Perform minimization and check that the two programs are equal.
+        let actualProgram = minimize(originalProgram, with: fuzzer)
+        XCTAssertEqual(expectedProgram, actualProgram,
+            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n" +
+            "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
+    }
+
+
     func testWasmTypeGroupNestedTypesAndTypeGroupDependencies() throws {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
@@ -2119,6 +2281,10 @@ class MinimizerTests: XCTestCase {
 
         func nextInstructionIsImportant(in b: ProgramBuilder) {
             initialIndicesOfTheImportantInstructions.append(b.indexOfNextInstruction())
+        }
+
+        func instructionNIsImportant(in b: ProgramBuilder, n: Int) {
+            initialIndicesOfTheImportantInstructions.append(b.indexOfNextInstruction() + n - 1)
         }
 
         func operationIsImportant(_ op: Fuzzilli.Operation.Type) {

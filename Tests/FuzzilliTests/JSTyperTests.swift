@@ -1534,7 +1534,7 @@ class JSTyperTests: XCTestCase {
             }
             b.doReturn(obj)
         }
-        let wasmSignature = [] => [.wasmExternRef]
+        let wasmSignature = [] => [.wasmExternRef()]
 
         let typeDesc = b.type(of: typeGroup[0]).wasmTypeDefinition!.description!
 
@@ -1551,11 +1551,8 @@ class JSTyperTests: XCTestCase {
                 // This forces an import of the wasmGlobalf64, second global
                 function.wasmLoadGlobal(globalVariable: wasmGlobalf64)
                 // This forces an import and a re-export of the jsTag.
-                function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
-                    function.WasmBuildLegacyCatch(tag: jsTag) { label, exception, args in
-                        function.wasmReturn()
-                    }
-                }
+                function.wasmBuildLegacyTryVoid(body: { _ in },
+                    catchClauses: [(tag: jsTag, body: {_, _, _ in })])
                 function.wasmUnreachable()
                 return []
             }
@@ -1574,7 +1571,7 @@ class JSTyperTests: XCTestCase {
             }
 
             // Function three
-            wasmModule.addWasmFunction(with: [.wasmExternRef] => [.wasmi32, .wasmi64]) { function, label, _ in
+            wasmModule.addWasmFunction(with: [.wasmExternRef()] => [.wasmi32, .wasmi64]) { function, label, _ in
                 return [function.consti32(1), function.consti64(2)]
             }
 
@@ -1585,7 +1582,7 @@ class JSTyperTests: XCTestCase {
 
 
             // Function five
-            wasmModule.addWasmFunction(with: [] => [.wasmExternRef]) { function, label, _ in
+            wasmModule.addWasmFunction(with: [] => [.wasmExternRef()]) { function, label, _ in
                 // This forces an import and we should see a re-exported function on the module.
                 return [function.wasmJsCall(function: plainFunction, withArgs: [], withWasmSignature: wasmSignature)!]
             }
@@ -1795,7 +1792,7 @@ class JSTyperTests: XCTestCase {
         let wasmTableConstructor = b.getProperty("Table", of: wasm)
         let wasmTable = b.construct(wasmTableConstructor) // In theory this needs arguments.
         XCTAssertFalse(b.type(of: wasmTable).Is(.object(ofGroup: "WasmTable")))
-        let realWasmTable = b.createWasmTable(elementType: .wasmAnyRef, limits: .init(min: 0), isTable64: false)
+        let realWasmTable = b.createWasmTable(elementType: .wasmAnyRef(), limits: .init(min: 0), isTable64: false)
         XCTAssert(b.type(of: realWasmTable).Is(.object(ofGroup: "WasmTable")))
         XCTAssert(b.type(of: realWasmTable).Is(ObjectGroup.wasmTable.instanceType))
         let tablePrototype = b.getProperty("prototype", of: wasmTableConstructor)
@@ -1903,5 +1900,26 @@ class JSTyperTests: XCTestCase {
             XCTAssert(result != dateCtor)
             XCTAssert(b.type(of: result).Is(requestedCtor))
         }
+    }
+
+    func testBufferUnionType() {
+        // Explicitly verify the properties of the ArrayBuffer | SharedArrayBuffer union type.
+        let unionType = ILType.jsArrayBuffer | .jsSharedArrayBuffer
+
+        XCTAssert(unionType.Is(.jsArrayBuffer | .jsSharedArrayBuffer))
+        XCTAssert(unionType.MayBe(.jsArrayBuffer))
+        XCTAssert(unionType.MayBe(.jsSharedArrayBuffer))
+        XCTAssertFalse(unionType.Is(.jsArrayBuffer)) // It's not *definitely* an ArrayBuffer
+        XCTAssertFalse(unionType.Is(.jsSharedArrayBuffer))
+
+        // Common properties should be preserved
+        XCTAssert(unionType.properties.contains("byteLength"))
+        XCTAssert(unionType.methods.contains("slice"))
+
+        // Disjoint properties/methods should be removed in the union
+        XCTAssertFalse(unionType.methods.contains("resize")) // Only on ArrayBuffer
+        XCTAssertFalse(unionType.methods.contains("grow"))   // Only on SharedArrayBuffer
+
+        XCTAssertNil(unionType.group)
     }
 }

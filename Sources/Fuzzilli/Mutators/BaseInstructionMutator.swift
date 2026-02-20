@@ -40,7 +40,7 @@ public class BaseInstructionMutator: Mutator {
             toMutate.insert(chooseUniform(from: candidates))
         }
 
-        b.adopting(from: program) {
+        b.adopting() {
             for instr in program.code {
                 if toMutate.contains(instr.index) {
                     mutate(instr, b)

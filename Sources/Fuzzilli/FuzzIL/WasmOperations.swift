@@ -74,11 +74,9 @@ final class Constf64: WasmOperation {
 
 final class WasmReturn: WasmOperation {
     override var opcode: Opcode { .wasmReturn(self) }
-    let returnTypes: [ILType]
 
-    init(returnTypes: [ILType]) {
-        self.returnTypes = returnTypes
-        super.init(numInputs: returnTypes.count, attributes: [.isJump], requiredContext: [.wasmFunction])
+    init(returnCount: Int) {
+        super.init(numInputs: returnCount, attributes: [.isJump], requiredContext: [.wasmFunction])
     }
 }
 
@@ -695,6 +693,7 @@ public enum WasmGlobal {
     case wasmf64(Float64)
     // Empty reference
     // TODO(gc): Add support for globals with non-nullable references.
+    // TODO(pawkra): add support for shared references.
     case externref
     case exnref
     case i31ref
@@ -716,11 +715,11 @@ public enum WasmGlobal {
         case .wasmf64:
             return .wasmf64
         case .externref:
-            return .wasmExternRef
+            return .wasmExternRef()
         case .exnref:
-            return .wasmExnRef
+            return .wasmExnRef()
         case .i31ref:
-            return .wasmI31Ref
+            return .wasmI31Ref()
         case .imported(let type):
             assert(type.wasmGlobalType != nil)
             return type.wasmGlobalType!.valueType
@@ -729,7 +728,7 @@ public enum WasmGlobal {
         }
     }
 
-    func typeString() -> String {
+func typeString() -> String {
         switch self {
         case .wasmi64(_):
             return "i64"
@@ -750,8 +749,9 @@ public enum WasmGlobal {
         }
     }
 
+
     // Returns a JS string representing the initial value.
-    func valueToString() -> String {
+func valueToString() -> String {
         switch self {
         case .wasmi64(let val):
             return "\(val)n"
@@ -801,9 +801,10 @@ final class WasmDefineTable: WasmOperation {
         self.definedEntries = definedEntries
 
         // TODO(manoskouk): Find a way to define non-function tables with initializers.
-        assert(elementType == .wasmFuncRef || definedEntries.isEmpty)
+        let isWasmFuncRef = elementType == .wasmFuncRef()
+        assert(isWasmFuncRef || definedEntries.isEmpty)
 
-        super.init(numInputs: elementType == .wasmFuncRef ? definedEntries.count : 0,
+        super.init(numInputs: isWasmFuncRef ? definedEntries.count : 0,
                    numOutputs: 1,
                    attributes: [.isMutable],
                    requiredContext: [.wasm])
@@ -876,11 +877,10 @@ final class WasmDefineDataSegment: WasmOperation {
 
 final class WasmDefineTag: WasmOperation {
     override var opcode: Opcode { .wasmDefineTag(self) }
-    public let parameterTypes: [ILType]
 
-    init(parameterTypes: [ILType]) {
-        self.parameterTypes = parameterTypes
-        super.init(numOutputs: 1, attributes: [], requiredContext: [.wasm])
+    init() {
+        // Inputs: The signature.
+        super.init(numInputs: 1, numOutputs: 1, attributes: [], requiredContext: [.wasm])
     }
 }
 
@@ -962,12 +962,12 @@ final class WasmCallIndirect: WasmOperation {
 
 final class WasmCallDirect: WasmOperation {
     override var opcode: Opcode { .wasmCallDirect(self) }
-    let signature: WasmSignature
 
-    init(signature: WasmSignature) {
-        self.signature = signature
-        super.init(numInputs: 1 + signature.parameterTypes.count, numOutputs: signature.outputTypes.count, requiredContext: [.wasmFunction])
+    init(parameterCount: Int, outputCount: Int) {
+        super.init(numInputs: 1 + parameterCount, numOutputs: outputCount, requiredContext: [.wasmFunction])
     }
+
+    var parameterCount: Int {numInputs - 1}
 }
 
 final class WasmReturnCallDirect: WasmOperation {
@@ -1247,22 +1247,20 @@ final class WasmSelect: WasmOperation {
 final class WasmBeginBlock: WasmOperation {
     override var opcode: Opcode { .wasmBeginBlock(self) }
 
-    let signature: WasmSignature
-
-    init(with signature: WasmSignature) {
-        self.signature = signature
-        super.init(numInputs: signature.parameterTypes.count, numInnerOutputs: signature.parameterTypes.count + 1, attributes: [.isBlockStart, .propagatesSurroundingContext], requiredContext: [.wasmFunction])
+    init(parameterCount: Int) {
+        // Inputs: The signature plus the arguments.
+        // Inner outputs: The label plus the arguments.
+        super.init(numInputs: 1 + parameterCount, numInnerOutputs: 1 + parameterCount, attributes: [.isBlockStart, .propagatesSurroundingContext], requiredContext: [.wasmFunction])
     }
+
+    var parameterCount: Int {numInputs - 1}
 }
 
 final class WasmEndBlock: WasmOperation {
     override var opcode: Opcode { .wasmEndBlock(self) }
 
-    let outputTypes: [ILType]
-
-    init(outputTypes: [ILType]) {
-        self.outputTypes = outputTypes
-        super.init(numInputs: outputTypes.count, numOutputs: outputTypes.count, attributes: [.isBlockEnd, .resumesSurroundingContext], requiredContext: [.wasmFunction])
+    init(outputCount: Int) {
+        super.init(numInputs: 1 + outputCount, numOutputs: outputCount, attributes: [.isBlockEnd, .resumesSurroundingContext], requiredContext: [.wasmFunction])
     }
 }
 
@@ -1274,62 +1272,70 @@ public enum WasmBranchHint: CaseIterable  {
 
 final class WasmBeginIf: WasmOperation {
     override var opcode: Opcode { .wasmBeginIf(self) }
-    let signature: WasmSignature
     let inverted: Bool
     let hint: WasmBranchHint
 
-    init(with signature: WasmSignature = [] => [], hint: WasmBranchHint = .None, inverted: Bool = false) {
-        self.signature = signature
+    init(parameterCount: Int = 0, hint: WasmBranchHint = .None, inverted: Bool = false) {
         self.inverted = inverted
         self.hint = hint
         // Note that the condition is the last input! This is due to how lifting works for the wasm
         // value stack and that the condition is the first value to be removed from the stack, so
         // it needs to be the last one pushed to it.
+        // Inputs: The signature, the arguments and the condition.
         // Inner outputs: 1 label (used for branch instructions) plus all the parameters.
-        super.init(numInputs: signature.parameterTypes.count + 1, numInnerOutputs: 1 + signature.parameterTypes.count, attributes: [.isBlockStart, .propagatesSurroundingContext, .isMutable], requiredContext: [.wasmFunction])
+        super.init(numInputs: 2 + parameterCount, numInnerOutputs: 1 + parameterCount, attributes: [.isBlockStart, .propagatesSurroundingContext, .isMutable], requiredContext: [.wasmFunction])
     }
+
+    var parameterCount: Int {numInputs - 2}
 }
 
 final class WasmBeginElse: WasmOperation {
     override var opcode: Opcode { .wasmBeginElse(self) }
-    let signature: WasmSignature
 
-    init(with signature: WasmSignature = [] => []) {
-        self.signature = signature
+    // The parameterCount and outputCount of the wasm signature.
+    init(parameterCount: Int = 0, outputCount: Int = 0) {
         // The WasmBeginElse acts both as a block end for the true case and as a block start for the
         // false case. As such, its input types are the results from the true block and its inner
         // output types are the same as for the corresponding WasmBeginIf.
-        super.init(numInputs: signature.outputTypes.count, numInnerOutputs: 1 + signature.parameterTypes.count, attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext], requiredContext: [.wasmFunction])
+        super.init(numInputs: 1 + outputCount, numInnerOutputs: 1 + parameterCount, attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext], requiredContext: [.wasmFunction])
     }
+
+    var parameterCount: Int {numInnerOutputs - 1}
+    var outputCount: Int {numInputs - 1}
 }
 
 final class WasmEndIf: WasmOperation {
     override var opcode: Opcode { .wasmEndIf(self) }
-    let outputTypes: [ILType]
 
-    init(outputTypes: [ILType] = []) {
-        self.outputTypes = outputTypes
-        super.init(numInputs: outputTypes.count, numOutputs: outputTypes.count, attributes: [.isBlockEnd], requiredContext: [.wasmFunction])
+    init(outputCount: Int = 0) {
+        super.init(numInputs: 1 + outputCount, numOutputs: outputCount, attributes: [.isBlockEnd], requiredContext: [.wasmFunction])
     }
+
+    var outputCount: Int {numInputs - 1}
 }
 
 final class WasmBeginLoop: WasmOperation {
     override var opcode: Opcode { .wasmBeginLoop(self) }
-    let signature: WasmSignature
 
-    init(with signature: WasmSignature) {
-        self.signature = signature
-        super.init(numInputs: signature.parameterTypes.count, numInnerOutputs: 1 + signature.parameterTypes.count, attributes: [.isBlockStart, .propagatesSurroundingContext], requiredContext: [.wasmFunction])
+    init(parameterCount: Int) {
+        // Inputs: the signature + the inputs to the loop.
+        // inner outputs: The loop label + the arguments of the loop.
+        super.init(numInputs: 1 + parameterCount, numInnerOutputs: 1 + parameterCount, attributes: [.isBlockStart, .propagatesSurroundingContext], requiredContext: [.wasmFunction])
     }
+
+    convenience init(with signature: WasmSignature) {
+        self.init(parameterCount: signature.parameterTypes.count)
+    }
+
+    var parameterCount: Int {numInputs - 1}
 }
 
 final class WasmEndLoop: WasmOperation {
     override var opcode: Opcode { .wasmEndLoop(self) }
-    let outputTypes: [ILType]
 
-    init(outputTypes: [ILType] = []) {
-        self.outputTypes = outputTypes
-        super.init(numInputs: outputTypes.count, numOutputs: outputTypes.count, attributes: [.isBlockEnd, .resumesSurroundingContext], requiredContext: [.wasmFunction])
+    init(outputCount: Int) {
+        // Inputs: the signature + the outputs of the loop.
+        super.init(numInputs: 1 + outputCount, numOutputs: outputCount, attributes: [.isBlockEnd, .resumesSurroundingContext], requiredContext: [.wasmFunction])
     }
 }
 
@@ -1344,47 +1350,50 @@ final class WasmBeginTryTable: WasmOperation {
     }
 
     override var opcode: Opcode { .wasmBeginTryTable(self) }
-    let signature: WasmSignature
     let catches: [CatchKind]
 
-    init(with signature: WasmSignature, catches: [CatchKind]) {
-        self.signature = signature
+    init(parameterCount: Int, catches: [CatchKind]) {
         self.catches = catches
         let inputTagCount = catches.count {$0 == .Ref || $0 == .NoRef}
         let inputLabelCount = catches.count
-        super.init(numInputs: signature.parameterTypes.count + inputLabelCount + inputTagCount , numInnerOutputs: signature.parameterTypes.count + 1, attributes: [.isBlockStart, .propagatesSurroundingContext], requiredContext: [.wasmFunction])
+        super.init(numInputs: 1 + parameterCount + inputLabelCount + inputTagCount,
+            numInnerOutputs: parameterCount + 1,
+            attributes: [.isBlockStart, .propagatesSurroundingContext],
+            requiredContext: [.wasmFunction])
     }
+
+    var parameterCount: Int {numInnerOutputs - 1}
 }
 
 final class WasmEndTryTable: WasmOperation {
     override var opcode: Opcode { .wasmEndTryTable(self) }
-    let outputTypes: [ILType]
 
-    init(outputTypes: [ILType]) {
-        self.outputTypes = outputTypes
-        super.init(numInputs: outputTypes.count, numOutputs: outputTypes.count, attributes: [.isBlockEnd, .resumesSurroundingContext], requiredContext: [.wasmFunction])
+    init(outputCount: Int) {
+        super.init(numInputs: 1 + outputCount, numOutputs: outputCount,
+            attributes: [.isBlockEnd, .resumesSurroundingContext], requiredContext: [.wasmFunction])
     }
 }
 
 final class WasmBeginTry: WasmOperation {
     override var opcode: Opcode { .wasmBeginTry(self) }
-    let signature: WasmSignature
 
-    init(with signature: WasmSignature) {
-        self.signature = signature
-        super.init(numInputs: signature.parameterTypes.count, numInnerOutputs: signature.parameterTypes.count + 1, attributes: [.isBlockStart, .propagatesSurroundingContext], requiredContext: [.wasmFunction])
+    init(parameterCount: Int) {
+        // Inputs: The block signature and the block arguments.
+        // Inner outputs: The label and the block parameters.
+        super.init(numInputs: 1 + parameterCount,
+            numInnerOutputs: 1 + parameterCount,
+            attributes: [.isBlockStart, .propagatesSurroundingContext],
+            requiredContext: [.wasmFunction])
     }
 }
 
 final class WasmBeginCatchAll : WasmOperation {
     override var opcode: Opcode { .wasmBeginCatchAll(self) }
-    let inputTypes: [ILType]
 
-    init(inputTypes: [ILType]) {
-        self.inputTypes = inputTypes
-
+    init(blockOutputCount: Int) {
+        // Inputs: The block signature and the outputs of the preceding try or catch block.
         super.init(
-            numInputs: inputTypes.count,
+            numInputs: 1 + blockOutputCount,
             numInnerOutputs: 1, // the label
             attributes: [
                 .isBlockEnd,
@@ -1399,10 +1408,8 @@ final class WasmBeginCatchAll : WasmOperation {
 
 final class WasmBeginCatch : WasmOperation {
     override var opcode: Opcode { .wasmBeginCatch(self) }
-    let signature: WasmSignature
 
-    init(with signature: WasmSignature) {
-        self.signature = signature
+    init(blockOutputCount: Int, labelParameterCount: Int) {
         // TODO: In an ideal world, the catch would only have one label that is used both for
         // branching as well as for rethrowing the exception. However, rethrows may only use labels
         // from catch blocks and branches may use any label but need to be very precise on the type
@@ -1410,9 +1417,11 @@ final class WasmBeginCatch : WasmOperation {
         // the usage. For now, we just emit a label for branching and the ".exceptionLabel" for
         // rethrows.
         super.init(
-            numInputs: 1 + signature.outputTypes.count,
+            // Inputs: The block signature, the tag and the outputs of the preceding try or catch
+            // (all) block.
+            numInputs: 2 + blockOutputCount,
             // Inner outputs are the branch label, the exception label and the tag parameters.
-            numInnerOutputs: 2 + signature.parameterTypes.count,
+            numInnerOutputs: 2 + labelParameterCount,
             attributes: [
                 .isBlockEnd,
                 .isBlockStart,
@@ -1420,26 +1429,30 @@ final class WasmBeginCatch : WasmOperation {
             ],
             requiredContext: [.wasmFunction])
     }
+
+    var blockOutputCount: Int {numInputs - 2}
+    var labelParameterCount: Int {numInnerOutputs - 2}
 }
 
 final class WasmEndTry: WasmOperation {
     override var opcode: Opcode { .wasmEndTry(self) }
-    let outputTypes: [ILType]
 
-    init(outputTypes: [ILType] = []) {
-        self.outputTypes = outputTypes
-        super.init(numInputs: outputTypes.count, numOutputs: outputTypes.count, attributes: [.isBlockEnd], requiredContext: [.wasmFunction])
+    init(blockOutputCount: Int) {
+        super.init(numInputs: 1 + blockOutputCount, numOutputs: blockOutputCount,
+            attributes: [.isBlockEnd], requiredContext: [.wasmFunction])
     }
 }
 
 /// A special try block that does not have any catch / catch_all handlers but ends with a delegate to handle the exception.
 final class WasmBeginTryDelegate: WasmOperation {
     override var opcode: Opcode { .wasmBeginTryDelegate(self) }
-    let signature: WasmSignature
 
-    init(with signature: WasmSignature) {
-        self.signature = signature
-        super.init(numInputs: signature.parameterTypes.count, numInnerOutputs: 1 + signature.parameterTypes.count, attributes: [.isBlockStart, .propagatesSurroundingContext], requiredContext: [.wasmFunction], contextOpened: [])
+    init(parameterCount: Int) {
+        // inputs: The signature and the arguments.
+        // innerOutputs: The label and the arguments.
+        super.init(numInputs: 1 + parameterCount, numInnerOutputs: 1 + parameterCount,
+            attributes: [.isBlockStart, .propagatesSurroundingContext],
+            requiredContext: [.wasmFunction])
     }
 }
 
@@ -1447,23 +1460,21 @@ final class WasmBeginTryDelegate: WasmOperation {
 /// This can be a "proper" try block (in which case its catch blocks apply) or any other block like a loop or an if.
 final class WasmEndTryDelegate: WasmOperation {
     override var opcode: Opcode { .wasmEndTryDelegate(self) }
-    let outputTypes: [ILType]
 
-    init(outputTypes: [ILType] = []) {
-        self.outputTypes = outputTypes
-        // Inputs: 1 label to delegate an exception to plus all the outputs of the try block.
-        super.init(numInputs: 1 + outputTypes.count, numOutputs: outputTypes.count, attributes: [.isBlockEnd, .resumesSurroundingContext], requiredContext: [.wasmFunction])
+    init(outputCount: Int) {
+        // Inputs: The signature, the label to delegate an exception to plus all the outputs of the
+        // try block.
+        super.init(numInputs: 2 + outputCount, numOutputs: outputCount,
+            attributes: [.isBlockEnd, .resumesSurroundingContext], requiredContext: [.wasmFunction])
     }
 }
 
 final class WasmThrow: WasmOperation {
     override var opcode: Opcode { .wasmThrow(self) }
-    public let parameterTypes: [ILType]
 
-    init(parameterTypes: [ILType]) {
-        self.parameterTypes = parameterTypes
+    init(parameterCount: Int) {
         // Inputs: the tag to be thrown plus the arguments for each parameter type of the tag.
-        super.init(numInputs: 1 + parameterTypes.count, attributes: [.isJump], requiredContext: [.wasmFunction])
+        super.init(numInputs: 1 + parameterCount, attributes: [.isJump], requiredContext: [.wasmFunction])
     }
 }
 
@@ -1487,40 +1498,40 @@ final class WasmRethrow: WasmOperation {
 
 final class WasmBranch: WasmOperation {
     override var opcode: Opcode { .wasmBranch(self) }
-    let labelTypes: [ILType]
 
-    init(labelTypes: [ILType]) {
-        self.labelTypes = labelTypes
-        super.init(numInputs: 1 + labelTypes.count, requiredContext: [.wasmFunction])
-
+    init(parameterCount: Int) {
+        super.init(numInputs: 1 + parameterCount, requiredContext: [.wasmFunction])
     }
+
+    var parameterCount: Int {numInputs - 1}
 }
 
 final class WasmBranchIf: WasmOperation {
     override var opcode: Opcode { .wasmBranchIf(self) }
-    let labelTypes: [ILType]
     let hint: WasmBranchHint
 
-    init(labelTypes: [ILType], hint: WasmBranchHint) {
-        self.labelTypes = labelTypes
+    init(parameterCount: Int, hint: WasmBranchHint) {
         self.hint = hint
         // The inputs are the label, the arguments and the condition.
-        super.init(numInputs: 1 + labelTypes.count + 1, attributes: [.isMutable], requiredContext: [.wasmFunction])
+        super.init(numInputs: 1 + parameterCount + 1, attributes: [.isMutable], requiredContext: [.wasmFunction])
     }
+
+    var parameterCount: Int {numInputs - 2}
 }
 
 final class WasmBranchTable: WasmOperation {
     override var opcode: Opcode { .wasmBranchTable(self) }
-    let labelTypes: [ILType]
     // The number of cases in the br_table. Note that the number of labels is one higher as each
     // br_table has a default label.
     let valueCount: Int
 
-    init(labelTypes: [ILType], valueCount: Int) {
-        self.labelTypes = labelTypes
+    init(parameterCount: Int, valueCount: Int) {
         self.valueCount = valueCount
-        super.init(numInputs: valueCount + 1 + labelTypes.count + 1, requiredContext: [.wasmFunction])
+        // Inputs: the case labels, the default label, the arguments and the condition.
+        super.init(numInputs: valueCount + 1 + parameterCount + 1, requiredContext: [.wasmFunction])
     }
+
+    var parameterCount: Int {numInputs - valueCount - 2}
 }
 
 // TODO: make this comprehensive, currently only works for locals, or assumes every thing it reassigns to is a local.
@@ -1528,10 +1539,7 @@ final class WasmBranchTable: WasmOperation {
 final class WasmReassign: WasmOperation {
     override var opcode: Opcode { .wasmReassign(self) }
 
-    let variableType: ILType
-
-    init(variableType: ILType) {
-        self.variableType = variableType
+    init() {
         super.init(numInputs: 2, attributes: [.isNotInputMutable], requiredContext: [.wasmFunction])
     }
 }
@@ -2215,6 +2223,14 @@ class WasmArraySet: WasmOperation {
     }
 }
 
+class WasmStructNew: WasmOperation {
+    override var opcode: Opcode { .wasmStructNew(self) }
+
+    init(fieldCount: Int) {
+        super.init(numInputs: fieldCount + 1, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
 class WasmStructNewDefault: WasmOperation {
     override var opcode: Opcode { .wasmStructNewDefault(self) }
 
@@ -2266,10 +2282,20 @@ class WasmRefIsNull: WasmOperation {
     }
 }
 
-class WasmRefI31: WasmOperation {
-    override var opcode: Opcode { .wasmRefI31(self) }
+class WasmRefEq: WasmOperation {
+    override var opcode: Opcode { .wasmRefEq(self) }
 
     init() {
+        super.init(numInputs: 2, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
+class WasmRefI31: WasmOperation {
+    override var opcode: Opcode { .wasmRefI31(self) }
+    let isShared: Bool
+
+    init(isShared: Bool) {
+        self.isShared = isShared
         super.init(numInputs: 1, numOutputs: 1, requiredContext: [.wasmFunction])
     }
 }
@@ -2297,6 +2323,16 @@ class WasmExternConvertAny: WasmOperation {
 
     init() {
         super.init(numInputs: 1, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
+class WasmRefTest: WasmOperation {
+    override var opcode: Opcode { .wasmRefTest(self) }
+    let type: ILType
+
+    init(refType: ILType) {
+        self.type = refType
+        super.init(numInputs: 1 + type.requiredInputCount(), numOutputs: 1, requiredContext: [.wasmFunction])
     }
 }
 
@@ -2389,5 +2425,34 @@ final class WasmAtomicCmpxchg: WasmOperation {
         self.op = op
         self.offset = offset
         super.init(numInputs: 4, numOutputs: 1, attributes: [.isMutable], requiredContext: [.wasmFunction])
+    }
+}
+
+final class WasmDefineAdHocSignatureType: WasmOperation {
+    override var opcode: Opcode { .wasmDefineAdHocSignatureType(self) }
+    let signature: WasmSignature
+
+    init(signature: WasmSignature) {
+        self.signature = signature
+        let numInputs = (signature.outputTypes + signature.parameterTypes).map {
+            $0.requiredInputCount() }.reduce(0) { $0 + $1 }
+        super.init(numInputs: numInputs, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
+// Same as WasmDefineAdHocSignatureType but not on the .wasmFunction context but .wasm (module).
+// This is needed in cases where we aren't in the JS context any more but need a Wasm signature.
+// TODO(mliedtke): We should explore alternative options. Right now this is a much better compromise
+// than failing often to generate operations that require a signature, e.g. something simple like a
+// Wasm function.
+final class WasmDefineAdHocModuleSignatureType: WasmOperation {
+    override var opcode: Opcode { .wasmDefineAdHocModuleSignatureType(self) }
+    let signature: WasmSignature
+
+    init(signature: WasmSignature) {
+        self.signature = signature
+        let numInputs = (signature.outputTypes + signature.parameterTypes).map {
+            $0.requiredInputCount() }.reduce(0) { $0 + $1 }
+        super.init(numInputs: numInputs, numOutputs: 1, requiredContext: [.wasm])
     }
 }

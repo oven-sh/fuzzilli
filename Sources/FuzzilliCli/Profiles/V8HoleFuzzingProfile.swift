@@ -36,6 +36,8 @@ let v8HoleFuzzingProfile = Profile(
         return args
     },
 
+    processArgsReference: nil,
+
     processEnv: [:],
 
     maxExecsBeforeRespawn: 1000,

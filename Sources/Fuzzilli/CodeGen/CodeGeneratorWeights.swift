@@ -28,6 +28,8 @@ public let codeGeneratorWeights = [
     "NamedVariableGenerator":                   10,
     "ArrayGenerator":                           10,
     "FloatArrayGenerator":                      10,
+    "HoleyArrayGenerator":                      10,
+    "ObjectIntegrityLevelGenerator":            1,
     "IntArrayGenerator":                        10,
     "TypedArrayGenerator":                      20,
     "BuiltinObjectInstanceGenerator":           10,
@@ -186,6 +188,7 @@ public let codeGeneratorWeights = [
     "TryCatchGenerator":                        5,
     "TryFinallyGenerator":                      5,
     "ThrowGenerator":                           1,
+    "ConditionalThrowGenerator":                1,
     "BlockStatementGenerator":                  1,
 
     // Special generators
@@ -202,8 +205,13 @@ public let codeGeneratorWeights = [
     "EvalGenerator":                            3,
     "NumberComputationGenerator":               40,
     "ImitationGenerator":                       30,
-    "ResizableArrayBufferGenerator":            5,
-    "GrowableSharedArrayBufferGenerator":       5,
+    "ResizableArrayBufferGenerator":            5*6, // TODO(tacet): Revert increased fuzzing probability factors by 02/2026 or later.
+    "ResizableBufferResizeGenerator":           5*3,
+    "GrowableSharedArrayBufferGenerator":       5*6,
+    "GrowableSharedBufferGrowGenerator":        5*3,
+    "TypedArrayFromBufferGenerator":            10*3,
+    "DataViewFromBufferGenerator":              5*3,
+    "TypedArrayLastIndexGenerator":             5*3,
     "FastToSlowPropertiesGenerator":            10,
     "IteratorGenerator":                        5,
     "ConstructWithDifferentNewTargetGenerator": 5,
@@ -216,6 +224,9 @@ public let codeGeneratorWeights = [
     // JS generators for wasm features (e.g. APIs on the WebAssembly global object).
     "WasmGlobalGenerator":                      4,
     "WasmMemoryGenerator":                      4,
+    "WasmMemoryToResizableBufferGenerator":     5*3, // TODO(tacet): Revert increased fuzzing probability factors by 02/2026 or later.
+    "WasmMemoryToFixedLengthBufferGenerator":   5*3,
+    "WasmMemoryJSGrowGenerator":                5*3,
     "WasmTagGenerator":                         4,
     "WasmLegacyTryCatchComplexGenerator":       5,
 
@@ -252,6 +263,7 @@ public let codeGeneratorWeights = [
     "WasmGlobalLoadGenerator":                  2,
     "WasmReassignmentGenerator":                2,
     "WasmDefineTagGenerator":                   4,
+    "WasmAdHocModuleSignature":                 2,
 
     // Primitive Value Generators
     "WasmLoadi32Generator":                     4,
@@ -309,7 +321,6 @@ public let codeGeneratorWeights = [
     "WasmLoopGenerator":                        8,
     "WasmLoopWithSignatureGenerator":           8,
     "WasmLegacyTryCatchGenerator":              8,
-    "WasmLegacyTryCatchWithResultGenerator":    8,
     "WasmLegacyTryDelegateGenerator":           8,
     "WasmThrowGenerator":                       2,
     "WasmLegacyRethrowGenerator":               10,
@@ -345,6 +356,7 @@ public let codeGeneratorWeights = [
     // Wasm-gc type generators
     // These run in the javascript context and define types to be used within wasm modules.
     "WasmTypeGroupGenerator":                   5,
+    "WasmTypeGroupWithAllTypesGenerator":       5,
     "WasmArrayTypeGenerator":                   5,
     "WasmStructTypeGenerator":                  5,
     "WasmSignatureTypeGenerator":               5,
@@ -356,13 +368,17 @@ public let codeGeneratorWeights = [
     "WasmArrayLengthGenerator":                 5,
     "WasmArrayGetGenerator":                    5,
     "WasmArraySetGenerator":                    5,
+    "WasmStructNewGenerator":                   5,
     "WasmStructNewDefaultGenerator":            5,
     "WasmStructGetGenerator":                   5,
     "WasmStructSetGenerator":                   5,
     "WasmRefNullGenerator":                     5,
     "WasmRefIsNullGenerator":                   5,
+    "WasmRefEqGenerator":                       5,
     "WasmRefI31Generator":                      5,
     "WasmI31GetGenerator":                      5,
     "WasmAnyConvertExternGenerator":            5,
     "WasmExternConvertAnyGenerator":            5,
+    "WasmRefTestGenerator":                     5,
+    "WasmRefTestAbstractGenerator":             5,
 ]

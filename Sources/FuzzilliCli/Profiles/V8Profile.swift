@@ -19,6 +19,8 @@ let v8Profile = Profile(
       v8ProcessArgs(randomize: randomize, forSandbox: false)
     },
 
+    processArgsReference: nil,
+
     // We typically fuzz without any sanitizer instrumentation, but if any sanitizers are active, "abort_on_error=1" must probably be set so that sanitizer errors can be detected.
     processEnv: [:],
 
@@ -49,6 +51,8 @@ let v8Profile = Profile(
         ("fuzzilli('FUZZILLI_CRASH', 3)", .shouldCrash),
         // Check that DEBUG is defined.
         ("fuzzilli('FUZZILLI_CRASH', 8)", .shouldCrash),
+        // Check that abort_with_sandbox_violation works.
+        ("fuzzilli('FUZZILLI_CRASH', 9)", .shouldCrash),
 
         // TODO we could try to check that OOM crashes are ignored here ( with.shouldNotCrash).
     ],
@@ -60,7 +64,9 @@ let v8Profile = Profile(
         (TurbofanVerifyTypeGenerator,             10),
 
         (WorkerGenerator,                         10),
-        (V8GcGenerator,                           10),
+        (V8GcGenerator,                            5),
+        (V8AllocationTimeoutGenerator,             5),
+        (V8MajorGcGenerator,                       5),
 
         (WasmStructGenerator,                     15),
         (WasmArrayGenerator,                      15),

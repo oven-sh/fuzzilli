@@ -431,8 +431,6 @@ class ProgramBuilderTests: XCTestCase {
         let fuzzer = makeMockFuzzer()
         let b = fuzzer.makeBuilder()
 
-        XCTAssert(b.enableRecursionGuard)
-
         // The recursion guard feature of the ProgramBuilder is meant to prevent trivial recursion
         // where a newly created function directly calls itself. It's also meant to prevent somewhat
         // odd code from being generated where operation inside a function's body operate on the function
@@ -2830,6 +2828,7 @@ class ProgramBuilderTests: XCTestCase {
         XCTAssertEqual(typesB.count, 1)
     }
 
+    // TODO(pawkra): check shared subtyping once we support more shared refs.
     func testWasmGCSubtyping() {
         let env = JavaScriptEnvironment()
         let config = Configuration(logLevel: .error)
@@ -2865,21 +2864,21 @@ class ProgramBuilderTests: XCTestCase {
                 let arrayI32Type = b.type(of: arrayI32)
                 XCTAssert(arrayI32Type.Is(.wasmRef(.Index(), nullability: true)))
                 XCTAssert(arrayI32Type.Is(.wasmRef(.Index(), nullability: false)))
-                XCTAssert(arrayI32Type.Is(.wasmRef(.Abstract(.WasmArray), nullability: true)))
-                XCTAssert(arrayI32Type.Is(.wasmRef(.Abstract(.WasmArray), nullability: false)))
-                XCTAssert(arrayI32Type.Is(.wasmRef(.Abstract(.WasmEq), nullability: true)))
-                XCTAssert(arrayI32Type.Is(.wasmRef(.Abstract(.WasmEq), nullability: false)))
-                XCTAssert(arrayI32Type.Is(.wasmRef(.Abstract(.WasmAny), nullability: true)))
-                XCTAssert(arrayI32Type.Is(.wasmRef(.Abstract(.WasmAny), nullability: false)))
-                XCTAssertFalse(arrayI32Type.Is(.wasmRef(.Abstract(.WasmStruct), nullability: true)))
-                XCTAssertFalse(arrayI32Type.Is(.wasmRef(.Abstract(.WasmStruct), nullability: false)))
-                XCTAssertFalse(arrayI32Type.Is(.wasmRef(.Abstract(.WasmExn), nullability: false)))
+                XCTAssert(arrayI32Type.Is(.wasmRef(.WasmArray, nullability: true)))
+                XCTAssert(arrayI32Type.Is(.wasmRef(.WasmArray, nullability: false)))
+                XCTAssert(arrayI32Type.Is(.wasmRef(.WasmEq, nullability: true)))
+                XCTAssert(arrayI32Type.Is(.wasmRef(.WasmEq, nullability: false)))
+                XCTAssert(arrayI32Type.Is(.wasmRef(.WasmAny, nullability: true)))
+                XCTAssert(arrayI32Type.Is(.wasmRef(.WasmAny, nullability: false)))
+                XCTAssertFalse(arrayI32Type.Is(.wasmRef(.WasmStruct, nullability: true)))
+                XCTAssertFalse(arrayI32Type.Is(.wasmRef(.WasmStruct, nullability: false)))
+                XCTAssertFalse(arrayI32Type.Is(.wasmRef(.WasmExn, nullability: false)))
 
                 let arrayI32B = function.wasmArrayNewFixed(arrayType: arrayDefI32B, elements: [])
                 let arrayI32BType = b.type(of: arrayI32B)
                 XCTAssertFalse(arrayI32BType.Is(arrayI32Type))
                 XCTAssertFalse(arrayI32Type.Is(arrayI32BType))
-                let refArrayType = ILType.wasmRef(.Abstract(.WasmArray), nullability: false)
+                let refArrayType = ILType.wasmRef(.WasmArray, nullability: false)
                 XCTAssertEqual(arrayI32Type.union(with: arrayI32BType), refArrayType)
                 XCTAssertEqual(arrayI32BType.union(with: arrayI32Type), refArrayType)
                 XCTAssertEqual(arrayI32Type.intersection(with: arrayI32BType), .nothing)
@@ -2889,14 +2888,14 @@ class ProgramBuilderTests: XCTestCase {
                 let structType = b.type(of: structVar)
                 XCTAssert(structType.Is(.wasmRef(.Index(), nullability: true)))
                 XCTAssert(structType.Is(.wasmRef(.Index(), nullability: false)))
-                XCTAssert(structType.Is(.wasmRef(.Abstract(.WasmStruct), nullability: false)))
-                XCTAssert(structType.Is(.wasmRef(.Abstract(.WasmEq), nullability: false)))
-                XCTAssert(structType.Is(.wasmRef(.Abstract(.WasmAny), nullability: false)))
-                XCTAssertFalse(structType.Is(.wasmRef(.Abstract(.WasmArray), nullability: true)))
-                XCTAssertFalse(structType.Is(.wasmRef(.Abstract(.WasmArray), nullability: false)))
-                XCTAssertFalse(structType.Is(.wasmRef(.Abstract(.WasmExn), nullability: false)))
+                XCTAssert(structType.Is(.wasmRef(.WasmStruct, nullability: false)))
+                XCTAssert(structType.Is(.wasmRef(.WasmEq, nullability: false)))
+                XCTAssert(structType.Is(.wasmRef(.WasmAny, nullability: false)))
+                XCTAssertFalse(structType.Is(.wasmRef(.WasmArray, nullability: true)))
+                XCTAssertFalse(structType.Is(.wasmRef(.WasmArray, nullability: false)))
+                XCTAssertFalse(structType.Is(.wasmRef(.WasmExn, nullability: false)))
 
-                let refEqType = ILType.wasmRef(.Abstract(.WasmEq), nullability: false)
+                let refEqType = ILType.wasmRef(.WasmEq, nullability: false)
                 XCTAssertEqual(structType.union(with: arrayI32Type), refEqType)
                 XCTAssertEqual(arrayI32Type.union(with: structType), refEqType)
                 XCTAssertEqual(structType.intersection(with: arrayI32Type), .nothing)
@@ -2905,25 +2904,25 @@ class ProgramBuilderTests: XCTestCase {
                 let i31 = function.wasmRefI31(function.consti32(42))
                 let i31Type = b.type(of: i31)
                 XCTAssertFalse(i31Type.Is(.wasmRef(.Index(), nullability: true)))
-                XCTAssert(i31Type.Is(.wasmRef(.Abstract(.WasmEq), nullability: false)))
-                XCTAssert(i31Type.Is(.wasmRef(.Abstract(.WasmAny), nullability: false)))
-                XCTAssertFalse(i31Type.Is(.wasmRef(.Abstract(.WasmArray), nullability: false)))
-                XCTAssertFalse(i31Type.Is(.wasmRef(.Abstract(.WasmStruct), nullability: false)))
-                XCTAssertFalse(i31Type.Is(.wasmRef(.Abstract(.WasmExn), nullability: false)))
+                XCTAssert(i31Type.Is(.wasmRef(.WasmEq, nullability: false)))
+                XCTAssert(i31Type.Is(.wasmRef(.WasmAny, nullability: false)))
+                XCTAssertFalse(i31Type.Is(.wasmRef(.WasmArray, nullability: false)))
+                XCTAssertFalse(i31Type.Is(.wasmRef(.WasmStruct, nullability: false)))
+                XCTAssertFalse(i31Type.Is(.wasmRef(.WasmExn, nullability: false)))
 
                 XCTAssertEqual(structType.union(with: i31Type), refEqType)
                 XCTAssertEqual(arrayI32Type.union(with: i31Type), refEqType)
                 XCTAssertEqual(i31Type.union(with: refEqType), refEqType)
                 XCTAssertEqual(refArrayType.union(with: i31Type), refEqType)
-                let refStructType = ILType.wasmRef(.Abstract(.WasmStruct), nullability: false)
+                let refStructType = ILType.wasmRef(.WasmStruct, nullability: false)
                 XCTAssertEqual(i31Type.union(with: refStructType), refEqType)
 
                 XCTAssertEqual(i31Type.intersection(with: refEqType), i31Type)
                 XCTAssertEqual(refEqType.intersection(with: i31Type), i31Type)
-                let refNone = ILType.wasmRef(.Abstract(.WasmNone), nullability: false)
+                let refNone = ILType.wasmRef(.WasmNone, nullability: false)
                 XCTAssertEqual(i31Type.intersection(with: refArrayType), refNone)
                 XCTAssertEqual(refStructType.intersection(with: i31Type), refNone)
-                XCTAssertEqual(i31Type.intersection(with: .wasmExnRef), .nothing)
+                XCTAssertEqual(i31Type.intersection(with: .wasmExnRef()), .nothing)
 
                 return []
             }
@@ -2982,37 +2981,6 @@ class ProgramBuilderTests: XCTestCase {
         // XCTAssertGreaterThan(numGeneratedInstructions, 30)
     }
 
-    func testWasmStructNewDefaultGeneratorSchedulingTest() {
-        let fuzzer = makeMockFuzzer()
-        let b = fuzzer.makeBuilder()
-        b.buildPrefix()
-
-        // TODO(mliedtke): The mechanism needs to learn how to resolve nested input dependencies.
-        b.wasmDefineTypeGroup {[
-            b.wasmDefineArrayType(elementType: .wasmi32, mutability: true),
-            b.wasmDefineStructType(fields: [.init(type: .wasmi32, mutability: true)], indexTypes: []),
-        ]}
-
-        // Pick the generator.
-        let generator = fuzzer.codeGenerators.filter {
-            $0.name == "WasmStructNewDefaultGenerator"
-        }[0]
-
-        // Now build this.
-        let syntheticGenerator = b.assembleSyntheticGenerator(for: generator)
-        XCTAssertNotNil(syntheticGenerator)
-
-        let numGeneratedInstructions = b.complete(generator: syntheticGenerator!, withBudget: 30)
-        XCTAssertGreaterThan(numGeneratedInstructions, 0)
-        XCTAssertTrue(b.finalize().code.contains(where: { instr in
-            if case .wasmStructNewDefault(_) = instr.op.opcode {
-                return true
-            } else {
-                return false
-            }
-        }))
-    }
-
     func testWasmMemorySizeSchedulingTest() {
         let fuzzer = makeMockFuzzer()
         let numPrograms = 30
@@ -3046,6 +3014,37 @@ class ProgramBuilderTests: XCTestCase {
         }
     }
 
+    func testTypedArrayFromBufferGenerator() {
+        let fuzzer = makeMockFuzzer()
+        let numPrograms = 30
+
+        for _ in 0...numPrograms {
+            let b = fuzzer.makeBuilder()
+            // Instead of loading a prefix, emit a single integer, so that we have a "prefix" but
+            // the prefix does not fulfill the requirements for the generator, yet.
+            b.loadInt(123)
+
+            let generator = fuzzer.codeGenerators.filter {
+                $0.name == "TypedArrayFromBufferGenerator"
+            }[0]
+
+            // Now build this.
+            let syntheticGenerator = b.assembleSyntheticGenerator(for: generator)
+            XCTAssertNotNil(syntheticGenerator)
+
+            let N = 30
+            // We might generate a lot more than 30 instructions to fulfill the constraints.
+            let numGeneratedInstructions = b.complete(generator: syntheticGenerator!, withBudget: N)
+            XCTAssertGreaterThan(numGeneratedInstructions, 0)
+            // All generator input requirements are fulfilled.
+            XCTAssert(generator.parts.allSatisfy {
+                $0.inputs.constraints.allSatisfy { b.randomVariable(ofType: $0.type) != nil }})
+            // All generator `produces` guarantees are fulfilled.
+            XCTAssert(generator.produces.allSatisfy { b.randomVariable(ofType: $0.type) != nil })
+            let _ = b.finalize()
+        }
+    }
+
     func testArrayGetSchedulingTest() {
         let fuzzer = makeMockFuzzer()
         let numPrograms = 30
@@ -3068,9 +3067,7 @@ class ProgramBuilderTests: XCTestCase {
             let syntheticGenerator = b.assembleSyntheticGenerator(for: generator)
             XCTAssertNotNil(syntheticGenerator)
 
-            let N = 30
-            // We might generate a lot more than 30 instructions to fulfill the constraints.
-            let numGeneratedInstructions = b.complete(generator: syntheticGenerator!, withBudget: N)
+            let numGeneratedInstructions = b.complete(generator: syntheticGenerator!, withBudget: 30)
 
             let program = b.finalize()
 
@@ -3084,6 +3081,50 @@ class ProgramBuilderTests: XCTestCase {
             }))
             XCTAssertGreaterThan(numGeneratedInstructions, 0)
         }
+    }
+
+    func testWasmGCScheduling() {
+        func test<each ExpectedOp>(
+                _ generatorName: String,
+                expectAny: repeat (each ExpectedOp).Type,
+                requiresTypes: Bool = false) {
+            let fuzzer = makeMockFuzzer()
+            let numPrograms = 30
+
+            for _ in 0..<numPrograms {
+                let b = fuzzer.makeBuilder()
+                b.buildPrefix()
+
+                // TODO(mliedtke): The mechanism needs to learn how to resolve nested input +
+                // context dependencies.
+                if requiresTypes {
+                    b.wasmDefineTypeGroup {[
+                        b.wasmDefineArrayType(elementType: .wasmi32, mutability: true),
+                        b.wasmDefineStructType(fields: [.init(type: .wasmi32, mutability: true)], indexTypes: []),
+                    ]}
+                }
+
+                let generator = fuzzer.codeGenerators.filter {$0.name == generatorName}[0]
+                let syntheticGenerator = b.assembleSyntheticGenerator(for: generator)
+                XCTAssertNotNil(syntheticGenerator)
+
+                let numGeneratedInstructions = b.complete(generator: syntheticGenerator!, withBudget: 30)
+                let program = b.finalize()
+
+                XCTAssertTrue(program.code.contains(where: { instr in
+                    for match in repeat instr.op is (each ExpectedOp) {
+                        if match { return true }
+                    }
+                    return false
+                }), generatorName)
+                XCTAssertGreaterThan(numGeneratedInstructions, 0)
+            }
+        }
+
+        test("WasmArrayNewGenerator", expectAny: WasmArrayNewDefault.self, WasmArrayNewFixed.self)
+        test("WasmStructNewDefaultGenerator", expectAny: WasmStructNewDefault.self)
+        test("WasmArrayGetGenerator", expectAny: WasmArrayGet.self, requiresTypes: true)
+        test("WasmStructGetGenerator", expectAny: WasmStructGet.self, requiresTypes: true)
     }
 
     func testThatGeneratorsExistAndAreBuildableFromJs() {
@@ -3200,7 +3241,7 @@ class ProgramBuilderRuntimeDataTests: XCTestCase {
                 counter += 1
             },
             GeneratorStub("AddOne") { b in
-                let value = b.runtimeData.popAndPush("value")
+                let value = b.runtimeData.peek("value")
                 b.binary(value, b.loadInt(1), with: .Add)
             },
             GeneratorStub("SubOne") { b in

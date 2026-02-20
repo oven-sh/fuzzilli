@@ -294,7 +294,6 @@ public class WasmLifter {
 //    private var tags: VariableMap<[ILType]> = VariableMap()
 
     private var typeGroups: Set<Int> = []
-    private var freeTypes: Set<Variable> = []
 
     private var typeDescToIndex : [WasmTypeDescription:Int] = [:]
     private var userDefinedTypesCount = 0
@@ -528,33 +527,26 @@ public class WasmLifter {
         self.bytecode += [0x1, 0x0, 0x0, 0x0]
     }
 
-    private func encodeAbstractHeapType(_ heapType: WasmAbstractHeapType) -> Data {
-        switch (heapType) {
-            case .WasmExtern:
-                return Data([0x6F])
-            case .WasmFunc:
-                return Data([0x70])
-            case .WasmAny:
-                return Data([0x6E])
-            case .WasmEq:
-                return Data([0x6D])
-            case .WasmI31:
-                return Data([0x6C])
-            case .WasmStruct:
-                return Data([0x6B])
-            case .WasmArray:
-                return Data([0x6A])
-            case .WasmExn:
-                return Data([0x69])
-            case .WasmNone:
-                return Data([0x71])
-            case .WasmNoExtern:
-                return Data([0x72])
-            case .WasmNoFunc:
-                return Data([0x73])
-            case .WasmNoExn:
-                return Data([0x74])
-        }
+    private func encodeAbstractHeapType(_ heapTypeInfo: HeapTypeInfo) -> Data {
+        // Base of v8 implementation. See
+        // https://source.chromium.org/chromium/chromium/src/+/main:v8/src/wasm/wasm-constants.h?q=symbol:ValueTypeCode
+        let sharedFlagPrefix: [UInt8] = heapTypeInfo.shared ? [0x65] : []
+        let opCode: UInt8 =
+            switch (heapTypeInfo.heapType) {
+                case .WasmExtern:    0x6F
+                case .WasmFunc:      0x70
+                case .WasmAny:       0x6E
+                case .WasmEq:        0x6D
+                case .WasmI31:       0x6C
+                case .WasmStruct:    0x6B
+                case .WasmArray:     0x6A
+                case .WasmExn:       0x69
+                case .WasmNone:      0x71
+                case .WasmNoExtern:  0x72
+                case .WasmNoFunc:    0x73
+                case .WasmNoExn:     0x74
+            }
+        return Data(sharedFlagPrefix + [opCode])
     }
 
     private func encodeWasmGCType(_ description: WasmTypeDescription?) throws -> Data {
@@ -569,28 +561,27 @@ public class WasmLifter {
             let isNullable = refType.nullability
             let nullabilityByte: UInt8 = isNullable ? 0x63 : 0x64
 
-            switch refType.kind {
-            case .Index(let description):
-                return try Data([nullabilityByte]) + encodeWasmGCType(description.get())
-            case .Abstract(let heapType):
-                return Data([nullabilityByte]) + encodeAbstractHeapType(heapType)
-            }
+            return try Data([nullabilityByte]) + encodeHeapType(refType.kind)
         }
         // HINT: If you crash here, you might not have specified an encoding for your new type in `ILTypeMapping`.
         return ILTypeMapping[type] ?? ILTypeMapping[defaultType!]!
     }
 
-    private func encodeHeapType(_ type: ILType, defaultType: ILType? = nil)  throws -> Data {
-        if let refType = type.wasmReferenceType {
-            switch refType.kind {
-            case .Index(let description):
-                return try encodeWasmGCType(description.get())
-            case .Abstract(let heapType):
-                return encodeAbstractHeapType(heapType)
-            }
+    private func encodeHeapType(_ refKind: WasmReferenceType.Kind) throws -> Data {
+        switch refKind {
+        case .Index(let description):
+            return try encodeWasmGCType(description.get())
+        case .Abstract(let heapTypeInfo):
+            return encodeAbstractHeapType(heapTypeInfo)
         }
-        // HINT: If you crash here, you might not have specified an encoding for your new type in `ILTypeMapping`.
-        return ILTypeMapping[type] ?? ILTypeMapping[defaultType!]!
+    }
+
+    // Convienience method to avoid casting to wasmReferenceType on callers side.
+    private func encodeHeapType(_ type: ILType) throws -> Data {
+        if let refType = type.wasmReferenceType {
+            return try encodeHeapType(refType.kind)
+        }
+        fatalError("This function supports only wasmReferenceType.")
     }
 
     private func buildTypeEntry(for desc: WasmTypeDescription, data: inout Data) throws {
@@ -631,12 +622,6 @@ public class WasmLifter {
             registerSignature(signature)
         }
 
-        // Special handling for defined Tags
-        for case let .tag(instr) in self.exports {
-            let tagSignature = (instr!.op as! WasmDefineTag).parameterTypes => []
-            assert(tagSignature.outputTypes.isEmpty)
-            registerSignature(tagSignature)
-        }
         // Special handling for defined functions
         for case let .function(functionInfo) in self.exports {
             registerSignature(functionInfo!.signature)
@@ -655,7 +640,6 @@ public class WasmLifter {
                 try buildTypeEntry(for: typer.getTypeDescription(of: typeDef), data: &temp)
             }
         }
-        // TODO(mliedtke): Also add "free types" which aren't in any explicit type group.
 
         for signature in self.signatures {
             temp += [0x60]
@@ -665,7 +649,7 @@ public class WasmLifter {
             }
             temp += Leb128.unsignedEncode(signature.outputTypes.count)
             for outputType in signature.outputTypes {
-                temp += try encodeType(outputType, defaultType: .wasmExternRef)
+                temp += try encodeType(outputType, defaultType: .wasmExternRef())
             }
         }
 
@@ -1079,13 +1063,13 @@ public class WasmLifter {
             case .wasmi64(let val):
                 temporaryInstruction = Instruction(Consti64(value: val), output: Variable())
             case .externref:
-                temp += try! Data([0xD0]) + encodeHeapType(.wasmExternRef) + Data([0x0B])
+                temp += try! Data([0xD0]) + encodeHeapType(.wasmExternRef()) + Data([0x0B])
                 continue
             case .exnref:
-                temp += try! Data([0xD0]) + encodeHeapType(.wasmExnRef) + Data([0x0B])
+                temp += try! Data([0xD0]) + encodeHeapType(.wasmExnRef()) + Data([0x0B])
                 continue
             case .i31ref:
-                temp += try! Data([0xD0]) + encodeHeapType(.wasmI31Ref) + Data([0x0B])
+                temp += try! Data([0xD0]) + encodeHeapType(.wasmI31Ref()) + Data([0x0B])
                 continue
             case .refFunc(_),
                  .imported(_):
@@ -1152,9 +1136,9 @@ public class WasmLifter {
         section += Leb128.unsignedEncode(self.exports.count { $0.isTag })
 
         for case let .tag(instr) in self.exports {
-            let tagSignature = (instr!.op as! WasmDefineTag).parameterTypes => []
+            let signatureDesc = typer.getTypeDescription(of: instr!.input(0))
             section.append(0)
-            section.append(Leb128.unsignedEncode(try getSignatureIndex(tagSignature)))
+            section.append(Leb128.unsignedEncode(typeDescToIndex[signatureDesc]!))
         }
 
         self.bytecode.append(Leb128.unsignedEncode(section.count))
@@ -1234,19 +1218,22 @@ public class WasmLifter {
         }
     }
 
-    /// This function updates the internal state of the lifter before actually emitting code to the wasm module. This should be invoked before we try to get the corresponding bytes for the Instruction
+    /// This function updates the internal state of the lifter before actually emitting code to the
+    /// wasm module. This should be invoked before we try to get the corresponding bytes for the
+    /// Instruction.
+    /// Returns true if the instruction requires emitting code into the module's code section (which
+    /// means it is true for almost all instructions appearing inside a wasm function and false for
+    /// all instructions outside of a wasm function like a Wasm memory definition).
     private func updateLifterState(wasmInstruction instr: Instruction) -> Bool {
         // Make sure that we actually have a Wasm operation here.
         assert(instr.op is WasmOperation)
 
         switch instr.op.opcode {
-        case .wasmBeginBlock(let op):
-            registerSignature(op.signature)
+        case .wasmBeginBlock(_):
             self.currentFunction!.labelBranchDepthMapping[instr.innerOutput(0)] = self.currentFunction!.variableAnalyzer.wasmBranchDepth
             // Needs typer analysis
             return true
-        case .wasmBeginIf(let op):
-            registerSignature(op.signature)
+        case .wasmBeginIf(_):
             self.currentFunction!.labelBranchDepthMapping[instr.innerOutput(0)] = self.currentFunction!.variableAnalyzer.wasmBranchDepth
             // Needs typer analysis
             return true
@@ -1255,23 +1242,19 @@ public class WasmLifter {
             self.currentFunction!.labelBranchDepthMapping[instr.innerOutput(0)] = self.currentFunction!.variableAnalyzer.wasmBranchDepth - 1
             // Needs typer analysis
             return true
-        case .wasmBeginTryTable(let op):
-            registerSignature(op.signature)
+        case .wasmBeginTryTable(_):
             self.currentFunction!.labelBranchDepthMapping[instr.innerOutput(0)] = self.currentFunction!.variableAnalyzer.wasmBranchDepth
             // Needs typer analysis
             return true
-        case .wasmBeginTry(let op):
-            registerSignature(op.signature)
+        case .wasmBeginTry(_):
             self.currentFunction!.labelBranchDepthMapping[instr.innerOutput(0)] = self.currentFunction!.variableAnalyzer.wasmBranchDepth
             // Needs typer analysis
             return true
-        case .wasmBeginTryDelegate(let op):
-            registerSignature(op.signature)
+        case .wasmBeginTryDelegate(_):
             self.currentFunction!.labelBranchDepthMapping[instr.innerOutput(0)] = self.currentFunction!.variableAnalyzer.wasmBranchDepth
             // Needs typer analysis
             return true
-        case .wasmBeginLoop(let op):
-            registerSignature(op.signature)
+        case .wasmBeginLoop(_):
             self.currentFunction!.labelBranchDepthMapping[instr.innerOutput(0)] = self.currentFunction!.variableAnalyzer.wasmBranchDepth
             // Needs typer analysis
             return true
@@ -1334,6 +1317,8 @@ public class WasmLifter {
             assert(self.exports.contains(where: {
                 $0.isTag && $0.getDefInstr()!.output == instr.output
             }))
+        case .wasmDefineAdHocModuleSignatureType(_):
+            break
         default:
             return true
         }
@@ -1343,8 +1328,10 @@ public class WasmLifter {
 
     // requires that the instr has been analyzed before. Maybe assert that?
     private func emitInputLoadsIfNecessary(forInstruction instr: Instruction) {
-        // Don't emit loads for reassigns. This is specially handled in the `lift` function for reassigns.
-        if instr.op is WasmReassign {
+        // Don't emit loads for reassigns. This is specially handled in the `lift` function for
+        // reassigns. WasmDefineAdHocSignatureType isn't a wasm instruction and therefore also
+        // doesn't have any Wasm stack inputs.
+        if instr.op is WasmReassign || instr.op is WasmDefineAdHocSignatureType {
             return
         }
 
@@ -1376,9 +1363,11 @@ public class WasmLifter {
     }
 
     private func emitStackSpillsIfNecessary(forInstruction instr: Instruction) {
-        // Don't emit spills for reassigns. This is specially handled in the `lift` function for reassigns.
-        // Similarly, the end of a function doesn't spill anything.
-        if instr.op is WasmReassign || instr.op is EndWasmFunction {
+        // Don't emit spills for reassigns. This is specially handled in the `lift` function for
+        // reassigns. Similarly, the end of a function doesn't spill anything.
+        // WasmDefineAdHocSignatureType isn't a wasm instruction and therefore also doesn't have any
+        // Wasm stack inputs.
+        if instr.op is WasmReassign || instr.op is EndWasmFunction || instr.op is WasmDefineAdHocSignatureType {
             return
         }
 
@@ -1453,15 +1442,14 @@ public class WasmLifter {
             for (idx, input) in instr.inputs.enumerated() {
                 let inputType = typer.type(of: input)
 
-                if inputType.Is(.wasmTypeDef()) || inputType.Is(.wasmRef(.Index(), nullability: true)) {
+                if inputType.Is(.wasmTypeDef()) || inputType.Is(.anyIndexRef) {
                     let typeDesc = typer.getTypeDescription(of: input)
-                    if typeDesc.typeGroupIndex != -1 {
-                        // Add typegroups and their dependencies.
-                        if typeGroups.insert(typeDesc.typeGroupIndex).inserted {
-                            typeGroups.formUnion(typer.getTypeGroupDependencies(typeGroupIndex: typeDesc.typeGroupIndex))
-                        }
-                    } else {
-                        freeTypes.insert(input)
+                    guard typeDesc.typeGroupIndex != -1 else {
+                        throw CompileError.fatalError("Missing type group index for \(input)")
+                    }
+                    // Add typegroups and their dependencies.
+                    if typeGroups.insert(typeDesc.typeGroupIndex).inserted {
+                        typeGroups.formUnion(typer.getTypeGroupDependencies(typeGroupIndex: typeDesc.typeGroupIndex))
                     }
                 }
 
@@ -1505,7 +1493,8 @@ public class WasmLifter {
                 self.exports.append(.global(instr))
             case .wasmDefineTable(let tableDef):
                 self.exports.append(.table(instr))
-                if tableDef.elementType == .wasmFuncRef {
+                // TODO(pawkra): support shared refs.
+                if tableDef.elementType == .wasmFuncRef() {
                     for (value, definedEntry) in zip(instr.inputs, tableDef.definedEntries) {
                         if !typer.type(of: value).Is(.wasmFunctionDef()) {
                             // Check if we need to import the inputs.
@@ -1907,14 +1896,17 @@ public class WasmLifter {
             } else {
                 throw WasmLifter.CompileError.failedIndexLookUp
             }
-        case .wasmBeginBlock(let op):
+        case .wasmBeginBlock(_):
             // A Block can "produce" (push) an item on the value stack, just like a function. Similarly, a block can also have parameters.
             // Ref: https://webassembly.github.io/spec/core/binary/instructions.html#binary-blocktype
-            return Data([0x02] + Leb128.unsignedEncode(getSignatureIndexStrict(op.signature)))
-        case .wasmBeginLoop(let op):
-            return Data([0x03] + Leb128.unsignedEncode(getSignatureIndexStrict(op.signature)))
+            let signatureDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            return Data([0x02] + Leb128.unsignedEncode(typeDescToIndex[signatureDesc]!))
+        case .wasmBeginLoop(_):
+            let signatureDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            return Data([0x03] + Leb128.unsignedEncode(typeDescToIndex[signatureDesc]!))
         case .wasmBeginTryTable(let op):
-            var inputIndex = op.signature.parameterTypes.count
+            let signatureDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            var inputIndex = 1 + op.parameterCount
             let catchTable: Data = try op.catches.map {
                     switch $0 {
                     case .Ref, .NoRef:
@@ -1930,17 +1922,19 @@ public class WasmLifter {
                     }
                 }.reduce(Data(), +)
             return [0x1F]
-                + Leb128.unsignedEncode(signatureIndexMap[op.signature]!)
+                + Leb128.unsignedEncode(typeDescToIndex[signatureDesc]!)
                 + Leb128.unsignedEncode(op.catches.count)
                 + catchTable
-        case .wasmBeginTry(let op):
-            return Data([0x06] + Leb128.unsignedEncode(getSignatureIndexStrict(op.signature)))
-        case .wasmBeginTryDelegate(let op):
-            return Data([0x06] + Leb128.unsignedEncode(getSignatureIndexStrict(op.signature)))
+        case .wasmBeginTry(_):
+            let signatureDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            return Data([0x06] + Leb128.unsignedEncode(typeDescToIndex[signatureDesc]!))
+        case .wasmBeginTryDelegate(_):
+            let signatureDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            return Data([0x06] + Leb128.unsignedEncode(typeDescToIndex[signatureDesc]!))
         case .wasmBeginCatchAll(_):
             return Data([0x19])
         case .wasmBeginCatch(_):
-            return Data([0x07] + Leb128.unsignedEncode(try resolveIdx(ofType: .tag, for: wasmInstruction.input(0))))
+            return Data([0x07] + Leb128.unsignedEncode(try resolveIdx(ofType: .tag, for: wasmInstruction.input(1))))
         case .wasmEndLoop(_),
                 .wasmEndIf(_),
                 .wasmEndTryTable(_),
@@ -1949,7 +1943,7 @@ public class WasmLifter {
             // Basically the same as EndBlock, just an explicit instruction.
             return Data([0x0B])
         case .wasmEndTryDelegate(_):
-            let branchDepth = try branchDepthFor(label: wasmInstruction.input(0))
+            let branchDepth = try branchDepthFor(label: wasmInstruction.input(1))
             // Mutation might make this EndTryDelegate branch to itself, which should not happen.
             if branchDepth < 0 {
                 throw WasmLifter.CompileError.invalidBranch
@@ -1964,11 +1958,11 @@ public class WasmLifter {
             return Data([0x09] + Leb128.unsignedEncode(blockDepth))
         case .wasmBranch(let op):
             let branchDepth = try branchDepthFor(label: wasmInstruction.input(0))
-            return Data([0x0C]) + Leb128.unsignedEncode(branchDepth) + Data(op.labelTypes.map {_ in 0x1A})
+            return Data([0x0C]) + Leb128.unsignedEncode(branchDepth) + Array(repeating: 0x1a, count: op.parameterCount)
         case .wasmBranchIf(let op):
             currentFunction!.addBranchHint(op.hint)
             let branchDepth = try branchDepthFor(label: wasmInstruction.input(0))
-            return Data([0x0D]) + Leb128.unsignedEncode(branchDepth) + Data(op.labelTypes.map {_ in 0x1A})
+            return Data([0x0D]) + Leb128.unsignedEncode(branchDepth) + Array(repeating: 0x1a, count: op.parameterCount)
         case .wasmBranchTable(let op):
             let depths = try (0...op.valueCount).map {
                 try branchDepthFor(label: wasmInstruction.input($0))
@@ -1976,7 +1970,8 @@ public class WasmLifter {
             return Data([0x0E]) + Leb128.unsignedEncode(op.valueCount) + depths.map(Leb128.unsignedEncode).joined()
         case .wasmBeginIf(let op):
             currentFunction!.addBranchHint(op.hint)
-            let beginIf = Data([0x04] + Leb128.unsignedEncode(try getSignatureIndex(op.signature)))
+            let signatureDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            let beginIf = Data([0x04] + Leb128.unsignedEncode(typeDescToIndex[signatureDesc]!))
             // Invert the condition with an `i32.eqz` (resulting in 0 becoming 1 and everything else becoming 0).
             return op.inverted ? Data([0x45]) + beginIf : beginIf
         case .wasmBeginElse(_):
@@ -1986,7 +1981,7 @@ public class WasmLifter {
             // wasmReassign is quite special, it needs to work for variables stored in various places, e.g. local slots or even globals. As such the lifting here first needs to locate the destination variable.
             var out = Data()
 
-            var storeInstruction = Data()
+            let storeInstruction: Data
             // If the variable is a local, we load the stack slot.
             // Check for the stack location of the `to` variable.
             if let stackSlot = currentFunction!.getStackSlot(for: wasmInstruction.input(0)) {
@@ -2168,6 +2163,10 @@ public class WasmLifter {
             let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
             let arrayIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
             return Data([Prefix.GC.rawValue, 0x0E]) + arrayIndex
+        case .wasmStructNew(_):
+            let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            let structIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
+            return Data([Prefix.GC.rawValue, 0x00]) + structIndex
         case .wasmStructNewDefault(_):
             let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
             let structIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
@@ -2187,8 +2186,10 @@ public class WasmLifter {
             return try Data([0xD0]) + encodeHeapType(typer.type(of: wasmInstruction.output))
         case .wasmRefIsNull(_):
             return Data([0xD1])
-        case .wasmRefI31(_):
-            return Data([Prefix.GC.rawValue, 0x1C])
+        case .wasmRefEq(_):
+            return Data([0xD3])
+        case .wasmRefI31(let op):
+            return Data([Prefix.GC.rawValue, op.isShared ? 0x1F : 0x1C])
         case .wasmI31Get(let op):
             let opCode: UInt8 = op.isSigned ? 0x1D : 0x1E
             return Data([Prefix.GC.rawValue, opCode])
@@ -2196,6 +2197,20 @@ public class WasmLifter {
             return Data([Prefix.GC.rawValue, 0x1A])
         case .wasmExternConvertAny(_):
             return Data([Prefix.GC.rawValue, 0x1B])
+        case .wasmRefTest(let op):
+            let refType = op.type.wasmReferenceType!
+            let opCode: UInt8 = refType.nullability ? 0x15 : 0x14
+            let typeData = if refType.isAbstract() {
+                try encodeHeapType(op.type)
+            } else {
+                try encodeWasmGCType(typer.getTypeDescription(of: wasmInstruction.input(1)))
+            }
+            return Data([Prefix.GC.rawValue, opCode]) + typeData
+
+        case .wasmDefineAdHocSignatureType(_):
+            // Nothing to do here, types are defined inside the typegroups, not inside a wasm
+            // function.
+            return Data()
 
         default:
              fatalError("unreachable")

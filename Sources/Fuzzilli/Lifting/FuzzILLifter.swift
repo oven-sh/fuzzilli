@@ -873,8 +873,8 @@ public class FuzzILLifter: Lifter {
         case .wasmDefineDataSegment(_):
             w.emit("\(output()) <- WasmDefineDataSegment [...]")
 
-        case .wasmDefineTag(let op):
-            w.emit("\(output()) <- WasmDefineTag \(op.parameterTypes)")
+        case .wasmDefineTag(_):
+            w.emit("\(output()) <- WasmDefineTag \(input(0))")
 
         case .wasmLoadGlobal(_):
             w.emit("\(output()) <- WasmLoadGlobal \(input(0))")
@@ -1064,13 +1064,13 @@ public class FuzzILLifter: Lifter {
                 w.emit("\(outputs) <- WasmCallIndirect(\(op.signature)) \(inputs)")
             }
 
-        case .wasmCallDirect(let op):
+        case .wasmCallDirect(_):
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
-            if op.signature.outputTypes.isEmpty {
-                w.emit("WasmCallDirect(\(op.signature)) \(inputs)")
+            if instr.outputs.isEmpty {
+                w.emit("WasmCallDirect \(inputs)")
             } else {
                 let outputs = instr.outputs.map(lift).joined(separator: ", ")
-                w.emit("\(outputs) <- WasmCallDirect(\(op.signature)) \(inputs)")
+                w.emit("\(outputs) <- WasmCallDirect \(inputs)")
             }
 
         case .wasmReturnCallDirect(let op):
@@ -1081,10 +1081,10 @@ public class FuzzILLifter: Lifter {
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
             w.emit("WasmReturnCallIndirect(\(op.signature)) \(inputs)")
 
-        case .wasmBeginBlock(let op):
+        case .wasmBeginBlock(_):
             // TODO(cffsmith): Maybe lift labels as e.g. L7 or something like that?
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
-            w.emit("WasmBeginBlock (\(op.signature)) [\(inputs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
+            w.emit("WasmBeginBlock [\(inputs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
             w.increaseIndentionLevel()
 
         case .wasmEndBlock(let op):
@@ -1097,9 +1097,9 @@ public class FuzzILLifter: Lifter {
                 w.emit("WasmEndBlock \(inputs)")
             }
 
-        case .wasmBeginLoop(let op):
+        case .wasmBeginLoop(_):
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
-            w.emit("WasmBeginLoop (\(op.signature)) [\(inputs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
+            w.emit("WasmBeginLoop [\(inputs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
             w.increaseIndentionLevel()
 
         case .wasmEndLoop(let op):
@@ -1114,10 +1114,10 @@ public class FuzzILLifter: Lifter {
 
         case .wasmBeginTryTable(let op):
             let args = instr.inputs.map(lift)
-            let blockArgs = args.prefix(op.signature.parameterTypes.count).joined(separator: ", ")
-            w.emit("WasmBeginTryTable (\(op.signature)) [\(blockArgs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
+            let blockArgs = args.prefix(1 + op.parameterCount).joined(separator: ", ")
+            w.emit("WasmBeginTryTable [\(blockArgs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
             w.increaseIndentionLevel(by: 2)
-            var inputIndex =  op.signature.parameterTypes.count
+            var inputIndex =  1 + op.parameterCount
             op.catches.forEach { kind in
                 if kind == .Ref || kind == .NoRef {
                     w.emit("catching \(kind) \(args[inputIndex]) to \(args[inputIndex + 1])")
@@ -1139,9 +1139,9 @@ public class FuzzILLifter: Lifter {
                 w.emit("WasmEndTryTable \(inputs)")
             }
 
-        case .wasmBeginTry(let op):
+        case .wasmBeginTry(_):
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
-            w.emit("WasmBeginTry (\(op.signature)) [\(inputs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
+            w.emit("WasmBeginTry [\(inputs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
             w.increaseIndentionLevel()
 
         case .wasmBeginCatchAll(_):
@@ -1176,8 +1176,8 @@ public class FuzzILLifter: Lifter {
         case .wasmRethrow(_):
             w.emit("WasmRethrow \(instr.input(0))")
 
-        case .wasmBeginTryDelegate(let op):
-            w.emit("WasmBeginTryDelegate -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))] (\(op.signature))")
+        case .wasmBeginTryDelegate(_):
+            w.emit("WasmBeginTryDelegate -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
             w.increaseIndentionLevel()
 
         case .wasmEndTryDelegate(_):
@@ -1219,14 +1219,12 @@ public class FuzzILLifter: Lifter {
                 case .Likely: "likely "
                 case .Unlikely: "unlikely "
             }
-            w.emit("WasmBeginIf \(op.inverted ? "inverted " : "")\(hint)(\(op.signature)) [\(inputs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
+            w.emit("WasmBeginIf \(op.inverted ? "inverted " : "")\(hint) [\(inputs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
             w.increaseIndentionLevel()
 
         case .wasmBeginElse(_):
             w.decreaseIndentionLevel()
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
-            // Note that the signature is printed by the WasmBeginIf, so we skip it here for better
-            // readability.
             w.emit("WasmBeginElse [\(inputs)] -> L:\(instr.innerOutput(0)) [\(liftCallArguments(instr.innerOutputs(1...)))]")
             w.increaseIndentionLevel()
 
@@ -1312,6 +1310,10 @@ public class FuzzILLifter: Lifter {
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
             w.emit("WasmArraySet [\(inputs)]")
 
+        case .wasmStructNew(_):
+            let inputs = instr.inputs.map(lift).joined(separator: ", ")
+            w.emit("\(output()) <- WasmStructNew [\(inputs)]")
+
         case .wasmStructNewDefault(_):
             w.emit("\(output()) <- WasmStructNewDefault [\(input(0))]")
 
@@ -1328,6 +1330,9 @@ public class FuzzILLifter: Lifter {
         case .wasmRefIsNull(_):
             w.emit("\(output()) <- WasmRefIsNull \(input(0))")
 
+        case .wasmRefEq(_):
+            w.emit("\(output()) <- WasmRefEq \(input(0)) \(input(1))")
+
         case .wasmRefI31(_):
             w.emit("\(output()) <- WasmRefI31 \(input(0))")
 
@@ -1339,6 +1344,10 @@ public class FuzzILLifter: Lifter {
 
         case .wasmExternConvertAny(_):
             w.emit("\(output()) <- WasmExternConvertAny \(input(0))")
+
+        case .wasmRefTest(let op):
+            let typeInput = op.type.requiredInputCount() > 0 ? " (IndexType: \(input(1)))" : ""
+            w.emit("\(output()) <- WasmRefTest \(op.type) \(input(0))\(typeInput)")
 
         case .wasmBeginTypeGroup(_):
             w.emit("WasmBeginTypeGroup")
@@ -1353,6 +1362,14 @@ public class FuzzILLifter: Lifter {
         case .wasmDefineSignatureType(let op):
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
             w.emit("\(output()) <- WasmDefineSignatureType(\(op.signature)) [\(inputs)]")
+
+        case .wasmDefineAdHocSignatureType(let op):
+            let inputs = instr.inputs.map(lift).joined(separator: ", ")
+            w.emit("\(output()) <- WasmDefineAdHocSignatureType(\(op.signature)) [\(inputs)]")
+
+        case .wasmDefineAdHocModuleSignatureType(let op):
+            let inputs = instr.inputs.map(lift).joined(separator: ", ")
+            w.emit("\(output()) <- WasmDefineAdHocModuleSignatureType(\(op.signature)) [\(inputs)]")
 
         case .wasmDefineArrayType(let op):
             let typeInput = op.elementType.requiredInputCount() == 1 ? " \(input(0))" : ""

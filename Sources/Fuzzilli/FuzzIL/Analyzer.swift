@@ -95,9 +95,9 @@ struct DefUseAnalyzer: Analyzer {
         return uses[variable]!.map({ code[$0] })
     }
 
-    /// Returns the indices of the instructions using the given variable.
+    /// Returns the indices of the instructions assigning to the given variable.
     func assignmentIndices(of variable: Variable) -> [Int] {
-        assert(uses.contains(variable))
+        assert(assignments.contains(variable))
         return assignments[variable]!
     }
 
@@ -107,7 +107,7 @@ struct DefUseAnalyzer: Analyzer {
         return uses[variable]!
     }
 
-    /// Returns the number of instructions using the given variable.
+    /// Returns the number of instructions assigning to the given variable.
     func numAssignments(of variable: Variable) -> Int {
         assert(assignments.contains(variable))
         return assignments[variable]!.count

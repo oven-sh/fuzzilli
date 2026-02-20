@@ -75,7 +75,7 @@ public class ProbingMutator: RuntimeAssistedMutator {
         // the block that they are the output of is closed.
         var pendingProbesStack = Stack<Variable?>()
         let b = fuzzer.makeBuilder()
-        b.adopting(from: program) {
+        b.adopting() {
             for instr in program.code {
                 b.adopt(instr)
 
@@ -143,7 +143,7 @@ public class ProbingMutator: RuntimeAssistedMutator {
 
         // Now build the final program by parsing the results and replacing the Probe operations
         // with FuzzIL operations that install one of the non-existent properties (if any).
-        b.adopting(from: instrumentedProgram) {
+        b.adopting() {
             for instr in instrumentedProgram.code {
                 if let op = instr.op as? Probe {
                     if let results = results[op.id] {

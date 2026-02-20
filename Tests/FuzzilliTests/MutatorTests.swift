@@ -140,7 +140,7 @@ class MutatorTests: XCTestCase {
         let mutator = OperationMutator()
         for _ in 1...10 {
             let newBuilder = fuzzer.makeBuilder()
-            newBuilder.adopting(from: prog) {
+            newBuilder.adopting() {
                 mutator.mutate(originalLoadInstruction[0], newBuilder)
             }
 

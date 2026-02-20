@@ -20,7 +20,10 @@ def check_git_clean():
         cwd=BASE_DIR,
         capture_output=True,
         check=True)
-    assert result.stdout.decode().strip() == "", f"Unexpected modified files: {result.stdout.decode()}"
+    output = result.stdout.decode().strip()
+    if output != "":
+        diff_result = subprocess.run(["git", "diff"], cwd=BASE_DIR, capture_output=True, check=True)
+        assert False, f"Unexpected modified files: {output}\n== Diff ==\n{diff_result.stdout.decode()}"
 
 def check_proto():
     """Check that program.proto is up-to-date."""

@@ -44,16 +44,16 @@ func testForErrorOutput(program: String, runner: JavaScriptExecutor, errorMessag
 
 class WasmSignatureConversionTests: XCTestCase {
     func testJsSignatureConversion() {
-        XCTAssertEqual(ProgramBuilder.convertJsSignatureToWasmSignature([.number] => .integer, availableTypes: WeightedList([(.wasmi32, 1), (.wasmFuncRef, 1), (.wasmExternRef, 1)])), [.wasmi32] => [.wasmi32])
-        XCTAssertEqual(ProgramBuilder.convertJsSignatureToWasmSignature([.number] => .integer, availableTypes: WeightedList([(.wasmf32, 1), (.wasmFuncRef, 1), (.wasmExternRef, 1)])), [.wasmf32] => [.wasmi32])
+        XCTAssertEqual(ProgramBuilder.convertJsSignatureToWasmSignature([.number] => .integer, availableTypes: WeightedList([(.wasmi32, 1), (.wasmFuncRef(), 1), (.wasmExternRef(), 1)])), [.wasmi32] => [.wasmi32])
+        XCTAssertEqual(ProgramBuilder.convertJsSignatureToWasmSignature([.number] => .integer, availableTypes: WeightedList([(.wasmf32, 1), (.wasmFuncRef(), 1), (.wasmExternRef(), 1)])), [.wasmf32] => [.wasmi32])
     }
 
     func testWasmSignatureConversion() {
         XCTAssertEqual(ProgramBuilder.convertWasmSignatureToJsSignature([.wasmi32, .wasmi64] => [.wasmf32]), [.integer, .bigint] => .float)
-        XCTAssertEqual(ProgramBuilder.convertWasmSignatureToJsSignature([.wasmi32, .wasmExnRef] => [.wasmf64]), [.integer, .jsAnything] => .float)
-        XCTAssertEqual(ProgramBuilder.convertWasmSignatureToJsSignature([.wasmExternRef, .wasmFuncRef] => [.wasmf64, .wasmf64]), [.jsAnything, .function()] => .jsArray)
-        XCTAssertEqual(ProgramBuilder.convertWasmSignatureToJsSignature([.wasmRef(.Index(), nullability: false), .wasmFuncRef] => [.wasmf64, .wasmf64]), [.jsAnything, .function()] => .jsArray)
-        XCTAssertEqual(ProgramBuilder.convertWasmSignatureToJsSignature([.wasmRef(.Abstract(.WasmExtern), nullability: false), .wasmFuncRef] => [.wasmf64, .wasmf64]), [.jsAnything, .function()] => .jsArray)
+        XCTAssertEqual(ProgramBuilder.convertWasmSignatureToJsSignature([.wasmi32, .wasmExnRef()] => [.wasmf64]), [.integer, .jsAnything] => .float)
+        XCTAssertEqual(ProgramBuilder.convertWasmSignatureToJsSignature([.wasmExternRef(), .wasmFuncRef()] => [.wasmf64, .wasmf64]), [.jsAnything, .function()] => .jsArray)
+        XCTAssertEqual(ProgramBuilder.convertWasmSignatureToJsSignature([.wasmRef(.Index(), nullability: false), .wasmFuncRef()] => [.wasmf64, .wasmf64]), [.jsAnything, .function()] => .jsArray)
+        XCTAssertEqual(ProgramBuilder.convertWasmSignatureToJsSignature([.wasmRef(.WasmExtern, nullability: false), .wasmFuncRef()] => [.wasmf64, .wasmf64]), [.jsAnything, .function()] => .jsArray)
         // TODO(cffsmith): Change this once we know how we want to represent .wasmSimd128 types in JS.
         XCTAssertEqual(ProgramBuilder.convertWasmSignatureToJsSignature([.wasmSimd128] => [.wasmSimd128]), [.jsAnything] => .jsAnything)
     }
@@ -324,28 +324,28 @@ class WasmFoundationTests: XCTestCase {
 
             wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
                 let ctr = function.consti32(10)
-                function.wasmBuildLoop(with: [] => []) { label, args in
+                function.wasmBuildLoop(with: [] => [], args: []) { label, args in
                     XCTAssert(b.type(of: label).Is(.anyLabel))
                     let result = function.wasmi32BinOp(ctr, function.consti32(1), binOpKind: .Sub)
                     function.wasmReassign(variable: ctr, to: result)
                     // The backedge, loop if we are not at zero yet.
                     let isNotZero = function.wasmi32CompareOp(ctr, function.consti32(0), using: .Ne)
                     function.wasmBranchIf(isNotZero, to: label)
+                    return []
                 }
                 return [ctr]
             }
 
             let tag = wasmModule.addTag(parameterTypes: [.wasmi32, .wasmi32])
             wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
-                function.wasmBuildLegacyTry(with: [] => [], args: []) { _, _ in
+                function.wasmBuildLegacyTryVoid(body: { _ in
                     function.WasmBuildThrow(tag: tag, inputs: [function.consti32(123), function.consti32(456)])
-                    function.WasmBuildLegacyCatch(tag: tag) { _, _, e in
+                }, catchClauses: [(tag: tag, body: { _, _, e in
                         // The exception values are e[0] = 123 and e[1] = 456.
                         function.wasmReassign(variable: e[0], to: e[1])
                         // The exception values should now be e[0] = 456, e[1] = 456.
                         function.wasmReturn(e[0])
-                    }
-                }
+                    })])
                 function.wasmUnreachable()
                 return [function.consti32(-1)]
             }
@@ -451,7 +451,7 @@ class WasmFoundationTests: XCTestCase {
         let module = b.buildWasmModule { wasmModule in
             // Note that globals of exnref can only be defined in wasm, not in JS.
             let global = wasmModule.addGlobal(wasmGlobal: .exnref, isMutable: true)
-            XCTAssertEqual(b.type(of: global), .object(ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"], withWasmType: WasmGlobalType(valueType: ILType.wasmExnRef, isMutable: true)))
+            XCTAssertEqual(b.type(of: global), .object(ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"], withWasmType: WasmGlobalType(valueType: .wasmExnRef(), isMutable: true)))
 
             wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
                 let value = function.wasmLoadGlobal(globalVariable: global)
@@ -460,12 +460,12 @@ class WasmFoundationTests: XCTestCase {
 
             // Throw an exception, catch it and store it in the global.
             wasmModule.addWasmFunction(with: [] => []) { function, label, args in
-                let exnref = function.wasmBuildBlockWithResults(with: [] => [.wasmExnRef], args: []) { catchLabel, _ in
+                let exnref = function.wasmBuildBlockWithResults(with: [] => [.wasmExnRef()], args: []) { catchLabel, _ in
                     function.wasmBuildTryTable(with: [] => [], args: [catchLabel], catches: [.AllRef]) { _, _ in
                         function.WasmBuildThrow(tag: tagi32, inputs: [function.consti32(42)])
                         return []
                     }
-                    return [function.wasmRefNull(type: .wasmExnRef)]
+                    return [function.wasmRefNull(type: .wasmExnRef())]
                 }[0]
                 function.wasmStoreGlobal(globalVariable: global, to: exnref)
                 return []
@@ -473,12 +473,12 @@ class WasmFoundationTests: XCTestCase {
 
             // Rethrow the exception stored in the global, catch it and extract the integer.
             wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
-                let caughtValues = function.wasmBuildBlockWithResults(with: [] => [.wasmi32, .wasmExnRef], args: []) { catchLabel, _ in
+                let caughtValues = function.wasmBuildBlockWithResults(with: [] => [.wasmi32, .wasmExnRef()], args: []) { catchLabel, _ in
                     function.wasmBuildTryTable(with: [] => [], args: [tagi32, catchLabel], catches: [.Ref]) { _, _ in
                         function.wasmBuildThrowRef(exception: function.wasmLoadGlobal(globalVariable: global))
                         return []
                     }
-                    return [function.consti32(-1), function.wasmRefNull(type: .wasmExnRef)]
+                    return [function.consti32(-1), function.wasmRefNull(type: .wasmExnRef())]
                 }
                 return [caughtValues[0]]
             }
@@ -509,12 +509,12 @@ class WasmFoundationTests: XCTestCase {
         let otherModule = b.buildWasmModule { wasmModule in
             // Rethrow the exception stored in the global, catch it and extract the integer.
             wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
-                let caughtValues = function.wasmBuildBlockWithResults(with: [] => [.wasmi32, .wasmExnRef], args: []) { catchLabel, _ in
+                let caughtValues = function.wasmBuildBlockWithResults(with: [] => [.wasmi32, .wasmExnRef()], args: []) { catchLabel, _ in
                     function.wasmBuildTryTable(with: [] => [], args: [tagi32, catchLabel], catches: [.Ref]) { _, _ in
                         function.wasmBuildThrowRef(exception: function.wasmLoadGlobal(globalVariable: global))
                         return []
                     }
-                    return [function.consti32(-1), function.wasmRefNull(type: .wasmExnRef)]
+                    return [function.consti32(-1), function.wasmRefNull(type: .wasmExnRef())]
                 }
                 return [caughtValues[0]]
             }
@@ -538,13 +538,13 @@ class WasmFoundationTests: XCTestCase {
 
         let module = b.buildWasmModule { wasmModule in
             let global = wasmModule.addGlobal(wasmGlobal: .externref, isMutable: true)
-            XCTAssertEqual(b.type(of: global), .object(ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"], withWasmType: WasmGlobalType(valueType: ILType.wasmExternRef, isMutable: true)))
+            XCTAssertEqual(b.type(of: global), .object(ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"], withWasmType: WasmGlobalType(valueType: .wasmExternRef(), isMutable: true)))
 
-            wasmModule.addWasmFunction(with: [] => [.wasmExternRef]) { function, label, args in
+            wasmModule.addWasmFunction(with: [] => [.wasmExternRef()]) { function, label, args in
                 [function.wasmLoadGlobal(globalVariable: global)]
             }
 
-            wasmModule.addWasmFunction(with: [.wasmExternRef] => []) { function, label, args in
+            wasmModule.addWasmFunction(with: [.wasmExternRef()] => []) { function, label, args in
                 function.wasmStoreGlobal(globalVariable: global, to: args[0])
                 return []
             }
@@ -577,8 +577,9 @@ class WasmFoundationTests: XCTestCase {
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
 
+        // TODO(pawkra): add shared ref variant.
         let global: Variable = b.createWasmGlobal(value: .externref, isMutable: true)
-        XCTAssertEqual(b.type(of: global), .object(ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"], withWasmType: WasmGlobalType(valueType: ILType.wasmExternRef, isMutable: true)))
+        XCTAssertEqual(b.type(of: global), .object(ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"], withWasmType: WasmGlobalType(valueType: ILType.wasmExternRef(), isMutable: true)))
 
         let outputFunc = b.createNamedVariable(forBuiltin: "output")
         // The initial value is "undefined" (because we didn't provide an explicit initialization).
@@ -603,13 +604,13 @@ class WasmFoundationTests: XCTestCase {
 
         let module = b.buildWasmModule { wasmModule in
             let global = wasmModule.addGlobal(wasmGlobal: .i31ref, isMutable: true)
-            XCTAssertEqual(b.type(of: global), .object(ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"], withWasmType: WasmGlobalType(valueType: ILType.wasmI31Ref, isMutable: true)))
+            XCTAssertEqual(b.type(of: global), .object(ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"], withWasmType: WasmGlobalType(valueType: .wasmI31Ref(), isMutable: true)))
 
-            wasmModule.addWasmFunction(with: [] => [.wasmI31Ref]) { function, label, args in
+            wasmModule.addWasmFunction(with: [] => [.wasmI31Ref()]) { function, label, args in
                 [function.wasmLoadGlobal(globalVariable: global)]
             }
 
-            wasmModule.addWasmFunction(with: [.wasmI31Ref] => []) { function, label, args in
+            wasmModule.addWasmFunction(with: [.wasmI31Ref()] => []) { function, label, args in
                 function.wasmStoreGlobal(globalVariable: global, to: args[0])
                 return []
             }
@@ -641,8 +642,9 @@ class WasmFoundationTests: XCTestCase {
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
 
+        // TODO(pawkra): add shared ref variant.
         let global: Variable = b.createWasmGlobal(value: .i31ref, isMutable: true)
-        XCTAssertEqual(b.type(of: global), .object(ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"], withWasmType: WasmGlobalType(valueType: ILType.wasmI31Ref, isMutable: true)))
+        XCTAssertEqual(b.type(of: global), .object(ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"], withWasmType: WasmGlobalType(valueType: ILType.wasmI31Ref(), isMutable: true)))
 
         let outputFunc = b.createNamedVariable(forBuiltin: "output")
         // The initial value is "null" (because we didn't provide an explicit initialization).
@@ -666,8 +668,8 @@ class WasmFoundationTests: XCTestCase {
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
 
-        let javaScriptTable = b.createWasmTable(elementType: .wasmExternRef, limits: Limits(min: 5, max: 25), isTable64: isTable64)
-        XCTAssertEqual(b.type(of: javaScriptTable), .wasmTable(wasmTableType: WasmTableType(elementType: .wasmExternRef, limits: Limits(min: 5, max: 25), isTable64: isTable64, knownEntries: [])))
+        let javaScriptTable = b.createWasmTable(elementType: .wasmExternRef(), limits: Limits(min: 5, max: 25), isTable64: isTable64)
+        XCTAssertEqual(b.type(of: javaScriptTable), .wasmTable(wasmTableType: WasmTableType(elementType: .wasmExternRef(), limits: Limits(min: 5, max: 25), isTable64: isTable64, knownEntries: [])))
 
         let object = b.createObject(with: ["a": b.loadInt(41), "b": b.loadInt(42)])
 
@@ -675,9 +677,9 @@ class WasmFoundationTests: XCTestCase {
         b.callMethod("set", on: javaScriptTable, withArgs: [isTable64 ? b.loadBigInt(1) : b.loadInt(1), object])
 
         let module = b.buildWasmModule { wasmModule in
-            let tableRef = wasmModule.addTable(elementType: .wasmExternRef, minSize: 2, isTable64: isTable64)
+            let tableRef = wasmModule.addTable(elementType: .wasmExternRef(), minSize: 2, isTable64: isTable64)
 
-            wasmModule.addWasmFunction(with: [] => [.wasmExternRef]) { function, _, _ in
+            wasmModule.addWasmFunction(with: [] => [.wasmExternRef()]) { function, _, _ in
                 let offset = isTable64 ? function.consti64(0) : function.consti32(0)
                 var ref = function.wasmTableGet(tableRef: tableRef, idx: offset)
                 let offset1 = isTable64 ? function.consti64(1) : function.consti32(1)
@@ -727,7 +729,7 @@ class WasmFoundationTests: XCTestCase {
             let wasmFunction = wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) { function, label, params in
                 [function.wasmi32BinOp(params[0], function.consti32(1), binOpKind: .Add)]
             }
-            wasmModule.addTable(elementType: .wasmFuncRef,
+            wasmModule.addTable(elementType: .wasmFuncRef(),
                                 minSize: 10,
                                 definedEntries: [.init(indexInTable: 0, signature: [.wasmi32] => [.wasmi32]), .init(indexInTable: 1, signature: [] => [.wasmi64])],
                                 definedEntryValues: [wasmFunction, jsFunction],
@@ -745,7 +747,7 @@ class WasmFoundationTests: XCTestCase {
         XCTAssertEqual(b.type(of: importedFunction), .function([] => .bigint))
 
         // This is the table type that we expect to see on the exports based on the dynamic object group typing.
-        let tableType = ILType.wasmTable(wasmTableType: WasmTableType(elementType: .wasmFuncRef, limits: Limits(min: 10), isTable64: isTable64, knownEntries: [
+        let tableType = ILType.wasmTable(wasmTableType: WasmTableType(elementType: .wasmFuncRef(), limits: Limits(min: 10), isTable64: isTable64, knownEntries: [
             .init(indexInTable: 0, signature: [.wasmi32] => [.wasmi32]),
             .init(indexInTable: 1, signature: [] => [.wasmi64])
 
@@ -793,7 +795,7 @@ class WasmFoundationTests: XCTestCase {
             let wasmFunction = wasmModule.addWasmFunction(with: [.wasmi64] => [.wasmi64, .wasmi64]) { function, label, params in
                 return [params[0], function.consti64(1)]
             }
-            let table = wasmModule.addTable(elementType: .wasmFuncRef,
+            let table = wasmModule.addTable(elementType: .wasmFuncRef(),
                                             minSize: 10,
                                             definedEntries: [.init(indexInTable: 0, signature: [.wasmi64] => [.wasmi64, .wasmi64]), .init(indexInTable: 1, signature: [.wasmi64] => [.wasmi64])],
                                             definedEntryValues: [wasmFunction, jsFunction],
@@ -843,7 +845,7 @@ class WasmFoundationTests: XCTestCase {
             let wasmFunction = wasmModule.addWasmFunction(with: [.wasmi64] => [.wasmi64, .wasmi64]) { function, label, params in
                 return [params[0], function.consti64(1)]
             }
-            wasmModule.addTable(elementType: .wasmFuncRef,
+            wasmModule.addTable(elementType: .wasmFuncRef(),
                 minSize: 10,
                 definedEntries: [.init(indexInTable: 0, signature: [.wasmi64] => [.wasmi64, .wasmi64]), .init(indexInTable: 1, signature: [.wasmi64] => [.wasmi64])],
                 definedEntryValues: [wasmFunction, jsFunction],
@@ -851,7 +853,7 @@ class WasmFoundationTests: XCTestCase {
         }
 
         let table = b.getProperty("wt0", of: module.loadExports())
-        let tableType = ILType.wasmTable(wasmTableType: WasmTableType(elementType: .wasmFuncRef, limits: Limits(min: 10), isTable64: false, knownEntries: [
+        let tableType = ILType.wasmTable(wasmTableType: WasmTableType(elementType: .wasmFuncRef(), limits: Limits(min: 10), isTable64: false, knownEntries: [
             .init(indexInTable: 0, signature: [.wasmi64] => [.wasmi64, .wasmi64]),
             .init(indexInTable: 1, signature: [.wasmi64] => [.wasmi64])
         ]))
@@ -866,7 +868,7 @@ class WasmFoundationTests: XCTestCase {
                 fn.wasmCallIndirect(signature: [.wasmi64] => [.wasmi64], table: table, functionArgs: [params[1]], tableIndex: params[0])
             }
 
-            wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmFuncRef]) { function, label, params in
+            wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmFuncRef()]) { function, label, params in
                 [function.wasmTableGet(tableRef: table, idx: params[0])]
             }
 
@@ -881,7 +883,7 @@ class WasmFoundationTests: XCTestCase {
         let reexportedTable = b.getProperty("iwt0", of: exports)
 
         // This is the table type that we expect to see on the exports based on the dynamic object group typing.
-        let reexportedTableType = ILType.wasmTable(wasmTableType: WasmTableType(elementType: .wasmFuncRef, limits: Limits(min: 10), isTable64: false, knownEntries: [
+        let reexportedTableType = ILType.wasmTable(wasmTableType: WasmTableType(elementType: .wasmFuncRef(), limits: Limits(min: 10), isTable64: false, knownEntries: [
             .init(indexInTable: 0, signature: [.wasmi64] => [.wasmi64, .wasmi64]),
             .init(indexInTable: 1, signature: [.wasmi64] => [.wasmi64])
 
@@ -997,7 +999,7 @@ class WasmFoundationTests: XCTestCase {
             let wasmFunction = wasmModule.addWasmFunction(with: [.wasmi64] => [.wasmi64, .wasmi64]) { function, label, params in
                 return [params[0], function.consti64(1)]
             }
-            let table = wasmModule.addTable(elementType: .wasmFuncRef,
+            let table = wasmModule.addTable(elementType: .wasmFuncRef(),
                                             minSize: 10,
                                             definedEntries: [.init(indexInTable: 0, signature: [.wasmi64] => [.wasmi64, .wasmi64]), .init(indexInTable: 1, signature: [.wasmi64] => [.wasmi64])],
                                             definedEntryValues: [wasmFunction, jsFunction],
@@ -2684,7 +2686,7 @@ class WasmFoundationTests: XCTestCase {
                 let max = function.consti32(10)
                 let one = function.consti32(1)
 
-                function.wasmBuildLoop(with: [] => []) { label, args in
+                function.wasmBuildLoop(with: [] => [], args: []) { label, args in
                     XCTAssert(b.type(of: label).Is(.anyLabel))
                     let result = function.wasmi32BinOp(ctr, one, binOpKind: .Add)
                     let varUpdate = function.wasmi64BinOp(variable, function.consti64(2), binOpKind: .Add)
@@ -2692,6 +2694,7 @@ class WasmFoundationTests: XCTestCase {
                     function.wasmReassign(variable: variable, to: varUpdate)
                     let comp = function.wasmi32CompareOp(ctr, max, using: .Lt_s)
                     function.wasmBranchIf(comp, to: label)
+                    return []
                 }
 
                 // Now combine the result of the break and the loop into one and return it.
@@ -2727,7 +2730,7 @@ class WasmFoundationTests: XCTestCase {
                     function.wasmBranchIf(condition, to: loopLabel, args: [incFirst, incSecond])
                     return [incFirst, incSecond]
                 }
-                function.wasmBuildIfElse(function.wasmi32CompareOp(loopResult[1], function.consti32(20), using: .Ne), hint: .None) {
+                function.wasmBuildIfElse(function.wasmi32CompareOp(loopResult[1], function.consti32(20), using: .Ne)) { label, args in
                     function.wasmUnreachable()
                 }
                 return [loopResult[0]]
@@ -2758,13 +2761,13 @@ class WasmFoundationTests: XCTestCase {
 
                 let comp = function.wasmi32CompareOp(variable, condVariable, using: .Lt_s)
 
-                function.wasmBuildIfElse(comp, hint: .None, ifBody: {
+                function.wasmBuildIfElse(comp) { label, args in
                     let tmp = function.wasmi32BinOp(variable, condVariable, binOpKind: .Add)
                     function.wasmReassign(variable: result, to: tmp)
-                }, elseBody: {
+                } elseBody: { label, args in
                     let tmp = function.wasmi32BinOp(variable, condVariable, binOpKind: .Sub)
                     function.wasmReassign(variable: result, to: tmp)
-                })
+                }
 
                 return [result]
             }
@@ -2893,13 +2896,13 @@ class WasmFoundationTests: XCTestCase {
         let module = b.buildWasmModule { wasmModule in
             wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) { function, label, args in
 
-                function.wasmBuildIfElse(function.wasmi32EqualZero(args[0]), hint: .Unlikely) {
+                function.wasmBuildIfElse(function.wasmi32EqualZero(args[0]), hint: .Unlikely) { _, _ in
                     let one = function.wasmJsCall(function: jsReturnOne, withArgs: [],
                         withWasmSignature: [] => [.wasmi32])!
                     function.wasmReturn(one)
                 }
                 let cond = function.wasmi32CompareOp(args[0], function.consti32(4), using: .Gt_s)
-                function.wasmBuildIfElse(cond, hint: .Likely) {
+                function.wasmBuildIfElse(cond, hint: .Likely) { _, _ in
                     function.wasmReturn(function.consti32(2))
                 }
                 function.wasmBranchIf(
@@ -2934,7 +2937,7 @@ class WasmFoundationTests: XCTestCase {
 
         let module = b.buildWasmModule { wasmModule in
             wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
-                function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
+                function.wasmBuildLegacyTryVoid { label in
                     XCTAssert(b.type(of: label).Is(.anyLabel))
                     function.wasmReturn(function.consti64(42))
                 }
@@ -2967,7 +2970,7 @@ class WasmFoundationTests: XCTestCase {
 
         let module = b.buildWasmModule { wasmModule in
             wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
-                function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
+                function.wasmBuildLegacyTryVoid { label in
                     XCTAssert(b.type(of: label).Is(.anyLabel))
                     // Manually set the availableTypes here for testing.
                     let wasmSignature = ProgramBuilder.convertJsSignatureToWasmSignature(b.type(of: functionA).signature!, availableTypes: WeightedList([]))
@@ -3010,17 +3013,16 @@ class WasmFoundationTests: XCTestCase {
         b.buildIfElse(supportsJSTag) {
             let module = b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
+                    function.wasmBuildLegacyTryVoid(body: { label in
                         XCTAssert(b.type(of: label).Is(.anyLabel))
                         let wasmSignature = ProgramBuilder.convertJsSignatureToWasmSignature(b.type(of: functionA).signature!, availableTypes: WeightedList([]))
                         function.wasmJsCall(function: functionA, withArgs: [], withWasmSignature: wasmSignature)
                         function.wasmUnreachable()
-                        function.WasmBuildLegacyCatch(tag: jstag) { label, exception, args in
-                            function.wasmReturn(function.consti64(123))
-                        }
-                    } catchAllBody: { label in
+                    }, catchClauses: [(tag: jstag, body: { label, exception, args in
+                        function.wasmReturn(function.consti64(123))
+                    })], catchAllBody: { label in
                         function.wasmUnreachable()
-                    }
+                    })
                     function.wasmUnreachable()
                     return [function.consti64(-1)]
                 }
@@ -3066,20 +3068,21 @@ class WasmFoundationTests: XCTestCase {
                 }
             */
             wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
-                function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
+                function.wasmBuildLegacyTryVoid(body: { label in
                     XCTAssert(b.type(of: label).Is(.anyLabel))
                     function.WasmBuildThrow(tag: throwTag, inputs: [function.consti64(123), function.consti32(234)])
                     function.wasmUnreachable()
-                    function.WasmBuildLegacyCatch(tag: otherTag) { label, exception, args in
+                }, catchClauses: [
+                    (tag: otherTag, body: { label, exception, args in
                         function.wasmUnreachable()
-                    }
-                    function.WasmBuildLegacyCatch(tag: throwTag) { label, exception, args in
+                    }),
+                    (tag: throwTag, body: { label, exception, args in
                         let result = function.wasmi64BinOp(args[0], function.extendi32Toi64(args[1], isSigned: true), binOpKind: .Add)
                         function.wasmReturn(result)
-                    }
-                } catchAllBody: { label in
+                    })
+                ], catchAllBody: { label in
                     function.wasmUnreachable()
-                }
+                })
                 function.wasmUnreachable()
                 return [function.consti64(-1)]
             }
@@ -3102,12 +3105,11 @@ class WasmFoundationTests: XCTestCase {
         let tag = b.createWasmTag(parameterTypes: [])
         let module = b.buildWasmModule { wasmModule in
             wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
-                function.wasmBuildLegacyTry(with: [] => [], args: []) { tryLabel, _ in
+                function.wasmBuildLegacyTryVoid(body: { tryLabel in
                     function.WasmBuildThrow(tag: tag, inputs: [])
-                    function.WasmBuildLegacyCatch(tag: tag) { catchLabel, exceptionLabel, args in
-                        function.wasmBranch(to: catchLabel)
-                    }
-                }
+                }, catchClauses: [(tag: tag, body: { catchLabel, exceptionLabel, args in
+                    function.wasmBranch(to: catchLabel)
+                })])
                 return [function.consti32(42)]
             }
         }
@@ -3130,7 +3132,7 @@ class WasmFoundationTests: XCTestCase {
         let module = b.buildWasmModule { wasmModule in
             wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
                 function.wasmBuildBlock(with: [] => [], args: []) { blockLabel, _ in
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { tryLabel, _ in
+                    function.wasmBuildLegacyTryVoid { tryLabel in
                         function.WasmBuildThrow(tag: tag, inputs: [])
                     } catchAllBody: { label in
                         function.wasmBranch(to: blockLabel)
@@ -3185,22 +3187,23 @@ class WasmFoundationTests: XCTestCase {
                 }
             */
             wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) { function, label, param in
-                function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
-                    function.wasmBuildIfElse(param[0], hint: .None) {
+                function.wasmBuildLegacyTryVoid(body: { label in
+                    function.wasmBuildIfElse(param[0], hint: .None) { _, _ in
                         function.WasmBuildThrow(tag: definedTag, inputs: [param[0]])
-                    } elseBody: {
+                    } elseBody: { _, _ in
                         function.WasmBuildThrow(tag: importedTag, inputs: [function.consti32(123)])
                     }
                     function.wasmUnreachable()
-                    function.WasmBuildLegacyCatch(tag: importedTag) { label, exception, args in
+                }, catchClauses: [
+                    (tag: importedTag, body: { label, exception, args in
                         function.wasmReturn(function.wasmi32BinOp(args[0], function.consti32(1), binOpKind: .Add))
-                    }
-                    function.WasmBuildLegacyCatch(tag: definedTag) { label, exception, args in
+                    }),
+                    (tag: definedTag, body: { label, exception, args in
                         function.wasmReturn(function.wasmi32BinOp(args[0], function.consti32(4), binOpKind: .Add))
-                    }
-                } catchAllBody: { label in
+                    })
+                ], catchAllBody: { label in
                     function.wasmUnreachable()
-                }
+                })
                 function.wasmUnreachable()
                 return [function.consti32(-1)]
             }
@@ -3236,16 +3239,20 @@ class WasmFoundationTests: XCTestCase {
             wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
                 let argI32 = function.consti32(123)
                 let argI64 = function.consti64(321)
-                function.wasmBuildLegacyTry(with: [.wasmi64, .wasmi32] => [], args: [argI64, argI32]) { label, args in
+                let signature = [.wasmi64, .wasmi32] => []
+                let signatureDef = b.wasmDefineAdHocSignatureType(signature: signature)
+                function.wasmBuildLegacyTryWithResult(signature: signature, signatureDef: signatureDef,
+                        args: [argI64, argI32], body: { label, args in
                     XCTAssert(b.type(of: label).Is(.anyLabel))
                     XCTAssertEqual(b.type(of: args[0]), .wasmi64)
                     XCTAssertEqual(b.type(of: args[1]), .wasmi32)
                     function.WasmBuildThrow(tag: tag, inputs: args)
-                    function.WasmBuildLegacyCatch(tag: tag) { label, exception, args in
-                        let result = function.wasmi64BinOp(args[0], function.extendi32Toi64(args[1], isSigned: true), binOpKind: .Add)
-                        function.wasmReturn(result)
-                    }
-                }
+                    return []
+                }, catchClauses: [(tag: tag, body: { label, exception, args in
+                    let result = function.wasmi64BinOp(args[0], function.extendi32Toi64(args[1], isSigned: true), binOpKind: .Add)
+                    function.wasmReturn(result)
+                    return []
+                })])
                 function.wasmUnreachable()
                 return [function.consti64(-1)]
             }
@@ -3275,14 +3282,17 @@ class WasmFoundationTests: XCTestCase {
         let module = b.buildWasmModule { wasmModule in
             wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) { function, label, args in
                 let contant42 = function.consti64(42)
-                let result = function.wasmBuildLegacyTryWithResult(with: [.wasmi32] => [.wasmi32, .wasmi64], args: args, body: { label, args in
-                    function.wasmBuildIfElse(function.wasmi32EqualZero(args[0]), hint: .None) {
+                let signature = [.wasmi32] => [.wasmi32, .wasmi64]
+                let signatureDef = b.wasmDefineAdHocSignatureType(signature: signature)
+                let result = function.wasmBuildLegacyTryWithResult(signature: signature,
+                        signatureDef: signatureDef, args: args, body: { label, args in
+                    function.wasmBuildIfElse(function.wasmi32EqualZero(args[0])) { _, _ in
                         function.WasmBuildThrow(tag: tagVoid, inputs: [])
                     }
-                    function.wasmBuildIfElse(function.wasmi32CompareOp(args[0], function.consti32(1), using: .Eq), hint: .None) {
+                    function.wasmBuildIfElse(function.wasmi32CompareOp(args[0], function.consti32(1), using: .Eq)) { _, _ in
                         function.WasmBuildThrow(tag: tagi32, inputs: [function.consti32(100)])
                     }
-                    function.wasmBuildIfElse(function.wasmi32CompareOp(args[0], function.consti32(2), using: .Eq), hint: .None) {
+                    function.wasmBuildIfElse(function.wasmi32CompareOp(args[0], function.consti32(2), using: .Eq)) { _, _ in
                         function.WasmBuildThrow(tag: tagi32Other, inputs: [function.consti32(200)])
                     }
                     return [args[0], contant42]
@@ -3298,7 +3308,7 @@ class WasmFoundationTests: XCTestCase {
                 ], catchAllBody: { _ in
                     return [function.consti32(900), contant42]
                 })
-                function.wasmBuildIfElse(function.wasmi64CompareOp(result[1], contant42, using: .Ne), hint: .None) {
+                function.wasmBuildIfElse(function.wasmi64CompareOp(result[1], contant42, using: .Ne), hint: .None) { _, _ in
                     function.wasmUnreachable()
                 }
                 return [result[0]]
@@ -3362,23 +3372,22 @@ class WasmFoundationTests: XCTestCase {
                 }
             */
             wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
-                function.wasmBuildLegacyTry(with: [] => [], args: []) { tryLabel, _ in
+                function.wasmBuildLegacyTryVoid(body: { tryLabel in
                     // Even though we have a try-catch_all, the delegate "skips" this catch block. The delegate acts as
                     // if the exception was thrown by the block whose label is passed into it.
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { unusedLabel, _ in
+                    function.wasmBuildLegacyTryVoid(body: { unusedLabel in
                         let val = function.consti32(42)
                         function.wasmBuildLegacyTryDelegate(with: [.wasmi32] => [], args: [val], body: {label, args in
                             function.WasmBuildThrow(tag: tag, inputs: args)
                         }, delegate: tryLabel)
                         function.wasmUnreachable()
-                    } catchAllBody: { label in
+                    }, catchAllBody: { label in
                         function.wasmUnreachable()
-                    }
+                    })
                     function.wasmUnreachable()
-                    function.WasmBuildLegacyCatch(tag: tag) { label, exception, args in
-                        function.wasmReturn(args[0])
-                    }
-                }
+                }, catchClauses: [(tag: tag, body: { label, exception, args in
+                    function.wasmReturn(args[0])
+                })])
                 function.wasmUnreachable()
                 return [function.consti32(-1)]
             }
@@ -3448,18 +3457,16 @@ class WasmFoundationTests: XCTestCase {
                 }
             */
             wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
-                function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
+                function.wasmBuildLegacyTryVoid(body: { label in
+                    function.wasmBuildLegacyTryVoid(body: { label in
                         function.WasmBuildThrow(tag: tag, inputs: [function.consti32(123)])
                         function.wasmUnreachable()
-                        function.WasmBuildLegacyCatch(tag: tag) { label, exception, args in
-                            function.wasmBuildLegacyRethrow(exception)
-                        }
-                    }
-                    function.WasmBuildLegacyCatch(tag: tag) { label, exception, args in
-                        function.wasmReturn(args[0])
-                    }
-                }
+                    }, catchClauses: [(tag: tag, body: { label, exception, args in
+                        function.wasmBuildLegacyRethrow(exception)
+                    })])
+                }, catchClauses: [(tag: tag, body: { label, exception, args in
+                    function.wasmReturn(args[0])
+                })])
                 function.wasmUnreachable()
                 return [function.consti32(-1)]
             }
@@ -3501,26 +3508,23 @@ class WasmFoundationTests: XCTestCase {
                 }
             */
             wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
-                function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
-                    function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
+                function.wasmBuildLegacyTryVoid(body: { label in
+                    function.wasmBuildLegacyTryVoid(body: { label in
                         function.WasmBuildThrow(tag: tag, inputs: [function.consti32(123)])
-                        function.WasmBuildLegacyCatch(tag: tag) { label, outerException, args in
-                            function.wasmBuildLegacyTry(with: [] => [], args: []) { label, _ in
-                                function.WasmBuildThrow(tag: tag, inputs: [function.consti32(456)])
-                                function.wasmUnreachable()
-                                function.WasmBuildLegacyCatch(tag: tag) { label, innerException, args in
-                                    // There are two "active" exceptions:
-                                    // outerException: [123: i32]
-                                    // innerException: [456: i32]
-                                    function.wasmBuildLegacyRethrow(outerException)
-                                }
-                            }
-                        }
-                    }
-                    function.WasmBuildLegacyCatch(tag: tag) { label, exception, args in
-                        function.wasmReturn(args[0])
-                    }
-                }
+                    }, catchClauses: [(tag: tag, body: { label, outerException, args in
+                        function.wasmBuildLegacyTryVoid(body: { label in
+                            function.WasmBuildThrow(tag: tag, inputs: [function.consti32(456)])
+                            function.wasmUnreachable()
+                        }, catchClauses: [(tag: tag, body: { label, innerException, args in
+                            // There are two "active" exceptions:
+                            // outerException: [123: i32]
+                            // innerException: [456: i32]
+                            function.wasmBuildLegacyRethrow(outerException)
+                        })])
+                    })])
+                }, catchClauses: [(tag: tag, body: { label, exception, args in
+                    function.wasmReturn(args[0])
+                })])
                 function.wasmUnreachable()
                 return [function.consti32(-1)]
             }
@@ -3726,9 +3730,9 @@ class WasmFoundationTests: XCTestCase {
                 function.wasmBuildBlock(with: [] => [], args: []) { catchAllNoRefLabel, _ in
                     let catchNoRefI32 = function.wasmBuildBlockWithResults(with: [] => [.wasmi32], args: []) { catchNoRefLabel, _ in
                         function.wasmBuildTryTable(with: [] => [], args: [tagi32, catchNoRefLabel, catchAllNoRefLabel], catches: [.NoRef, .AllNoRef]) { _, _ in
-                            function.wasmBuildIfElse(function.wasmi32EqualZero(args[0]), hint: .None) {
+                            function.wasmBuildIfElse(function.wasmi32EqualZero(args[0])) { _, _ in
                                 function.WasmBuildThrow(tag: tagVoid, inputs: [])
-                            } elseBody: {
+                            } elseBody: { _, _ in
                                 function.WasmBuildThrow(tag: tagi32, inputs: [args[0]])
                             }
                             return []
@@ -3762,20 +3766,20 @@ class WasmFoundationTests: XCTestCase {
         let tagi32 = b.createWasmTag(parameterTypes: [.wasmi32])
         let module = b.buildWasmModule { wasmModule in
             wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) { function, label, args in
-                function.wasmBuildBlockWithResults(with: [] => [.wasmExnRef], args: []) { catchAllRefLabel, _ in
-                    let catchRefI32 = function.wasmBuildBlockWithResults(with: [] => [.wasmi32, .wasmExnRef], args: []) { catchRefLabel, _ in
+                function.wasmBuildBlockWithResults(with: [] => [.wasmExnRef()], args: []) { catchAllRefLabel, _ in
+                    let catchRefI32 = function.wasmBuildBlockWithResults(with: [] => [.wasmi32, .wasmExnRef()], args: []) { catchRefLabel, _ in
                         function.wasmBuildTryTable(with: [] => [], args: [tagi32, catchRefLabel, catchAllRefLabel], catches: [.Ref, .AllRef]) { _, _ in
-                            function.wasmBuildIfElse(function.wasmi32EqualZero(args[0]), hint: .None) {
+                            function.wasmBuildIfElse(function.wasmi32EqualZero(args[0])) { _, _ in
                                 function.WasmBuildThrow(tag: tagVoid, inputs: [])
-                            } elseBody: {
+                            } elseBody: { _, _ in
                                 function.WasmBuildThrow(tag: tagi32, inputs: [args[0]])
                             }
                             return []
                         }
-                        return [function.consti32(-1), function.wasmRefNull(type: .wasmExnRef)]
+                        return [function.consti32(-1), function.wasmRefNull(type: .wasmExnRef())]
                     }
                     function.wasmReturn(catchRefI32[0])
-                    return [function.wasmRefNull(type: .wasmExnRef)]
+                    return [function.wasmRefNull(type: .wasmExnRef())]
                 }
                 return [function.consti32(100)]
             }
@@ -3865,10 +3869,8 @@ class WasmFoundationTests: XCTestCase {
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
-        // Assumption: All types but the bottom (null) types are supported in the JS API.
-        let supportedTypes = WasmAbstractHeapType.allCases.filter {!$0.isBottom()}.map { heapType in
-            ILType.wasmRef(.Abstract(heapType), nullability:true)
-        }
+        // Assumption: All types apart from bottom (null) & shared types are supported in the JS API.
+        let supportedTypes = WasmAbstractHeapType.allNonBottomTypes().map {ILType.wasmRef($0, nullability: true)}
         b.createWasmTag(parameterTypes: supportedTypes)
         let prog = b.finalize()
         let jsProg = fuzzer.lifter.lift(prog, withOptions: [.includeComments])
@@ -3894,12 +3896,12 @@ class WasmFoundationTests: XCTestCase {
         let module = b.buildWasmModule { wasmModule in
             // Inner function that throws, catches and then rethrows the value.
             let callee = wasmModule.addWasmFunction(with: [.wasmi32] => []) { function, label, args in
-                let caughtValues = function.wasmBuildBlockWithResults(with: [] => [.wasmi32, .wasmExnRef], args: []) { catchRefLabel, _ in
+                let caughtValues = function.wasmBuildBlockWithResults(with: [] => [.wasmi32, .wasmExnRef()], args: []) { catchRefLabel, _ in
                     function.wasmBuildTryTable(with: [] => [], args: [tagi32, catchRefLabel], catches: [.Ref]) { _, _ in
                         function.WasmBuildThrow(tag: tagi32, inputs: [args[0]])
                         return []
                     }
-                    return [function.consti32(0), function.wasmRefNull(type: .wasmExnRef)]
+                    return [function.consti32(0), function.wasmRefNull(type: .wasmExnRef())]
                 }
                 // Print the caught i32 value.
                 function.wasmJsCall(function: printInteger, withArgs: [caughtValues[0]], withWasmSignature: [.wasmi32] => [])
@@ -3972,7 +3974,7 @@ class WasmFoundationTests: XCTestCase {
                     trueValue: function.consti64(123), falseValue: function.consti64(321))]
             }
 
-            wasmModule.addWasmFunction(with: [.wasmi32, .wasmExternRef, .wasmExternRef] => [.wasmExternRef]) { function, label, args in
+            wasmModule.addWasmFunction(with: [.wasmi32, .wasmExternRef(), .wasmExternRef()] => [.wasmExternRef()]) { function, label, args in
                 [function.wasmSelect(on: args[0], trueValue: args[1], falseValue: args[2])]
             }
         }
@@ -4148,13 +4150,13 @@ class WasmFoundationTests: XCTestCase {
                 let f1 = module.addWasmFunction(with: [] => [.wasmi64]) { f, _, _ in return [f.consti64(1)]}
                 let f2 = module.addWasmFunction(with: [] => [.wasmi64]) { f, _, _ in return [f.consti64(2)]}
                 let f3 = module.addWasmFunction(with: [] => [.wasmi64]) { f, _, _ in return [f.consti64(3)]}
-
-                module.addTable(elementType: .wasmFuncRef,
+                // TODO(pawkra): add shared ref variant.
+                module.addTable(elementType: .wasmFuncRef(),
                     minSize: 10,
                     definedEntries: [],
                     definedEntryValues: [],
                     isTable64: isTable64)
-                let table2  = module.addTable(elementType: .wasmFuncRef,
+                let table2  = module.addTable(elementType: .wasmFuncRef(),
                     minSize: 10,
                     definedEntries: [],
                     definedEntryValues: [],
@@ -4165,7 +4167,7 @@ class WasmFoundationTests: XCTestCase {
                 module.addWasmFunction(with: [] => [.wasmi64, .wasmi64]) { f, _, _ in
                     let tableOffset = { (i: Int) in isTable64 ? f.consti64(Int64(i)) : f.consti32(Int32(i))}
                     f.wasmTableInit(elementSegment: elemSegment2, table: table2, tableOffset: tableOffset(5), elementSegmentOffset: f.consti32(2), nrOfElementsToUpdate: f.consti32(2))
-                    let callIndirect = { (table: Variable, idx: Int) in 
+                    let callIndirect = { (table: Variable, idx: Int) in
                         let idxVar = isTable64 ? f.consti64(Int64(idx)) : f.consti32(Int32(idx))
                         return f.wasmCallIndirect(signature: [] => [.wasmi64], table: table, functionArgs: [], tableIndex: idxVar)
                     }
@@ -4196,12 +4198,13 @@ class WasmFoundationTests: XCTestCase {
                 let f2 = module.addWasmFunction(with: [] => [.wasmi64]) { f, _, _ in return [f.consti64(2)]}
                 let f3 = module.addWasmFunction(with: [] => [.wasmi64]) { f, _, _ in return [f.consti64(3)]}
 
-                let table1 = module.addTable(elementType: .wasmFuncRef,
+                // TODO(pawkra): add shared ref variant.
+                let table1 = module.addTable(elementType: .wasmFuncRef(),
                     minSize: 10,
                     definedEntries: [],
                     definedEntryValues: [],
                     isTable64: isTable64)
-                let table2  = module.addTable(elementType: .wasmFuncRef,
+                let table2  = module.addTable(elementType: .wasmFuncRef(),
                     minSize: 10,
                     definedEntries: (0..<4).map { WasmTableType.IndexInTableAndWasmSignature.init(indexInTable: $0, signature: [] => [.wasmi64]) },
                     definedEntryValues: [f3, f3, f1, f2],
@@ -4210,7 +4213,7 @@ class WasmFoundationTests: XCTestCase {
                 module.addWasmFunction(with: [] => [.wasmi64, .wasmi64]) { f, _, _ in
                     let const = { (i: Int) in isTable64 ? f.consti64(Int64(i)) : f.consti32(Int32(i))}
                     f.wasmTableCopy(dstTable: table1, srcTable: table2, dstOffset: const(1), srcOffset: const(2), count: const(2))
-                    let callIndirect = { (table: Variable, idx: Int) in 
+                    let callIndirect = { (table: Variable, idx: Int) in
                         let idxVar = isTable64 ? f.consti64(Int64(idx)) : f.consti32(Int32(idx))
                         return f.wasmCallIndirect(signature: [] => [.wasmi64], table: table, functionArgs: [], tableIndex: idxVar)
                     }
@@ -4414,6 +4417,40 @@ class WasmGCTests: XCTestCase {
         testForOutput(program: jsProg, runner: runner, outputString: "42\n")
     }
 
+    func testStructNew() throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest()
+        let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
+        let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
+        let b = fuzzer.makeBuilder()
+
+        let types = b.wasmDefineTypeGroup {
+            let structOfi32 = b.wasmDefineStructType(fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)], indexTypes: [])
+            let structOfStruct = b.wasmDefineStructType(fields: [WasmStructTypeDescription.Field(type: .wasmRef(.Index(), nullability: true), mutability: true)], indexTypes: [structOfi32])
+            return [structOfi32, structOfStruct]
+        }
+        let structOfi32 = types[0]
+        let structOfStruct = types[1]
+
+        let module = b.buildWasmModule { wasmModule in
+            wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) { function, label, args in
+                let innerStruct = function.wasmStructNew(structType: structOfi32, fields: [args[0]])
+                let outerStruct = function.wasmStructNew(structType: structOfStruct, fields: [innerStruct])
+                let retrievedInnerStruct = function.wasmStructGet(theStruct: outerStruct, fieldIndex: 0)
+                let retrievedValue = function.wasmStructGet(theStruct: retrievedInnerStruct, fieldIndex: 0)
+                return [retrievedValue]
+            }
+        }
+
+        let exports = module.loadExports()
+        let outputFunc = b.createNamedVariable(forBuiltin: "output")
+        let wasmOut = b.callMethod(module.getExportedMethod(at: 0), on: exports, withArgs: [b.loadInt(42)])
+        b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: wasmOut)])
+
+        let program = b.finalize()
+        let jsProgram = fuzzer.lifter.lift(program)
+        testForOutput(program: jsProgram, runner: runner, outputString: "42\n")
+    }
+
     func testStructPacked() throws {
         let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
@@ -4468,8 +4505,9 @@ class WasmGCTests: XCTestCase {
                 return [arrayi32, signature]
             }
 
+            // TODO(pawkra): add shared ref variant.
             let module = b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmFuncRef]) { function, label, args in
+                wasmModule.addWasmFunction(with: [] => [.wasmFuncRef()]) { function, label, args in
                     // TODO(mliedtke): Do something more useful with the signature type than
                     // defining a null value for it and testing that it's implicitly convertible to
                     // .wasmFuncRef.
@@ -4487,6 +4525,85 @@ class WasmGCTests: XCTestCase {
         }
 
         testForOutput(program: jsProg, runner: runner, outputString: "null\n")
+    }
+
+    func testLoopWithWasmGCSignature() throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest()
+        let jsProg = buildAndLiftProgram { b in
+
+            let typeGroup = b.wasmDefineTypeGroup {
+                let arrayType = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
+                let signature = b.wasmDefineSignatureType(
+                    signature: [.wasmRef(.Index(), nullability: true)]
+                            => [.wasmRef(.Index(), nullability: true)],
+                    indexTypes: [arrayType, arrayType])
+                return [arrayType, signature]
+            }
+            let arrayType = typeGroup[0]
+            let loopSignature = typeGroup[1]
+
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                    let index = function.consti32(0)
+                    let array = function.wasmArrayNewFixed(arrayType: arrayType,
+                        elements: [function.consti32(1)])
+                    let arrayResult = function.wasmBuildLoop(with: loopSignature, args: [array]) { loopLabel, args in
+                        let val = function.wasmArrayGet(array: args[0], index: index)
+                        let newVal = function.wasmi32BinOp(val, val, binOpKind: .Add)
+                        function.wasmArraySet(array: args[0], index: index, element: newVal)
+                        let cond = function.wasmi32CompareOp(newVal, function.consti32(50), using: .Lt_s)
+                        function.wasmBranchIf(cond, to: loopLabel, args: [args[0]])
+                        return args
+                    }[0]
+                    return [function.wasmArrayGet(array: arrayResult, index: index)]
+                }
+            }
+
+            let exports = module.loadExports()
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            let wasmOut = b.callMethod(module.getExportedMethod(at: 0), on: exports, withArgs: [])
+            b.callFunction(outputFunc, withArgs: [wasmOut])
+        }
+
+        testForOutput(program: jsProg, runner: runner, outputString: "64\n")
+    }
+
+    func testLoopWithAdHocWasmGCSignature() throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest()
+        let jsProg = buildAndLiftProgram { b in
+
+            let structType = b.wasmDefineTypeGroup {[
+                b.wasmDefineStructType(
+                    fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
+                    indexTypes: [])
+            ]}[0]
+
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                    let structVal = function.wasmStructNewDefault(structType: structType)
+                    function.wasmStructSet(theStruct: structVal, fieldIndex: 0, value: function.consti32(1))
+                    let signature = [b.type(of: structVal)] => [.wasmi32]
+                    // This loop creates a new struct on each iteration just for having different
+                    // values on the loop entry and the loop backedge (`br_if`).
+                    return function.wasmBuildLoop(with: signature, args: [structVal]) { loopLabel, args in
+                        let val = function.wasmStructGet(theStruct: args[0], fieldIndex: 0)
+                        let newVal = function.wasmi32BinOp(val, val, binOpKind: .Add)
+                        let newStruct = function.wasmStructNewDefault(structType: structType)
+                        function.wasmStructSet(theStruct: newStruct, fieldIndex: 0, value: newVal)
+                        let cond = function.wasmi32CompareOp(newVal, function.consti32(50), using: .Lt_s)
+                        function.wasmBranchIf(cond, to: loopLabel, args: [newStruct])
+                        return [newVal]
+                    }
+                }
+            }
+
+            let exports = module.loadExports()
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            let wasmOut = b.callMethod(module.getExportedMethod(at: 0), on: exports, withArgs: [])
+            b.callFunction(outputFunc, withArgs: [wasmOut])
+        }
+
+        testForOutput(program: jsProg, runner: runner, outputString: "64\n")
     }
 
     func testSelfReferenceType() throws {
@@ -4685,15 +4802,18 @@ class WasmGCTests: XCTestCase {
         testForOutput(program: jsProg, runner: runner, outputString: "1\n0\n")
     }
 
-    func testRefNullAbstractTypes() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref"])
+    func refNullAbstractTypes(sharedRef: Bool) throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref", "--experimental-wasm-shared"])
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
 
+        let unsupportedHeapType: Set<WasmAbstractHeapType> = sharedRef ? [.WasmFunc, .WasmNoFunc, .WasmExn, .WasmNoExn] : []
+        let supportedHeapTypes = Array(Set(WasmAbstractHeapType.allCases).subtracting(unsupportedHeapType))
+
         let module = b.buildWasmModule { wasmModule in
-            for heapType in WasmAbstractHeapType.allCases {
-                let valueType = ILType.wasmRef(.Abstract(heapType), nullability: true)
+            for heapType in supportedHeapTypes {
+                let valueType = ILType.wasmRef(heapType, shared: sharedRef, nullability: true)
                 if heapType.isUsableInJS() {
                     // ref.null <heapType>
                     wasmModule.addWasmFunction(with: [] => [valueType]) { function, label, args in
@@ -4709,8 +4829,8 @@ class WasmGCTests: XCTestCase {
 
         let exports = module.loadExports()
         let outputFunc = b.createNamedVariable(forBuiltin: "output")
-        let exportedFctCount = WasmAbstractHeapType.allCases.count
-                             + WasmAbstractHeapType.allCases.count {$0.isUsableInJS()}
+        let exportedFctCount = supportedHeapTypes.count
+                             + supportedHeapTypes.count {$0.isUsableInJS()}
         for i in 0..<exportedFctCount {
             let wasmOut = b.callMethod(module.getExportedMethod(at: i), on: exports, withArgs: [])
             b.callFunction(outputFunc, withArgs: [wasmOut])
@@ -4719,21 +4839,68 @@ class WasmGCTests: XCTestCase {
         let prog = b.finalize()
         let jsProg = fuzzer.lifter.lift(prog)
         // In JS all null values look the same (they are the same).
-        let expected = WasmAbstractHeapType.allCases.map {$0.isUsableInJS() ? "null\n1\n" : "1\n"}.joined()
+        let expected = supportedHeapTypes.map {$0.isUsableInJS() ? "null\n1\n" : "1\n"}.joined()
         testForOutput(program: jsProg, runner: runner, outputString: expected)
     }
 
-    func testI31Ref() throws {
+    func testRefNullAbstractTypesSharedRef() throws {
+        try refNullAbstractTypes(sharedRef: true)
+    }
+
+    func testRefNullAbstractTypesUnsharedRef() throws {
+        try refNullAbstractTypes(sharedRef: false)
+    }
+
+    func testRefEq() throws {
         let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
 
+        let arrayType = b.wasmDefineTypeGroup {b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)}[0]
+
         let module = b.buildWasmModule { wasmModule in
-            wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmI31Ref]) { function, label, args in
-                [function.wasmRefI31(args[0])]
+            wasmModule.addWasmFunction(with: [.wasmEqRef(), .wasmEqRef()] => [.wasmi32]) { function, label, args in
+                return [function.wasmRefEq(args[0], args[1])]
             }
-            wasmModule.addWasmFunction(with: [.wasmI31Ref] => [.wasmi32, .wasmi32]) { function, label, args in
+            wasmModule.addWasmFunction(with: [] => [.wasmEqRef()]) { function, label, args in
+                return [function.wasmArrayNewFixed(arrayType: arrayType, elements: [])]
+            }
+        }
+
+        let exports = module.loadExports()
+        let outputFunc = b.createNamedVariable(forBuiltin: "output")
+
+        let array = b.callMethod(module.getExportedMethod(at: 1), on: exports, withArgs: [])
+        let otherArray = b.callMethod(module.getExportedMethod(at: 1), on: exports, withArgs: [])
+
+        let wasmRefEq = module.getExportedMethod(at: 0)
+        let cases = [
+            b.callMethod(wasmRefEq, on: exports, withArgs: [b.loadInt(1), b.loadInt(1)]),
+            b.callMethod(wasmRefEq, on: exports, withArgs: [b.loadInt(0), b.loadInt(1)]),
+            b.callMethod(wasmRefEq, on: exports, withArgs: [array, array]),
+            b.callMethod(wasmRefEq, on: exports, withArgs: [array, otherArray])
+        ]
+
+        for input in cases { b.callFunction(outputFunc, withArgs: [input]) }
+
+        let prog = b.finalize()
+        let jsProg = fuzzer.lifter.lift(prog)
+        testForOutput(program: jsProg, runner: runner, outputString: "1\n0\n1\n0\n")
+    }
+
+    func i31Ref(shared: Bool) throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-shared"])
+        let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
+        let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
+        let b = fuzzer.makeBuilder()
+        let i31RefT = ILType.wasmI31Ref(shared: shared)
+
+        let module = b.buildWasmModule { wasmModule in
+            wasmModule.addWasmFunction(with: [.wasmi32] => [i31RefT]) { function, label, args in
+                [function.wasmRefI31(args[0], shared: shared)]
+            }
+            wasmModule.addWasmFunction(with: [i31RefT] => [.wasmi32, .wasmi32]) { function, label, args in
                 [function.wasmI31Get(args[0], isSigned: true),
                  function.wasmI31Get(args[0], isSigned: false)]
             }
@@ -4757,6 +4924,14 @@ class WasmGCTests: XCTestCase {
         testForOutput(program: jsProg, runner: runner, outputString: "42\n-42\n42,42\n-42,2147483606\n")
     }
 
+    func testi31RefShared() throws {
+        try i31Ref(shared: true)
+    }
+
+    func testi31RefUnshared() throws {
+        try i31Ref(shared: false)
+    }
+
     func testExternAnyConversions() throws {
         let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
@@ -4764,29 +4939,29 @@ class WasmGCTests: XCTestCase {
         let b = fuzzer.makeBuilder()
 
         let module = b.buildWasmModule { wasmModule in
-            wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmRefExtern]) { function, label, args in
+            wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmRefExtern()]) { function, label, args in
                 // As ref.i31 produces a non null `ref i31`, the result of extern.convert_any is a
                 // non-nullable `ref extern`.
                 let result = function.wasmExternConvertAny(function.wasmRefI31(args[0]))
-                XCTAssertEqual(b.type(of: result), .wasmRefExtern)
+                XCTAssertEqual(b.type(of: result), .wasmRefExtern())
                 return [result]
             }
 
-            wasmModule.addWasmFunction(with: [.wasmRefExtern] => [.wasmRefAny]) { function, label, args in
+            wasmModule.addWasmFunction(with: [.wasmRefExtern()] => [.wasmRefAny()]) { function, label, args in
                 let result = function.wasmAnyConvertExtern(args[0])
-                XCTAssertEqual(b.type(of: result), .wasmRefAny)
+                XCTAssertEqual(b.type(of: result), .wasmRefAny())
                 return [result]
             }
 
-            wasmModule.addWasmFunction(with: [] => [.wasmExternRef]) { function, label, args in
-                let result = function.wasmExternConvertAny(function.wasmRefNull(type: .wasmNullRef))
-                XCTAssertEqual(b.type(of: result), .wasmExternRef)
+            wasmModule.addWasmFunction(with: [] => [.wasmExternRef()]) { function, label, args in
+                let result = function.wasmExternConvertAny(function.wasmRefNull(type: .wasmNullRef()))
+                XCTAssertEqual(b.type(of: result), .wasmExternRef())
                 return [result]
             }
 
-            wasmModule.addWasmFunction(with: [] => [.wasmAnyRef]) { function, label, args in
-                let result = function.wasmAnyConvertExtern(function.wasmRefNull(type: .wasmNullExternRef))
-                XCTAssertEqual(b.type(of: result), .wasmAnyRef)
+            wasmModule.addWasmFunction(with: [] => [.wasmAnyRef()]) { function, label, args in
+                let result = function.wasmAnyConvertExtern(function.wasmRefNull(type: .wasmNullExternRef()))
+                XCTAssertEqual(b.type(of: result), .wasmAnyRef())
                 return [result]
             }
         }
@@ -4801,6 +4976,73 @@ class WasmGCTests: XCTestCase {
         let prog = b.finalize()
         let jsProg = fuzzer.lifter.lift(prog)
         testForOutput(program: jsProg, runner: runner, outputString: "42\n42\nnull\nnull\n")
+    }
+
+    func testRefTest() throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest()
+        let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
+        let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
+        let b = fuzzer.makeBuilder()
+
+        let arrayType = b.wasmDefineTypeGroup {b.wasmDefineArrayType(elementType: .wasmi32, mutability: false)}[0]
+        let tagi32 = b.createWasmTag(parameterTypes: [.wasmi32])
+
+        let module = b.buildWasmModule { wasmModule in
+            wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                let array = function.wasmArrayNewFixed(arrayType: arrayType, elements: [])
+                let null = function.wasmRefNull(type: .wasmArrayRef())
+                let refType = ILType.wasmRef(.Index(), nullability: false)
+                let refNullType = ILType.wasmRef(.Index(), nullability: true)
+                let results = [
+                    function.wasmRefTest(array, refType: refType, typeDef: arrayType),
+                    function.wasmRefTest(null, refType: refType, typeDef: arrayType),
+                    function.wasmRefTest(array, refType: refNullType, typeDef: arrayType),
+                    function.wasmRefTest(null, refType: refNullType, typeDef: arrayType),
+                ]
+                let result = results.reduce(function.consti32(0), { acc, r in
+                    let shifted = function.wasmi32BinOp(acc, function.consti32(10), binOpKind: WasmIntegerBinaryOpKind.Mul)
+                    return function.wasmi32BinOp(shifted, r, binOpKind: WasmIntegerBinaryOpKind.Add)
+                })
+                return [result]
+            }
+            wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                let array = function.wasmArrayNewFixed(arrayType: arrayType, elements: [])
+                let result = function.wasmRefTest(array, refType: .wasmEqRef())
+                return [result]
+            }
+            wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                let ref = function.wasmRefI31(function.consti32(0))
+                let refType = ILType.wasmRef(.Index(), nullability: false)
+                let result = function.wasmRefTest(ref, refType: refType, typeDef: arrayType)
+                return [result]
+            }
+            wasmModule.addWasmFunction(with: [.wasmRefExtern()] => [.wasmi32]) { function, label, args in
+                let result = function.wasmRefTest(args[0], refType: .wasmNullExternRef())
+                return [result]
+            }
+            wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                let exnref = function.wasmBuildBlockWithResults(with: [] => [.wasmExnRef()], args: []) { catchLabel, _ in
+                    function.wasmBuildTryTable(with: [] => [], args: [catchLabel], catches: [.AllRef]) { _, _ in
+                        function.WasmBuildThrow(tag: tagi32, inputs: [function.consti32(42)])
+                        return []
+                    }
+                    return [function.wasmRefNull(type: .wasmExnRef())]
+                }[0]
+                let result = function.wasmRefTest(exnref, refType: .wasmExnRef())
+                return [result]
+            }
+        }
+
+        let exports = module.loadExports()
+        let outputFunc = b.createNamedVariable(forBuiltin: "output")
+        for method in module.getExportedMethods() {
+            let result = b.callMethod(method.0, on: exports, withArgs: [b.loadInt(42)])
+            b.callFunction(outputFunc, withArgs: [result])
+        }
+
+        let prog = b.finalize()
+        let jsProg = fuzzer.lifter.lift(prog)
+        testForOutput(program: jsProg, runner: runner, outputString: "1011\n1\n0\n0\n1\n")
     }
 }
 
@@ -6337,8 +6579,8 @@ class WasmJSPITests: XCTestCase {
 
         // Now lets build the module
         let module = b.buildWasmModule { m in
-            m.addWasmFunction(with: [.wasmExternRef] => [.wasmi32]) { f, label, args in
-                [f.wasmJsCall(function: importFunction, withArgs: args, withWasmSignature: [.wasmExternRef] => [.wasmi32])!]
+            m.addWasmFunction(with: [.wasmExternRef()] => [.wasmi32]) { f, label, args in
+                [f.wasmJsCall(function: importFunction, withArgs: args, withWasmSignature: [.wasmExternRef()] => [.wasmi32])!]
             }
         }
 

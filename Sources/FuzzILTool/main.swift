@@ -173,8 +173,12 @@ else if args.has("--compile") {
     let ast: JavaScriptParser.AST
     do {
         ast = try parser.parse(path)
+    } catch JavaScriptParser.ParserError.parsingFailed(let error) {
+        // Unwrap the JS parse error here to format its linebreaks.
+        print("Failed to parse \(path):\n\(error)")
+        exit(-1)
     } catch {
-        print("Failed to parse \(path): \(error)")
+        print("Failed to parse \(path):\n\(error)")
         exit(-1)
     }
 
@@ -188,7 +192,7 @@ else if args.has("--compile") {
     }
 
     if let js_path = args["--outputPathJS"] {
-        let content = jsLifter.lift(program)
+        let content = ast.leadingComments + jsLifter.lift(program)
         do {
             try content.write(to: URL(fileURLWithPath: js_path), atomically: false, encoding: String.Encoding.utf8)
         } catch {

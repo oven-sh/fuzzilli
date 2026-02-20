@@ -363,4 +363,9 @@ enum Opcode {
     case wasmDefineSignatureType(WasmDefineSignatureType)
     case createNamedDisposableVariable(CreateNamedDisposableVariable)
     case createNamedAsyncDisposableVariable(CreateNamedAsyncDisposableVariable)
+    case wasmDefineAdHocSignatureType(WasmDefineAdHocSignatureType)
+    case wasmStructNew(WasmStructNew)
+    case wasmRefEq(WasmRefEq)
+    case wasmRefTest(WasmRefTest)
+    case wasmDefineAdHocModuleSignatureType(WasmDefineAdHocModuleSignatureType)
 }

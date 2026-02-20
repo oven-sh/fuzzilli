@@ -369,23 +369,21 @@ public class OperationMutator: BaseInstructionMutator {
 
         case .wasmDefineGlobal(let op):
             // We never change the type of the global, only the value as changing the type will break the following code pretty much instantly.
-            let wasmGlobal: WasmGlobal
-            switch op.wasmGlobal.toType() {
-            case .wasmf32:
-                wasmGlobal = .wasmf32(Float32(b.randomFloat()))
-            case .wasmf64:
-                wasmGlobal = .wasmf64(b.randomFloat())
-            case .wasmi32:
-                wasmGlobal = .wasmi32(Int32(truncatingIfNeeded: b.randomInt()))
-            case .wasmi64:
-                wasmGlobal = .wasmi64(b.randomInt())
-            case .wasmExternRef,
-                 .wasmExnRef,
-                 .wasmI31Ref:
-                wasmGlobal = op.wasmGlobal
-            default:
-                fatalError("unexpected/unimplemented Value Type!")
-            }
+            let wasmGlobal:WasmGlobal =
+                switch op.wasmGlobal.toType() {
+                case .wasmf32:
+                    .wasmf32(Float32(b.randomFloat()))
+                case .wasmf64:
+                    .wasmf64(b.randomFloat())
+                case .wasmi32:
+                    .wasmi32(Int32(truncatingIfNeeded: b.randomInt()))
+                case .wasmi64:
+                    .wasmi64(b.randomInt())
+                case ILType.wasmExternRef(), ILType.wasmExnRef(), ILType.wasmI31Ref():
+                    op.wasmGlobal
+                default:
+                    fatalError("unexpected/unimplemented Value Type!")
+                }
             newOp = WasmDefineGlobal(wasmGlobal: wasmGlobal, isMutable: probability(0.5))
         case .wasmDefineTable(let op):
             // TODO: change table size?
@@ -499,9 +497,9 @@ public class OperationMutator: BaseInstructionMutator {
                 : Int64.random(in: Int64.min...Int64.max) // most likely out of bounds
             newOp = WasmSimdLoad(kind: kind, staticOffset: staticOffset)
         case .wasmBranchIf(let op):
-            newOp = WasmBranchIf(labelTypes: op.labelTypes, hint: chooseUniform(from: WasmBranchHint.allCases))
+            newOp = WasmBranchIf(parameterCount: op.parameterCount, hint: chooseUniform(from: WasmBranchHint.allCases))
         case .wasmBeginIf(let op):
-            newOp = WasmBeginIf(with: op.signature, hint: chooseUniform(from: WasmBranchHint.allCases), inverted: Bool.random())
+            newOp = WasmBeginIf(parameterCount: op.parameterCount, hint: chooseUniform(from: WasmBranchHint.allCases), inverted: Bool.random())
         case .wasmArrayGet(let op):
             // Switch signedness. (This only matters for packed types i8 and i16.)
             newOp = WasmArrayGet(isSigned: !op.isSigned)
@@ -510,6 +508,21 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = WasmStructGet(fieldIndex: op.fieldIndex, isSigned: !op.isSigned)
         case .wasmI31Get(let op):
             newOp = WasmI31Get(isSigned: !op.isSigned)
+        case .wasmRefTest(let op):
+            let newType: ILType
+            switch op.type.wasmReferenceType!.kind {
+            case .Abstract(let heapTypeInfo):
+                let chosenType = chooseUniform(
+                    from: WasmAbstractHeapType.allCases.filter {
+                        $0 != heapTypeInfo.heapType && $0.inSameHierarchy(heapTypeInfo.heapType)
+                    }
+                )
+                newType = ILType.wasmRef(.Abstract(HeapTypeInfo(chosenType, shared: false)), nullability: Bool.random())
+            case .Index(_):
+                let nullable = op.type.wasmReferenceType!.nullability
+                newType = ILType.wasmRef(.Index(), nullability: !nullable)
+            }
+            newOp = WasmRefTest(refType: newType)
         // Unexpected operations to make the switch fully exhaustive.
         case .nop(_),
              .loadUndefined(_),
@@ -712,6 +725,8 @@ public class OperationMutator: BaseInstructionMutator {
              .wasmDefineArrayType(_),
              .wasmDefineStructType(_),
              .wasmDefineSignatureType(_),
+             .wasmDefineAdHocSignatureType(_),
+             .wasmDefineAdHocModuleSignatureType(_),
              .wasmDefineForwardOrSelfReference(_),
              .wasmResolveForwardReference(_),
              .wasmArrayNewFixed(_),
@@ -728,7 +743,9 @@ public class OperationMutator: BaseInstructionMutator {
              .wasmDefineElementSegment(_),
              .wasmDropElementSegment(_),
              .wasmTableInit(_),
-             .wasmTableCopy(_):
+             .wasmTableCopy(_),
+             .wasmStructNew(_),
+             .wasmRefEq(_):
              let mutability = instr.isOperationMutable ? "mutable" : "immutable"
              fatalError("Unexpected operation \(instr.op.opcode), marked as \(mutability)")
         }

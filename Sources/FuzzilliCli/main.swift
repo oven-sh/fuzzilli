@@ -328,6 +328,10 @@ if args.unusedOptionals.count > 0 {
     configError("Invalid arguments: \(args.unusedOptionals)")
 }
 
+if profile.isDifferential && storagePath == nil {
+    configError("Differential fuzzing mode requires storage path")
+}
+
 // Initialize the logger such that we can print to the screen.
 let logger = Logger(withLabel: "Cli")
 
@@ -408,8 +412,26 @@ let jsShellArguments = profile.processArgs(argumentRandomization) + additionalAr
 logger.info("Using the following arguments for the target engine: \(jsShellArguments)")
 
 func makeFuzzer(with configuration: Configuration) -> Fuzzer {
+    let createRunner = { (baseArgs: [String], forReferenceRunner: Bool) -> REPRL in
+        let finalArgs = baseArgs + configuration.getInstanceSpecificArguments(forReferenceRunner: forReferenceRunner)
+        return REPRL(
+            executable: jsShellPath,
+            processArguments: finalArgs,
+            processEnvironment: profile.processEnv,
+            maxExecsBeforeRespawn: profile.maxExecsBeforeRespawn
+        )
+    }
+
     // A script runner to execute JavaScript code in an instrumented JS engine.
-    let runner = REPRL(executable: jsShellPath, processArguments: jsShellArguments, processEnvironment: profile.processEnv, maxExecsBeforeRespawn: profile.maxExecsBeforeRespawn)
+    let runner = createRunner(jsShellArguments, false)
+
+    // A script runner used to verify that the samples are indeed differential samples.
+    let referenceRunner: REPRL? = {
+        guard profile.isDifferential, let refArgs = profile.processArgsReference else {
+            return nil
+        }
+        return createRunner(refArgs, true)
+    }()
 
     /// The mutation fuzzer responsible for mutating programs from the corpus and evaluating the outcome.
     let disabledMutators = Set(profile.disabledMutators)
@@ -525,6 +547,7 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
     // Construct the fuzzer instance.
     return Fuzzer(configuration: configuration,
                   scriptRunner: runner,
+                  referenceScriptRunner: referenceRunner,
                   engine: engine,
                   mutators: mutators,
                   codeGenerators: codeGenerators,
@@ -547,7 +570,10 @@ let mainConfig = Configuration(arguments: CommandLine.arguments,
                                staticCorpus: staticCorpus,
                                tag: tag,
                                isWasmEnabled: enableWasm,
-                               storagePath: storagePath)
+                               storagePath: storagePath,
+                               forDifferentialFuzzing: forDifferentialFuzzing,
+                               instanceId: 0,
+                               dumplingEnabled: profile.isDifferential)
 
 let fuzzer = makeFuzzer(with: mainConfig)
 
@@ -641,6 +667,7 @@ fuzzer.sync {
 
     // Resume a previous fuzzing session ...
     if resume, let path = storagePath {
+        let start = Date()
         var corpus = loadCorpus(from: path + "/old_corpus")
         logger.info("Scheduling import of \(corpus.count) programs from previous fuzzing run.")
 
@@ -650,6 +677,10 @@ fuzzer.sync {
         fuzzer.registerEventListener(for: fuzzer.events.CorpusImportComplete) {
             // Delete the old corpus directory as soon as the corpus import is complete.
             try? FileManager.default.removeItem(atPath: path + "/old_corpus")
+
+            let duration = Date().timeIntervalSince(start)
+            let humanReadableDuration = Duration.seconds(duration).formatted(.time(pattern: .hourMinuteSecond))
+            logger.info("Corpus import after resume took \((String(format: "%.0f", duration)))s (\(humanReadableDuration)).")
         }
 
         fuzzer.scheduleCorpusImport(corpus, importMode: .interestingOnly(shouldMinimize: false))  // We assume that the programs are already minimized
@@ -658,11 +689,19 @@ fuzzer.sync {
     // ... or import an existing corpus.
     if let path = corpusImportPath {
         assert(!resume)
+        let start = Date()
         let corpus = loadCorpus(from: path)
         guard !corpus.isEmpty else {
             logger.fatal("Cannot import an empty corpus.")
         }
         logger.info("Scheduling corpus import of \(corpus.count) programs with mode \(corpusImportModeName).")
+
+        fuzzer.registerEventListener(for: fuzzer.events.CorpusImportComplete) {
+            let duration = Date().timeIntervalSince(start)
+            let humanReadableDuration = Duration.seconds(duration).formatted(.time(pattern: .hourMinuteSecond))
+            logger.info("Existing corpus import took \((String(format: "%.0f", duration)))s (\(humanReadableDuration)).")
+        }
+
         fuzzer.scheduleCorpusImport(corpus, importMode: corpusImportMode)
     }
 
@@ -674,9 +713,10 @@ fuzzer.sync {
     fuzzer.start(runUntil: exitCondition)
 }
 
-// Add thread worker instances if requested
-// Worker instances use a slightly different configuration, mostly just a lower log level.
-let workerConfig = Configuration(arguments: CommandLine.arguments,
+for i in 1..<numJobs {
+    // Add thread worker instances if requested
+    // Worker instances use a slightly different configuration, mostly just a lower log level.
+    let workerConfig = Configuration(arguments: CommandLine.arguments,
                                  timeout: timeout.maxTimeout(),
                                  logLevel: .warning,
                                  startupTests: profile.startupTests,
@@ -686,9 +726,11 @@ let workerConfig = Configuration(arguments: CommandLine.arguments,
                                  staticCorpus: staticCorpus,
                                  tag: tag,
                                  isWasmEnabled: enableWasm,
-                                 storagePath: storagePath)
+                                 storagePath: storagePath,
+                                 forDifferentialFuzzing: forDifferentialFuzzing,
+                                 instanceId: i,
+                                 dumplingEnabled: profile.isDifferential)
 
-for _ in 1..<numJobs {
     let worker = makeFuzzer(with: workerConfig)
     worker.async {
         // Wait some time between starting workers to reduce the load on the main instance.

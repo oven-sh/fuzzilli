@@ -711,6 +711,9 @@ public let bunSubprocessGroup = ObjectGroup(
         "pid":        .integer,
         "exitCode":   .integer | .undefined,
         "signalCode": .string | .undefined,
+        "stdin":      .jsAnything,
+        "stdout":     .jsAnything,
+        "stderr":     .jsAnything,
         "exited":     .jsPromise,
     ],
     methods: [
@@ -741,7 +744,6 @@ public let BunSpawnGenerator = CodeGenerator("BunSpawnGenerator") { b in
         ("true", []),
         ("printf", ["%s", "test"]),
         ("cat", ["/dev/null"]),
-        ("wc", ["-c"]),
     ]
     let (cmd, args) = commands.randomElement()!
 
@@ -765,10 +767,8 @@ public let BunSpawnGenerator = CodeGenerator("BunSpawnGenerator") { b in
 public let BunFileGenerator = CodeGenerator("BunFileGenerator") { b in
     let paths = [
         "/dev/null",
-        "/dev/urandom",
         "/tmp/fuzzilli-test-\(Int.random(in: 0...9999))",
         "/proc/self/status",
-        "/etc/hostname",
     ]
     let path = b.loadString(paths.randomElement()!)
     let bun = b.createNamedVariable(forBuiltin: "Bun")

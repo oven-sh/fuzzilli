@@ -172,6 +172,55 @@ public extension ILType {
         withProperties: ["routes"],
         withMethods: ["match", "reload"]
     )
+
+    // BunArchive
+    static let bunArchive = ILType.object(
+        ofGroup: "BunArchive",
+        withProperties: ["count"],
+        withMethods: ["extract", "readFile", "entries", "close"]
+    )
+
+    // BunServer - result of Bun.serve()
+    static let bunServer = ILType.object(
+        ofGroup: "BunServer",
+        withProperties: ["port", "hostname", "url", "development"],
+        withMethods: ["stop", "reload", "ref", "unref", "requestIP", "upgrade"]
+    )
+
+    // BunArrayBufferSink
+    static let bunArrayBufferSink = ILType.object(
+        ofGroup: "BunArrayBufferSink",
+        withProperties: [],
+        withMethods: ["write", "flush", "end", "start"]
+    )
+
+    // BunCookie
+    static let bunCookie = ILType.object(
+        ofGroup: "BunCookie",
+        withProperties: ["name", "value", "domain", "path", "expires", "secure", "httpOnly", "sameSite", "maxAge"],
+        withMethods: ["toString", "toJSON"]
+    )
+
+    // BunCookieMap
+    static let bunCookieMap = ILType.object(
+        ofGroup: "BunCookieMap",
+        withProperties: [],
+        withMethods: ["get", "set", "delete", "has", "entries", "keys", "values", "toJSON"]
+    )
+
+    // BunTerminal
+    static let bunTerminal = ILType.object(
+        ofGroup: "BunTerminal",
+        withProperties: ["columns", "rows"],
+        withMethods: ["write", "clearLine", "cursorTo", "moveCursor"]
+    )
+
+    // BunS3Client
+    static let bunS3Client = ILType.object(
+        ofGroup: "BunS3Client",
+        withProperties: [],
+        withMethods: ["file", "write", "exists", "delete", "size", "stat", "presign", "unlink"]
+    )
 }
 
 // MARK: - Bun ObjectGroup Definitions
@@ -748,6 +797,84 @@ public let bunFileSystemRouterGroup = ObjectGroup(
     ]
 )
 
+public let bunArchiveGroup = ObjectGroup(
+    name: "BunArchive",
+    instanceType: .bunArchive,
+    properties: [
+        "count": .integer,
+    ],
+    methods: [
+        "extract":  [.opt(.string)] => .jsPromise,
+        "readFile": [.string] => .jsPromise,
+        "entries":  [] => .jsAnything,
+        "close":    [] => .undefined,
+    ]
+)
+
+public let bunServerGroup = ObjectGroup(
+    name: "BunServer",
+    instanceType: .bunServer,
+    properties: [
+        "port":        .integer,
+        "hostname":    .string,
+        "url":         .string,
+        "development": .boolean,
+    ],
+    methods: [
+        "stop":      [.opt(.boolean)] => .undefined,
+        "reload":    [.object()] => .undefined,
+        "ref":       [] => .undefined,
+        "unref":     [] => .undefined,
+        "requestIP": [.jsAnything] => .jsAnything,
+    ]
+)
+
+public let bunArrayBufferSinkGroup = ObjectGroup(
+    name: "BunArrayBufferSink",
+    instanceType: .bunArrayBufferSink,
+    properties: [:],
+    methods: [
+        "write": [.jsAnything] => .integer,
+        "flush": [] => .jsAnything,
+        "end":   [] => .jsAnything,
+        "start": [.opt(.object())] => .undefined,
+    ]
+)
+
+public let bunCookieGroup = ObjectGroup(
+    name: "BunCookie",
+    instanceType: .bunCookie,
+    properties: [
+        "name":     .string,
+        "value":    .string,
+        "domain":   .string,
+        "path":     .string,
+        "secure":   .boolean,
+        "httpOnly": .boolean,
+        "sameSite": .string,
+    ],
+    methods: [
+        "toString": [] => .string,
+        "toJSON":   [] => .object(),
+    ]
+)
+
+public let bunCookieMapGroup = ObjectGroup(
+    name: "BunCookieMap",
+    instanceType: .bunCookieMap,
+    properties: [:],
+    methods: [
+        "get":     [.string] => .bunCookie | .undefined,
+        "set":     [.string, .string, .opt(.object())] => .undefined,
+        "delete":  [.string] => .boolean,
+        "has":     [.string] => .boolean,
+        "entries": [] => .jsAnything,
+        "keys":    [] => .jsAnything,
+        "values":  [] => .jsAnything,
+        "toJSON":  [] => .object(),
+    ]
+)
+
 // MARK: - Bun Code Generators
 
 // Generator that safely exercises Bun.spawn with harmless commands
@@ -1239,6 +1366,156 @@ public let BunFetchGenerator = CodeGenerator("BunFetchGenerator") { b in
     }
 }
 
+// Generator that exercises Bun.serve() with localhost
+public let BunServeGenerator = CodeGenerator("BunServeGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+
+    let handler = b.buildPlainFunction(with: .parameters(n: 1)) { args in
+        let req = args[0]
+        b.getProperty("url", of: req)
+        b.getProperty("method", of: req)
+        let body = b.loadString("OK")
+        let responseConstructor = b.createNamedVariable(forBuiltin: "Response")
+        b.construct(responseConstructor, withArgs: [body])
+    }
+
+    let port = b.loadInt(0)
+    let opts = b.createObject(with: [
+        "port": port,
+        "fetch": handler,
+    ])
+    let server = b.callMethod("serve", on: bun, withArgs: [opts])
+    b.callMethod("stop", on: server)
+}
+
+// Generator that exercises Bun.$ (shell)
+public let BunShellGenerator = CodeGenerator("BunShellGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let shell = b.getProperty("$", of: bun)
+
+    let cmds = ["echo hello", "true", "printf test", "cat /dev/null"]
+    let cmd = b.loadString(cmds.randomElement()!)
+    b.callMethod("text", on: b.callFunction(shell, withArgs: [cmd]))
+}
+
+// Generator that exercises Bun.markdown
+public let BunMarkdownGenerator = CodeGenerator("BunMarkdownGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let markdown = b.getProperty("markdown", of: bun)
+
+    let inputs = [
+        "# Hello\\n\\nWorld",
+        "| a | b |\\n|---|---|\\n| 1 | 2 |",
+        "- [x] task\\n- [ ] todo",
+        "```js\\nconst x = 1;\\n```",
+        "~~strike~~ **bold** *italic*",
+    ]
+    let input = b.loadString(inputs.randomElement()!)
+    b.callMethod("html", on: markdown, withArgs: [input])
+}
+
+// Generator that exercises Bun.CSRF
+public let BunCSRFGenerator = CodeGenerator("BunCSRFGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let csrf = b.getProperty("CSRF", of: bun)
+    let secret = b.loadString("test-secret-\(Int.random(in: 0...9999))")
+
+    let token = b.callMethod("generate", on: csrf, withArgs: [secret])
+    b.callMethod("verify", on: csrf, withArgs: [token, secret])
+}
+
+// Generator that exercises Bun.readableStreamTo* conversions
+public let BunStreamConversionGenerator = CodeGenerator("BunStreamConversionGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let data = b.loadString("test data \(Int.random(in: 0...9999))")
+
+    let blobConstructor = b.createNamedVariable(forBuiltin: "Blob")
+    let blob = b.construct(blobConstructor, withArgs: [b.createArray(with: [data])])
+    let stream = b.callMethod("stream", on: blob)
+
+    switch Int.random(in: 0...5) {
+    case 0: b.callMethod("readableStreamToText", on: bun, withArgs: [stream])
+    case 1: b.callMethod("readableStreamToArrayBuffer", on: bun, withArgs: [stream])
+    case 2: b.callMethod("readableStreamToJSON", on: bun, withArgs: [stream])
+    case 3: b.callMethod("readableStreamToBlob", on: bun, withArgs: [stream])
+    case 4: b.callMethod("readableStreamToArray", on: bun, withArgs: [stream])
+    default: b.callMethod("readableStreamToBytes", on: bun, withArgs: [stream])
+    }
+}
+
+// Generator that exercises Bun.Archive
+public let BunArchiveGenerator = CodeGenerator("BunArchiveGenerator") { b in
+    let archiveConstructor = b.createNamedVariable(forBuiltin: "Bun")
+    let archive = b.getProperty("Archive", of: archiveConstructor)
+
+    let data = b.loadString("not a real archive \(Int.random(in: 0...9999))")
+    b.buildTryCatchFinally(tryBody: {
+        b.construct(archive, withArgs: [data])
+    }, catchBody: { _ in })
+}
+
+// Generator that exercises Bun.sql with safe queries on local databases
+public let BunSQLGenerator = CodeGenerator("BunSQLGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let sql = b.callMethod("sql", on: bun, withArgs: [])
+
+    let queries = [
+        "SELECT 1",
+        "SELECT 1 + 1 AS result",
+        "SELECT CURRENT_TIMESTAMP",
+    ]
+    let query = b.loadString(queries.randomElement()!)
+    b.buildTryCatchFinally(tryBody: {
+        b.callFunction(sql, withArgs: [query])
+    }, catchBody: { _ in })
+}
+
+// Generator that exercises Bun.ArrayBufferSink
+public let BunArrayBufferSinkGenerator = CodeGenerator("BunArrayBufferSinkGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let sinkConstructor = b.getProperty("ArrayBufferSink", of: bun)
+    let sink = b.construct(sinkConstructor)
+
+    b.callMethod("start", on: sink)
+    let data = b.loadString("chunk \(Int.random(in: 0...9999))")
+    b.callMethod("write", on: sink, withArgs: [data])
+    b.callMethod("end", on: sink)
+}
+
+// Generator that exercises Bun.Cookie / Bun.CookieMap
+public let BunCookieGenerator = CodeGenerator("BunCookieGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+
+    if Bool.random() {
+        let cookieConstructor = b.getProperty("Cookie", of: bun)
+        let name = b.loadString("test_cookie_\(Int.random(in: 0...999))")
+        let value = b.loadString("value_\(Int.random(in: 0...999))")
+        let cookie = b.construct(cookieConstructor, withArgs: [name, value])
+        b.callMethod("toString", on: cookie)
+    } else {
+        let mapConstructor = b.getProperty("CookieMap", of: bun)
+        let header = b.loadString("foo=bar; baz=qux")
+        let map = b.construct(mapConstructor, withArgs: [header])
+        b.callMethod("get", on: map, withArgs: [b.loadString("foo")])
+        b.callMethod("has", on: map, withArgs: [b.loadString("baz")])
+    }
+}
+
+// Generator that exercises Bun.dns with more methods
+public let BunDNSExtendedGenerator = CodeGenerator("BunDNSExtendedGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let dns = b.getProperty("dns", of: bun)
+    let hostname = b.loadString(["localhost", "127.0.0.1", "example.invalid"].randomElement()!)
+
+    switch Int.random(in: 0...4) {
+    case 0: b.callMethod("lookup", on: dns, withArgs: [hostname])
+    case 1: b.callMethod("resolve", on: dns, withArgs: [hostname])
+    case 2: b.callMethod("prefetch", on: dns, withArgs: [hostname])
+    case 3: b.callMethod("getCacheStats", on: dns)
+    default: b.callMethod("reverse", on: dns, withArgs: [b.loadString("127.0.0.1")])
+    }
+}
+
 // MARK: - Bun Profile
 
 let bunProfile = Profile(
@@ -1293,6 +1570,16 @@ let bunProfile = Profile(
         (BunListenGenerator,          5),
         (BunDNSGenerator,             5),
         (BunSleepGenerator,           3),
+        (BunServeGenerator,          10),
+        (BunShellGenerator,           5),
+        (BunMarkdownGenerator,       10),
+        (BunCSRFGenerator,            5),
+        (BunStreamConversionGenerator, 10),
+        (BunArchiveGenerator,         5),
+        (BunSQLGenerator,             5),
+        (BunArrayBufferSinkGenerator,  5),
+        (BunCookieGenerator,          5),
+        (BunDNSExtendedGenerator,     5),
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),
@@ -1467,6 +1754,44 @@ let bunProfile = Profile(
         // Text formatting
         "Bun.wrapAnsi"      : .function([.string, .integer, .opt(.object())] => .string),
 
+        // Server / networking
+        "Bun.serve"         : .function([.object()] => .bunServer),
+        "Bun.fetch"         : .function([.string, .opt(.object())] => .jsPromise),
+        "Bun.build"         : .function([.object()] => .jsPromise),
+        "Bun.mmap"          : .function([.string] => .object()),
+        "Bun.udpSocket"     : .function([.object()] => .jsAnything),
+
+        // SQL
+        "Bun.sql"           : .function([.opt(.string)] => .jsAnything),
+        "Bun.postgres"      : .function([.opt(.string)] => .jsAnything),
+        "Bun.SQL"           : .function([.opt(.string)] => .jsAnything),
+
+        // Stream conversions
+        "Bun.readableStreamToArray"       : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToArrayBuffer" : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToText"        : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToJSON"        : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToBlob"        : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToBytes"       : .function([.jsAnything] => .jsPromise),
+
+        // Markdown
+        "Bun.markdown"      : .object(withMethods: ["html", "render"]),
+
+        // CSRF
+        "Bun.CSRF"          : .object(withMethods: ["generate", "verify"]),
+
+        // Classes
+        "Bun.Archive"       : .constructor([.jsAnything, .opt(.object())] => .bunArchive),
+        "Bun.ArrayBufferSink" : .constructor([] => .bunArrayBufferSink),
+        "Bun.Cookie"        : .constructor([.string, .string, .opt(.object())] => .bunCookie),
+        "Bun.CookieMap"     : .constructor([.opt(.string)] => .bunCookieMap),
+        "Bun.Terminal"      : .constructor([.opt(.object())] => .bunTerminal),
+        "Bun.S3Client"      : .constructor([.opt(.object())] => .bunS3Client),
+        "Bun.RedisClient"   : .constructor([.opt(.string)] => .jsAnything),
+
+        // Shell
+        "Bun.$"             : .function([.string] => .jsPromise),
+
         // Fuzzilli integration
         "fuzzilli"          : .function([.string, .jsAnything] => .undefined),
     ],
@@ -1502,6 +1827,11 @@ let bunProfile = Profile(
         bunSubprocessGroup,
         bunSyncSubprocessGroup,
         bunFileSystemRouterGroup,
+        bunArchiveGroup,
+        bunServerGroup,
+        bunArrayBufferSinkGroup,
+        bunCookieGroup,
+        bunCookieMapGroup,
     ],
 
     additionalEnumerations: [

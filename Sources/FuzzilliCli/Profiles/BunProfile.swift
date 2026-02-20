@@ -116,6 +116,111 @@ public extension ILType {
         withProperties: [],
         withMethods: ["hash"]
     )
+
+    // BunJSON5 - JSON5 parser
+    static let bunJSON5 = ILType.object(
+        ofGroup: "BunJSON5",
+        withProperties: [],
+        withMethods: ["parse"]
+    )
+
+    // BunJSONC - JSONC parser
+    static let bunJSONC = ILType.object(
+        ofGroup: "BunJSONC",
+        withProperties: [],
+        withMethods: ["parse"]
+    )
+
+    // BunJSONL - JSONL parser/stringifier
+    static let bunJSONL = ILType.object(
+        ofGroup: "BunJSONL",
+        withProperties: [],
+        withMethods: ["parse", "stringify"]
+    )
+
+    // BunFile - File handle returned by Bun.file()
+    static let bunFile = ILType.object(
+        ofGroup: "BunFile",
+        withProperties: ["size", "type", "name"],
+        withMethods: ["text", "json", "arrayBuffer", "stream", "slice", "exists", "writer"]
+    )
+
+    // BunSubprocess - Result of Bun.spawn()
+    static let bunSubprocess = ILType.object(
+        ofGroup: "BunSubprocess",
+        withProperties: ["pid", "exitCode", "signalCode", "stdin", "stdout", "stderr", "exited"],
+        withMethods: ["kill", "ref", "unref"]
+    )
+
+    // BunSyncSubprocess - Result of Bun.spawnSync()
+    static let bunSyncSubprocess = ILType.object(
+        ofGroup: "BunSyncSubprocess",
+        withProperties: ["exitCode", "signalCode", "stdout", "stderr", "success"],
+        withMethods: []
+    )
+
+    // BunTCPSocket
+    static let bunTCPSocket = ILType.object(
+        ofGroup: "BunTCPSocket",
+        withProperties: ["data", "readyState", "remoteAddress", "localPort"],
+        withMethods: ["write", "end", "close", "terminate", "ref", "unref", "reload", "flush"]
+    )
+
+    // BunFileSystemRouter
+    static let bunFileSystemRouter = ILType.object(
+        ofGroup: "BunFileSystemRouter",
+        withProperties: ["routes"],
+        withMethods: ["match", "reload"]
+    )
+
+    // BunArchive
+    static let bunArchive = ILType.object(
+        ofGroup: "BunArchive",
+        withProperties: ["count"],
+        withMethods: ["extract", "readFile", "entries", "close"]
+    )
+
+    // BunServer - result of Bun.serve()
+    static let bunServer = ILType.object(
+        ofGroup: "BunServer",
+        withProperties: ["port", "hostname", "url", "development"],
+        withMethods: ["stop", "reload", "ref", "unref", "requestIP", "upgrade"]
+    )
+
+    // BunArrayBufferSink
+    static let bunArrayBufferSink = ILType.object(
+        ofGroup: "BunArrayBufferSink",
+        withProperties: [],
+        withMethods: ["write", "flush", "end", "start"]
+    )
+
+    // BunCookie
+    static let bunCookie = ILType.object(
+        ofGroup: "BunCookie",
+        withProperties: ["name", "value", "domain", "path", "expires", "secure", "httpOnly", "sameSite", "maxAge"],
+        withMethods: ["toString", "toJSON"]
+    )
+
+    // BunCookieMap
+    static let bunCookieMap = ILType.object(
+        ofGroup: "BunCookieMap",
+        withProperties: [],
+        withMethods: ["get", "set", "delete", "has", "entries", "keys", "values", "toJSON"]
+    )
+
+    // BunTerminal
+    static let bunTerminal = ILType.object(
+        ofGroup: "BunTerminal",
+        withProperties: ["columns", "rows"],
+        withMethods: ["write", "clearLine", "cursorTo", "moveCursor"]
+    )
+
+    // BunS3Client
+    static let bunS3Client = ILType.object(
+        ofGroup: "BunS3Client",
+        withProperties: [],
+        withMethods: ["file", "write", "exists", "delete", "size", "stat", "presign", "unlink"]
+    )
 }
 
 // MARK: - Bun ObjectGroup Definitions
@@ -601,7 +706,319 @@ public let bunBlobGroup = ObjectGroup(
     ]
 )
 
+public let bunJSON5Group = ObjectGroup(
+    name: "BunJSON5",
+    instanceType: .bunJSON5,
+    properties: [:],
+    methods: [
+        "parse": [.string] => .jsAnything,
+    ]
+)
+
+public let bunJSONCGroup = ObjectGroup(
+    name: "BunJSONC",
+    instanceType: .bunJSONC,
+    properties: [:],
+    methods: [
+        "parse": [.string] => .jsAnything,
+    ]
+)
+
+public let bunJSONLGroup = ObjectGroup(
+    name: "BunJSONL",
+    instanceType: .bunJSONL,
+    properties: [:],
+    methods: [
+        "parse": [.string] => .jsAnything,
+        "stringify": [.jsAnything] => .string,
+    ]
+)
+
+public let bunFileGroup = ObjectGroup(
+    name: "BunFile",
+    instanceType: .bunFile,
+    properties: [
+        "size": .integer,
+        "type": .string,
+        "name": .string,
+    ],
+    methods: [
+        "text":        [] => .jsPromise,
+        "json":        [] => .jsPromise,
+        "arrayBuffer": [] => .jsPromise,
+        "stream":      [] => .jsAnything,
+        "slice":       [.opt(.integer), .opt(.integer)] => .bunFile,
+        "exists":      [] => .jsPromise,
+        "writer":      [.opt(.object())] => .jsAnything,
+    ]
+)
+
+public let bunSubprocessGroup = ObjectGroup(
+    name: "BunSubprocess",
+    instanceType: .bunSubprocess,
+    properties: [
+        "pid":        .integer,
+        "exitCode":   .integer | .undefined,
+        "signalCode": .string | .undefined,
+        "stdin":      .jsAnything,
+        "stdout":     .jsAnything,
+        "stderr":     .jsAnything,
+        "exited":     .jsPromise,
+    ],
+    methods: [
+        "kill":  [.opt(.integer)] => .undefined,
+        "ref":   [] => .undefined,
+        "unref": [] => .undefined,
+    ]
+)
+
+public let bunSyncSubprocessGroup = ObjectGroup(
+    name: "BunSyncSubprocess",
+    instanceType: .bunSyncSubprocess,
+    properties: [
+        "exitCode":   .integer,
+        "signalCode": .string | .undefined,
+        "stdout":     .jsAnything,
+        "stderr":     .jsAnything,
+        "success":    .boolean,
+    ],
+    methods: [:]
+)
+
+public let bunFileSystemRouterGroup = ObjectGroup(
+    name: "BunFileSystemRouter",
+    instanceType: .bunFileSystemRouter,
+    properties: [
+        "routes": .object(),
+    ],
+    methods: [
+        "match":  [.string] => .jsAnything,
+        "reload": [] => .undefined,
+    ]
+)
+
+public let bunArchiveGroup = ObjectGroup(
+    name: "BunArchive",
+    instanceType: .bunArchive,
+    properties: [
+        "count": .integer,
+    ],
+    methods: [
+        "extract":  [.opt(.string)] => .jsPromise,
+        "readFile": [.string] => .jsPromise,
+        "entries":  [] => .jsAnything,
+        "close":    [] => .undefined,
+    ]
+)
+
+public let bunServerGroup = ObjectGroup(
+    name: "BunServer",
+    instanceType: .bunServer,
+    properties: [
+        "port":        .integer,
+        "hostname":    .string,
+        "url":         .string,
+        "development": .boolean,
+    ],
+    methods: [
+        "stop":      [.opt(.boolean)] => .undefined,
+        "reload":    [.object()] => .undefined,
+        "ref":       [] => .undefined,
+        "unref":     [] => .undefined,
+        "requestIP": [.jsAnything] => .jsAnything,
+    ]
+)
+
+public let bunArrayBufferSinkGroup = ObjectGroup(
+    name: "BunArrayBufferSink",
+    instanceType: .bunArrayBufferSink,
+    properties: [:],
+    methods: [
+        "write": [.jsAnything] => .integer,
+        "flush": [] => .jsAnything,
+        "end":   [] => .jsAnything,
+        "start": [.opt(.object())] => .undefined,
+    ]
+)
+
+public let bunCookieGroup = ObjectGroup(
+    name: "BunCookie",
+    instanceType: .bunCookie,
+    properties: [
+        "name":     .string,
+        "value":    .string,
+        "domain":   .string,
+        "path":     .string,
+        "secure":   .boolean,
+        "httpOnly": .boolean,
+        "sameSite": .string,
+    ],
+    methods: [
+        "toString": [] => .string,
+        "toJSON":   [] => .object(),
+    ]
+)
+
+public let bunCookieMapGroup = ObjectGroup(
+    name: "BunCookieMap",
+    instanceType: .bunCookieMap,
+    properties: [:],
+    methods: [
+        "get":     [.string] => .bunCookie | .undefined,
+        "set":     [.string, .string, .opt(.object())] => .undefined,
+        "delete":  [.string] => .boolean,
+        "has":     [.string] => .boolean,
+        "entries": [] => .jsAnything,
+        "keys":    [] => .jsAnything,
+        "values":  [] => .jsAnything,
+        "toJSON":  [] => .object(),
+    ]
+)
+
 // MARK: - Bun Code Generators
+
+// Generator that safely exercises Bun.spawn with harmless commands
+public let BunSpawnGenerator = CodeGenerator("BunSpawnGenerator") { b in
+    let commands: [(String, [String])] = [
+        ("echo", ["hello"]),
+        ("true", []),
+        ("printf", ["%s", "test"]),
+        ("cat", ["/dev/null"]),
+    ]
+    let (cmd, args) = commands.randomElement()!
+
+    let cmdArray = b.createArray(with: ([cmd] + args).map { b.loadString($0) })
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+
+    if Bool.random() {
+        // spawnSync
+        let result = b.callMethod("spawnSync", on: bun, withArgs: [cmdArray])
+        b.getProperty("stdout", of: result)
+        b.getProperty("exitCode", of: result)
+    } else {
+        // spawn
+        let proc = b.callMethod("spawn", on: bun, withArgs: [cmdArray])
+        b.getProperty("pid", of: proc)
+        b.getProperty("exited", of: proc)
+    }
+}
+
+// Generator that exercises Bun.file() with safe paths
+public let BunFileGenerator = CodeGenerator("BunFileGenerator") { b in
+    let paths = [
+        "/dev/null",
+        "/tmp/fuzzilli-test-\(Int.random(in: 0...9999))",
+        "/proc/self/status",
+    ]
+    let path = b.loadString(paths.randomElement()!)
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let file = b.callMethod("file", on: bun, withArgs: [path])
+
+    switch Int.random(in: 0...4) {
+    case 0: b.callMethod("text", on: file)
+    case 1: b.callMethod("json", on: file)
+    case 2: b.callMethod("arrayBuffer", on: file)
+    case 3: b.callMethod("exists", on: file)
+    default: b.getProperty("size", of: file)
+    }
+}
+
+// Generator that exercises Bun.write() with safe temp paths
+public let BunWriteGenerator = CodeGenerator("BunWriteGenerator") { b in
+    let path = b.loadString("/tmp/fuzzilli-write-\(Int.random(in: 0...9999))")
+    let data = b.loadString("test data \(Int.random(in: 0...9999))")
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    b.callMethod("write", on: bun, withArgs: [path, data])
+}
+
+// Generator that exercises JSON5/JSONC/JSONL parsers
+public let BunJSONParserGenerator = CodeGenerator("BunJSONParserGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+
+    switch Int.random(in: 0...2) {
+    case 0:
+        let json5 = b.getProperty("JSON5", of: bun)
+        let input = b.loadString("{key: 'value', trailing: true,}")
+        b.callMethod("parse", on: json5, withArgs: [input])
+    case 1:
+        let jsonc = b.getProperty("JSONC", of: bun)
+        let input = b.loadString("{ /* comment */ \"key\": \(Int.random(in: 0...1000)) }")
+        b.callMethod("parse", on: jsonc, withArgs: [input])
+    default:
+        let jsonl = b.getProperty("JSONL", of: bun)
+        let input = b.loadString("{\"a\":\(Int.random(in: 0...100))}\n{\"b\":\(Int.random(in: 0...100))}")
+        b.callMethod("parse", on: jsonl, withArgs: [input])
+    }
+}
+
+// Generator that exercises Bun.connect() with localhost
+public let BunConnectGenerator = CodeGenerator("BunConnectGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let hostname = b.loadString("localhost")
+    let port = b.loadInt(Int64.random(in: 10000...60000))
+
+    let openHandler = b.buildPlainFunction(with: .parameters(n: 1)) { _ in }
+    let dataHandler = b.buildPlainFunction(with: .parameters(n: 2)) { _ in }
+    let closeHandler = b.buildPlainFunction(with: .parameters(n: 1)) { _ in }
+    let errorHandler = b.buildPlainFunction(with: .parameters(n: 2)) { _ in }
+
+    let socket = b.createObject(with: [
+        "open": openHandler,
+        "data": dataHandler,
+        "close": closeHandler,
+        "error": errorHandler,
+    ])
+    let opts = b.createObject(with: [
+        "hostname": hostname,
+        "port": port,
+        "socket": socket,
+    ])
+    b.callMethod("connect", on: bun, withArgs: [opts])
+}
+
+// Generator that exercises Bun.listen() on localhost with random high ports
+public let BunListenGenerator = CodeGenerator("BunListenGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let hostname = b.loadString("localhost")
+    let port = b.loadInt(0) // port 0 = OS assigns random port
+
+    let openHandler = b.buildPlainFunction(with: .parameters(n: 1)) { _ in }
+    let dataHandler = b.buildPlainFunction(with: .parameters(n: 2)) { _ in }
+    let closeHandler = b.buildPlainFunction(with: .parameters(n: 1)) { _ in }
+
+    let socket = b.createObject(with: [
+        "open": openHandler,
+        "data": dataHandler,
+        "close": closeHandler,
+    ])
+    let opts = b.createObject(with: [
+        "hostname": hostname,
+        "port": port,
+        "socket": socket,
+    ])
+    let server = b.callMethod("listen", on: bun, withArgs: [opts])
+    b.callMethod("stop", on: server)
+}
+
+// Generator that exercises Bun.dns
+public let BunDNSGenerator = CodeGenerator("BunDNSGenerator") { b in
+    let hostnames = ["localhost", "127.0.0.1", "::1", "example.invalid", "0.0.0.0"]
+    let hostname = b.loadString(hostnames.randomElement()!)
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let dns = b.getProperty("dns", of: bun)
+    b.callMethod("lookup", on: dns, withArgs: [hostname])
+}
+
+// Generator that exercises Bun.sleep/sleepSync
+public let BunSleepGenerator = CodeGenerator("BunSleepGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let ms = b.loadInt(Int64.random(in: 0...5))
+    if Bool.random() {
+        b.callMethod("sleep", on: bun, withArgs: [ms])
+    } else {
+        b.callMethod("sleepSync", on: bun, withArgs: [ms])
+    }
+}
 
 // Generator that exercises Bun hash APIs with specific algorithm strings
 public let BunHashGenerator = CodeGenerator("BunHashGenerator") { b in
@@ -949,6 +1366,156 @@ public let BunFetchGenerator = CodeGenerator("BunFetchGenerator") { b in
     }
 }
 
+// Generator that exercises Bun.serve() with localhost
+public let BunServeGenerator = CodeGenerator("BunServeGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+
+    let handler = b.buildPlainFunction(with: .parameters(n: 1)) { args in
+        let req = args[0]
+        b.getProperty("url", of: req)
+        b.getProperty("method", of: req)
+        let body = b.loadString("OK")
+        let responseConstructor = b.createNamedVariable(forBuiltin: "Response")
+        b.construct(responseConstructor, withArgs: [body])
+    }
+
+    let port = b.loadInt(0)
+    let opts = b.createObject(with: [
+        "port": port,
+        "fetch": handler,
+    ])
+    let server = b.callMethod("serve", on: bun, withArgs: [opts])
+    b.callMethod("stop", on: server)
+}
+
+// Generator that exercises Bun.$ (shell)
+public let BunShellGenerator = CodeGenerator("BunShellGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let shell = b.getProperty("$", of: bun)
+
+    let cmds = ["echo hello", "true", "printf test", "cat /dev/null"]
+    let cmd = b.loadString(cmds.randomElement()!)
+    b.callMethod("text", on: b.callFunction(shell, withArgs: [cmd]))
+}
+
+// Generator that exercises Bun.markdown
+public let BunMarkdownGenerator = CodeGenerator("BunMarkdownGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let markdown = b.getProperty("markdown", of: bun)
+
+    let inputs = [
+        "# Hello\\n\\nWorld",
+        "| a | b |\\n|---|---|\\n| 1 | 2 |",
+        "- [x] task\\n- [ ] todo",
+        "```js\\nconst x = 1;\\n```",
+        "~~strike~~ **bold** *italic*",
+    ]
+    let input = b.loadString(inputs.randomElement()!)
+    b.callMethod("html", on: markdown, withArgs: [input])
+}
+
+// Generator that exercises Bun.CSRF
+public let BunCSRFGenerator = CodeGenerator("BunCSRFGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let csrf = b.getProperty("CSRF", of: bun)
+    let secret = b.loadString("test-secret-\(Int.random(in: 0...9999))")
+
+    let token = b.callMethod("generate", on: csrf, withArgs: [secret])
+    b.callMethod("verify", on: csrf, withArgs: [token, secret])
+}
+
+// Generator that exercises Bun.readableStreamTo* conversions
+public let BunStreamConversionGenerator = CodeGenerator("BunStreamConversionGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let data = b.loadString("test data \(Int.random(in: 0...9999))")
+
+    let blobConstructor = b.createNamedVariable(forBuiltin: "Blob")
+    let blob = b.construct(blobConstructor, withArgs: [b.createArray(with: [data])])
+    let stream = b.callMethod("stream", on: blob)
+
+    switch Int.random(in: 0...5) {
+    case 0: b.callMethod("readableStreamToText", on: bun, withArgs: [stream])
+    case 1: b.callMethod("readableStreamToArrayBuffer", on: bun, withArgs: [stream])
+    case 2: b.callMethod("readableStreamToJSON", on: bun, withArgs: [stream])
+    case 3: b.callMethod("readableStreamToBlob", on: bun, withArgs: [stream])
+    case 4: b.callMethod("readableStreamToArray", on: bun, withArgs: [stream])
+    default: b.callMethod("readableStreamToBytes", on: bun, withArgs: [stream])
+    }
+}
+
+// Generator that exercises Bun.Archive
+public let BunArchiveGenerator = CodeGenerator("BunArchiveGenerator") { b in
+    let archiveConstructor = b.createNamedVariable(forBuiltin: "Bun")
+    let archive = b.getProperty("Archive", of: archiveConstructor)
+
+    let data = b.loadString("not a real archive \(Int.random(in: 0...9999))")
+    b.buildTryCatchFinally(tryBody: {
+        b.construct(archive, withArgs: [data])
+    }, catchBody: { _ in })
+}
+
+// Generator that exercises Bun.sql with safe queries on local databases
+public let BunSQLGenerator = CodeGenerator("BunSQLGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let sql = b.callMethod("sql", on: bun, withArgs: [])
+
+    let queries = [
+        "SELECT 1",
+        "SELECT 1 + 1 AS result",
+        "SELECT CURRENT_TIMESTAMP",
+    ]
+    let query = b.loadString(queries.randomElement()!)
+    b.buildTryCatchFinally(tryBody: {
+        b.callFunction(sql, withArgs: [query])
+    }, catchBody: { _ in })
+}
+
+// Generator that exercises Bun.ArrayBufferSink
+public let BunArrayBufferSinkGenerator = CodeGenerator("BunArrayBufferSinkGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let sinkConstructor = b.getProperty("ArrayBufferSink", of: bun)
+    let sink = b.construct(sinkConstructor)
+
+    b.callMethod("start", on: sink)
+    let data = b.loadString("chunk \(Int.random(in: 0...9999))")
+    b.callMethod("write", on: sink, withArgs: [data])
+    b.callMethod("end", on: sink)
+}
+
+// Generator that exercises Bun.Cookie / Bun.CookieMap
+public let BunCookieGenerator = CodeGenerator("BunCookieGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+
+    if Bool.random() {
+        let cookieConstructor = b.getProperty("Cookie", of: bun)
+        let name = b.loadString("test_cookie_\(Int.random(in: 0...999))")
+        let value = b.loadString("value_\(Int.random(in: 0...999))")
+        let cookie = b.construct(cookieConstructor, withArgs: [name, value])
+        b.callMethod("toString", on: cookie)
+    } else {
+        let mapConstructor = b.getProperty("CookieMap", of: bun)
+        let header = b.loadString("foo=bar; baz=qux")
+        let map = b.construct(mapConstructor, withArgs: [header])
+        b.callMethod("get", on: map, withArgs: [b.loadString("foo")])
+        b.callMethod("has", on: map, withArgs: [b.loadString("baz")])
+    }
+}
+
+// Generator that exercises Bun.dns with more methods
+public let BunDNSExtendedGenerator = CodeGenerator("BunDNSExtendedGenerator") { b in
+    let bun = b.createNamedVariable(forBuiltin: "Bun")
+    let dns = b.getProperty("dns", of: bun)
+    let hostname = b.loadString(["localhost", "127.0.0.1", "example.invalid"].randomElement()!)
+
+    switch Int.random(in: 0...4) {
+    case 0: b.callMethod("lookup", on: dns, withArgs: [hostname])
+    case 1: b.callMethod("resolve", on: dns, withArgs: [hostname])
+    case 2: b.callMethod("prefetch", on: dns, withArgs: [hostname])
+    case 3: b.callMethod("getCacheStats", on: dns)
+    default: b.callMethod("reverse", on: dns, withArgs: [b.loadString("127.0.0.1")])
+    }
+}
+
 // MARK: - Bun Profile
 
 let bunProfile = Profile(
@@ -995,6 +1562,24 @@ let bunProfile = Profile(
         (BunBufferEncodingGenerator, 10),
         (BunColorGenerator,           5),
         (BunFetchGenerator,          10),
+        (BunSpawnGenerator,          10),
+        (BunFileGenerator,           10),
+        (BunWriteGenerator,           5),
+        (BunJSONParserGenerator,     10),
+        (BunConnectGenerator,         5),
+        (BunListenGenerator,          5),
+        (BunDNSGenerator,             5),
+        (BunSleepGenerator,           3),
+        (BunServeGenerator,          10),
+        (BunShellGenerator,           5),
+        (BunMarkdownGenerator,       10),
+        (BunCSRFGenerator,            5),
+        (BunStreamConversionGenerator, 10),
+        (BunArchiveGenerator,         5),
+        (BunSQLGenerator,             5),
+        (BunArrayBufferSinkGenerator,  5),
+        (BunCookieGenerator,          5),
+        (BunDNSExtendedGenerator,     5),
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),
@@ -1052,15 +1637,16 @@ let bunProfile = Profile(
         "HTMLRewriter"      : .constructor([] => .htmlRewriter),
 
         // Bun hash constructors (shortcuts for specific algorithms)
-        // These are constructor objects with a static .hash method
-        "Bun.MD4"           : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.MD5"           : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA1"          : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA224"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA256"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA384"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA512"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA512_256"    : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
+        // new Bun.SHA256() returns an instance with .update(), .digest(), .copy()
+        // Also has a static .hash() method
+        "Bun.MD4"           : .constructor([] => .bunCryptoHasher),
+        "Bun.MD5"           : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA1"          : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA224"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA256"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA384"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA512"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA512_256"    : .constructor([] => .bunCryptoHasher),
 
         // Bun utility methods (non-blocking, non-IO)
         "Bun.hash"          : .function([.jsAnything, .opt(.integer)] => .integer),
@@ -1120,6 +1706,10 @@ let bunProfile = Profile(
         "Bun.zstdCompressSync"   : .function([.jsAnything, .opt(.object())] => .object()),
         "Bun.zstdDecompressSync" : .function([.jsAnything] => .object()),
 
+        // Compression (async)
+        "Bun.zstdCompress"   : .function([.jsAnything, .opt(.object())] => .jsPromise),
+        "Bun.zstdDecompress" : .function([.jsAnything] => .jsPromise),
+
         // Bun metadata properties
         "Bun.version"       : .string,
         "Bun.revision"      : .string,
@@ -1128,6 +1718,7 @@ let bunProfile = Profile(
 
         // Buffer utilities
         "Bun.concatArrayBuffers" : .function([.object(), .opt(.integer), .opt(.boolean)] => .object()),
+        "Bun.arrayBufferToString" : .function([.object(), .opt(.string)] => .string),
         "Bun.indexOfLine"   : .function([.object(), .opt(.integer)] => .integer),
         "Bun.allocUnsafe"   : .function([.integer] => .object()),
 
@@ -1140,6 +1731,67 @@ let bunProfile = Profile(
         // Parsers
         "Bun.TOML"          : .bunTOML,
         "Bun.YAML"          : .bunYAML,
+        "Bun.JSON5"         : .bunJSON5,
+        "Bun.JSONC"         : .bunJSONC,
+        "Bun.JSONL"         : .bunJSONL,
+
+        // File I/O
+        "Bun.file"          : .function([.string] => .bunFile),
+        "Bun.write"         : .function([.string, .jsAnything] => .jsPromise),
+
+        // Process spawning
+        "Bun.spawn"         : .function([.object()] => .bunSubprocess),
+        "Bun.spawnSync"     : .function([.object()] => .bunSyncSubprocess),
+
+        // Async sleep
+        "Bun.sleep"         : .function([.number] => .jsPromise),
+
+        // Resolve
+        "Bun.resolve"       : .function([.string, .string] => .jsPromise),
+
+        // DNS
+        "Bun.dns"           : .object(withMethods: ["lookup"]),
+
+        // Text formatting
+        "Bun.wrapAnsi"      : .function([.string, .integer, .opt(.object())] => .string),
+
+        // Server / networking
+        "Bun.serve"         : .function([.object()] => .bunServer),
+        "Bun.fetch"         : .function([.string, .opt(.object())] => .jsPromise),
+        "Bun.build"         : .function([.object()] => .jsPromise),
+        "Bun.mmap"          : .function([.string] => .object()),
+        "Bun.udpSocket"     : .function([.object()] => .jsAnything),
+
+        // SQL
+        "Bun.sql"           : .function([.opt(.string)] => .jsAnything),
+        "Bun.postgres"      : .function([.opt(.string)] => .jsAnything),
+        "Bun.SQL"           : .function([.opt(.string)] => .jsAnything),
+
+        // Stream conversions
+        "Bun.readableStreamToArray"       : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToArrayBuffer" : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToText"        : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToJSON"        : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToBlob"        : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToBytes"       : .function([.jsAnything] => .jsPromise),
+
+        // Markdown
+        "Bun.markdown"      : .object(withMethods: ["html", "render"]),
+
+        // CSRF
+        "Bun.CSRF"          : .object(withMethods: ["generate", "verify"]),
+
+        // Classes
+        "Bun.Archive"       : .constructor([.jsAnything, .opt(.object())] => .bunArchive),
+        "Bun.ArrayBufferSink" : .constructor([] => .bunArrayBufferSink),
+        "Bun.Cookie"        : .constructor([.string, .string, .opt(.object())] => .bunCookie),
+        "Bun.CookieMap"     : .constructor([.opt(.string)] => .bunCookieMap),
+        "Bun.Terminal"      : .constructor([.opt(.object())] => .bunTerminal),
+        "Bun.S3Client"      : .constructor([.opt(.object())] => .bunS3Client),
+        "Bun.RedisClient"   : .constructor([.opt(.string)] => .jsAnything),
+
+        // Shell
+        "Bun.$"             : .function([.string] => .jsPromise),
 
         // Fuzzilli integration
         "fuzzilli"          : .function([.string, .jsAnything] => .undefined),
@@ -1169,6 +1821,18 @@ let bunProfile = Profile(
         bunURLSearchParamsGroup,
         bunFormDataGroup,
         bunBlobGroup,
+        bunJSON5Group,
+        bunJSONCGroup,
+        bunJSONLGroup,
+        bunFileGroup,
+        bunSubprocessGroup,
+        bunSyncSubprocessGroup,
+        bunFileSystemRouterGroup,
+        bunArchiveGroup,
+        bunServerGroup,
+        bunArrayBufferSinkGroup,
+        bunCookieGroup,
+        bunCookieMapGroup,
     ],
 
     additionalEnumerations: [

@@ -1637,15 +1637,16 @@ let bunProfile = Profile(
         "HTMLRewriter"      : .constructor([] => .htmlRewriter),
 
         // Bun hash constructors (shortcuts for specific algorithms)
-        // These are constructor objects with a static .hash method
-        "Bun.MD4"           : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.MD5"           : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA1"          : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA224"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA256"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA384"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA512"        : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
-        "Bun.SHA512_256"    : .bunHashConstructor + .constructor([] => .bunCryptoHasher),
+        // new Bun.SHA256() returns an instance with .update(), .digest(), .copy()
+        // Also has a static .hash() method
+        "Bun.MD4"           : .constructor([] => .bunCryptoHasher),
+        "Bun.MD5"           : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA1"          : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA224"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA256"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA384"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA512"        : .constructor([] => .bunCryptoHasher),
+        "Bun.SHA512_256"    : .constructor([] => .bunCryptoHasher),
 
         // Bun utility methods (non-blocking, non-IO)
         "Bun.hash"          : .function([.jsAnything, .opt(.integer)] => .integer),

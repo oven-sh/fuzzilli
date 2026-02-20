@@ -953,7 +953,7 @@ public let BunFetchGenerator = CodeGenerator("BunFetchGenerator") { b in
 
 let bunProfile = Profile(
     processArgs: { randomize in ["fuzzilli"] },
-
+    processArgsReference: nil,
 
     processEnv: [
         "ASAN_OPTIONS": "allow_user_segv_handler=1:allocator_may_return_null=1:abort_on_error=1:symbolize=false:redzone=128:detect_leaks=0",
@@ -963,7 +963,7 @@ let bunProfile = Profile(
 
     maxExecsBeforeRespawn: 1000,
 
-    timeout: 2500,
+    timeout: .value(2500),
 
     codePrefix: """
                 delete globalThis.Loader;

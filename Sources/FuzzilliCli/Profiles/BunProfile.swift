@@ -723,6 +723,19 @@ public let bunSubprocessGroup = ObjectGroup(
     ]
 )
 
+public let bunSyncSubprocessGroup = ObjectGroup(
+    name: "BunSyncSubprocess",
+    instanceType: .bunSyncSubprocess,
+    properties: [
+        "exitCode":   .integer,
+        "signalCode": .string | .undefined,
+        "stdout":     .jsAnything,
+        "stderr":     .jsAnything,
+        "success":    .boolean,
+    ],
+    methods: [:]
+)
+
 public let bunFileSystemRouterGroup = ObjectGroup(
     name: "BunFileSystemRouter",
     instanceType: .bunFileSystemRouter,
@@ -1449,16 +1462,10 @@ let bunProfile = Profile(
         "Bun.resolve"       : .function([.string, .string] => .jsPromise),
 
         // DNS
-        "Bun.dns"           : .object(),
+        "Bun.dns"           : .object(withMethods: ["lookup"]),
 
         // Text formatting
         "Bun.wrapAnsi"      : .function([.string, .integer, .opt(.object())] => .string),
-
-        // Table formatting
-        "Bun.table"         : .function([.jsAnything, .opt(.object())] => .string),
-
-        // Module prefetching
-        "Bun.prefetch"      : .function([.string] => .undefined),
 
         // Fuzzilli integration
         "fuzzilli"          : .function([.string, .jsAnything] => .undefined),
@@ -1493,6 +1500,7 @@ let bunProfile = Profile(
         bunJSONLGroup,
         bunFileGroup,
         bunSubprocessGroup,
+        bunSyncSubprocessGroup,
         bunFileSystemRouterGroup,
     ],
 

@@ -189,38 +189,55 @@ public extension ILType {
 
     // BunArrayBufferSink
     static let bunArrayBufferSink = ILType.object(
-        ofGroup: "BunArrayBufferSink",
+        ofGroup: "Bun.ArrayBufferSink",
         withProperties: [],
         withMethods: ["write", "flush", "end", "start"]
     )
 
     // BunCookie
     static let bunCookie = ILType.object(
-        ofGroup: "BunCookie",
+        ofGroup: "Bun.Cookie",
         withProperties: ["name", "value", "domain", "path", "expires", "secure", "httpOnly", "sameSite", "maxAge"],
         withMethods: ["toString", "toJSON"]
     )
 
     // BunCookieMap
     static let bunCookieMap = ILType.object(
-        ofGroup: "BunCookieMap",
+        ofGroup: "Bun.CookieMap",
         withProperties: [],
         withMethods: ["get", "set", "delete", "has", "entries", "keys", "values", "toJSON"]
     )
 
     // BunTerminal
     static let bunTerminal = ILType.object(
-        ofGroup: "BunTerminal",
+        ofGroup: "Bun.Terminal",
         withProperties: ["columns", "rows"],
         withMethods: ["write", "clearLine", "cursorTo", "moveCursor"]
     )
 
     // BunS3Client
     static let bunS3Client = ILType.object(
-        ofGroup: "BunS3Client",
+        ofGroup: "Bun.S3Client",
         withProperties: [],
         withMethods: ["file", "write", "exists", "delete", "size", "stat", "presign", "unlink"]
     )
+
+    // BunRedisClient
+    static let bunRedisClient = ILType.object(
+        ofGroup: "Bun.RedisClient",
+        withProperties: [],
+        withMethods: ["get", "set", "del", "exists", "keys", "ping", "quit", "subscribe", "publish"]
+    )
+
+    // Hash constructor instance types (each needs its own group to match builtin name)
+    static let bunMD4 = ILType.object(ofGroup: "Bun.MD4", withProperties: [], withMethods: ["update", "digest", "copy"])
+    static let bunMD5 = ILType.object(ofGroup: "Bun.MD5", withProperties: [], withMethods: ["update", "digest", "copy"])
+    static let bunSHA1 = ILType.object(ofGroup: "Bun.SHA1", withProperties: [], withMethods: ["update", "digest", "copy"])
+    static let bunSHA224 = ILType.object(ofGroup: "Bun.SHA224", withProperties: [], withMethods: ["update", "digest", "copy"])
+    static let bunSHA256 = ILType.object(ofGroup: "Bun.SHA256", withProperties: [], withMethods: ["update", "digest", "copy"])
+    static let bunSHA384 = ILType.object(ofGroup: "Bun.SHA384", withProperties: [], withMethods: ["update", "digest", "copy"])
+    static let bunSHA512 = ILType.object(ofGroup: "Bun.SHA512", withProperties: [], withMethods: ["update", "digest", "copy"])
+    static let bunSHA512_256 = ILType.object(ofGroup: "Bun.SHA512_256", withProperties: [], withMethods: ["update", "digest", "copy"])
 }
 
 // MARK: - Bun ObjectGroup Definitions
@@ -830,7 +847,7 @@ public let bunServerGroup = ObjectGroup(
 )
 
 public let bunArrayBufferSinkGroup = ObjectGroup(
-    name: "BunArrayBufferSink",
+    name: "Bun.ArrayBufferSink",
     instanceType: .bunArrayBufferSink,
     properties: [:],
     methods: [
@@ -842,7 +859,7 @@ public let bunArrayBufferSinkGroup = ObjectGroup(
 )
 
 public let bunCookieGroup = ObjectGroup(
-    name: "BunCookie",
+    name: "Bun.Cookie",
     instanceType: .bunCookie,
     properties: [
         "name":     .string,
@@ -860,7 +877,7 @@ public let bunCookieGroup = ObjectGroup(
 )
 
 public let bunCookieMapGroup = ObjectGroup(
-    name: "BunCookieMap",
+    name: "Bun.CookieMap",
     instanceType: .bunCookieMap,
     properties: [:],
     methods: [
@@ -872,6 +889,146 @@ public let bunCookieMapGroup = ObjectGroup(
         "keys":    [] => .jsAnything,
         "values":  [] => .jsAnything,
         "toJSON":  [] => .object(),
+    ]
+)
+
+// BunTerminal group
+public let bunTerminalGroup = ObjectGroup(
+    name: "Bun.Terminal",
+    instanceType: .bunTerminal,
+    properties: [
+        "columns": .integer,
+        "rows":    .integer,
+    ],
+    methods: [
+        "write":     [.string] => .undefined,
+        "clearLine": [.opt(.integer)] => .undefined,
+        "cursorTo":  [.integer, .opt(.integer)] => .undefined,
+        "moveCursor": [.integer, .integer] => .undefined,
+    ]
+)
+
+// BunS3Client group
+public let bunS3ClientGroup = ObjectGroup(
+    name: "Bun.S3Client",
+    instanceType: .bunS3Client,
+    properties: [:],
+    methods: [
+        "file":    [.string] => .jsAnything,
+        "write":   [.string, .jsAnything] => .jsPromise,
+        "exists":  [.string] => .jsPromise,
+        "delete":  [.string] => .jsPromise,
+        "size":    [.string] => .jsPromise,
+        "stat":    [.string] => .jsPromise,
+        "presign": [.string, .opt(.object())] => .string,
+        "unlink":  [.string] => .jsPromise,
+    ]
+)
+
+// BunRedisClient group
+public let bunRedisClientGroup = ObjectGroup(
+    name: "Bun.RedisClient",
+    instanceType: .bunRedisClient,
+    properties: [:],
+    methods: [
+        "get":       [.string] => .jsPromise,
+        "set":       [.string, .jsAnything] => .jsPromise,
+        "del":       [.string] => .jsPromise,
+        "exists":    [.string] => .jsPromise,
+        "keys":      [.string] => .jsPromise,
+        "ping":      [] => .jsPromise,
+        "quit":      [] => .jsPromise,
+        "subscribe": [.string, .function()] => .jsPromise,
+        "publish":   [.string, .string] => .jsPromise,
+    ]
+)
+
+// Hash constructor instance groups (one per algorithm to match builtin names)
+public let bunMD4Group = ObjectGroup(
+    name: "Bun.MD4",
+    instanceType: .bunMD4,
+    properties: [:],
+    methods: [
+        "update": [.jsAnything, .opt(.string)] => .bunMD4,
+        "digest": [.opt(.string)] => (.object() | .string),
+        "copy":   [] => .bunMD4,
+    ]
+)
+
+public let bunMD5Group = ObjectGroup(
+    name: "Bun.MD5",
+    instanceType: .bunMD5,
+    properties: [:],
+    methods: [
+        "update": [.jsAnything, .opt(.string)] => .bunMD5,
+        "digest": [.opt(.string)] => (.object() | .string),
+        "copy":   [] => .bunMD5,
+    ]
+)
+
+public let bunSHA1Group = ObjectGroup(
+    name: "Bun.SHA1",
+    instanceType: .bunSHA1,
+    properties: [:],
+    methods: [
+        "update": [.jsAnything, .opt(.string)] => .bunSHA1,
+        "digest": [.opt(.string)] => (.object() | .string),
+        "copy":   [] => .bunSHA1,
+    ]
+)
+
+public let bunSHA224Group = ObjectGroup(
+    name: "Bun.SHA224",
+    instanceType: .bunSHA224,
+    properties: [:],
+    methods: [
+        "update": [.jsAnything, .opt(.string)] => .bunSHA224,
+        "digest": [.opt(.string)] => (.object() | .string),
+        "copy":   [] => .bunSHA224,
+    ]
+)
+
+public let bunSHA256Group = ObjectGroup(
+    name: "Bun.SHA256",
+    instanceType: .bunSHA256,
+    properties: [:],
+    methods: [
+        "update": [.jsAnything, .opt(.string)] => .bunSHA256,
+        "digest": [.opt(.string)] => (.object() | .string),
+        "copy":   [] => .bunSHA256,
+    ]
+)
+
+public let bunSHA384Group = ObjectGroup(
+    name: "Bun.SHA384",
+    instanceType: .bunSHA384,
+    properties: [:],
+    methods: [
+        "update": [.jsAnything, .opt(.string)] => .bunSHA384,
+        "digest": [.opt(.string)] => (.object() | .string),
+        "copy":   [] => .bunSHA384,
+    ]
+)
+
+public let bunSHA512Group = ObjectGroup(
+    name: "Bun.SHA512",
+    instanceType: .bunSHA512,
+    properties: [:],
+    methods: [
+        "update": [.jsAnything, .opt(.string)] => .bunSHA512,
+        "digest": [.opt(.string)] => (.object() | .string),
+        "copy":   [] => .bunSHA512,
+    ]
+)
+
+public let bunSHA512_256Group = ObjectGroup(
+    name: "Bun.SHA512_256",
+    instanceType: .bunSHA512_256,
+    properties: [:],
+    methods: [
+        "update": [.jsAnything, .opt(.string)] => .bunSHA512_256,
+        "digest": [.opt(.string)] => (.object() | .string),
+        "copy":   [] => .bunSHA512_256,
     ]
 )
 
@@ -1639,14 +1796,14 @@ let bunProfile = Profile(
         // Bun hash constructors (shortcuts for specific algorithms)
         // new Bun.SHA256() returns an instance with .update(), .digest(), .copy()
         // Also has a static .hash() method
-        "Bun.MD4"           : .constructor([] => .bunCryptoHasher),
-        "Bun.MD5"           : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA1"          : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA224"        : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA256"        : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA384"        : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA512"        : .constructor([] => .bunCryptoHasher),
-        "Bun.SHA512_256"    : .constructor([] => .bunCryptoHasher),
+        "Bun.MD4"           : .constructor([] => .bunMD4),
+        "Bun.MD5"           : .constructor([] => .bunMD5),
+        "Bun.SHA1"          : .constructor([] => .bunSHA1),
+        "Bun.SHA224"        : .constructor([] => .bunSHA224),
+        "Bun.SHA256"        : .constructor([] => .bunSHA256),
+        "Bun.SHA384"        : .constructor([] => .bunSHA384),
+        "Bun.SHA512"        : .constructor([] => .bunSHA512),
+        "Bun.SHA512_256"    : .constructor([] => .bunSHA512_256),
 
         // Bun utility methods (non-blocking, non-IO)
         "Bun.hash"          : .function([.jsAnything, .opt(.integer)] => .integer),
@@ -1788,7 +1945,7 @@ let bunProfile = Profile(
         "Bun.CookieMap"     : .constructor([.opt(.string)] => .bunCookieMap),
         "Bun.Terminal"      : .constructor([.opt(.object())] => .bunTerminal),
         "Bun.S3Client"      : .constructor([.opt(.object())] => .bunS3Client),
-        "Bun.RedisClient"   : .constructor([.opt(.string)] => .jsAnything),
+        "Bun.RedisClient"   : .constructor([.opt(.string)] => .bunRedisClient),
 
         // Shell
         "Bun.$"             : .function([.string] => .jsPromise),
@@ -1833,6 +1990,17 @@ let bunProfile = Profile(
         bunArrayBufferSinkGroup,
         bunCookieGroup,
         bunCookieMapGroup,
+        bunTerminalGroup,
+        bunS3ClientGroup,
+        bunRedisClientGroup,
+        bunMD4Group,
+        bunMD5Group,
+        bunSHA1Group,
+        bunSHA224Group,
+        bunSHA256Group,
+        bunSHA384Group,
+        bunSHA512Group,
+        bunSHA512_256Group,
     ],
 
     additionalEnumerations: [

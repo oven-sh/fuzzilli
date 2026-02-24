@@ -175,7 +175,7 @@ public extension ILType {
 
     // BunArchive
     static let bunArchive = ILType.object(
-        ofGroup: "BunArchive",
+        ofGroup: "Bun.Archive",
         withProperties: ["count"],
         withMethods: ["extract", "readFile", "entries", "close"]
     )
@@ -815,7 +815,7 @@ public let bunFileSystemRouterGroup = ObjectGroup(
 )
 
 public let bunArchiveGroup = ObjectGroup(
-    name: "BunArchive",
+    name: "Bun.Archive",
     instanceType: .bunArchive,
     properties: [
         "count": .integer,

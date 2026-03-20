@@ -1692,6 +1692,7 @@ let bunProfile = Profile(
     codePrefix: """
                 delete globalThis.Loader;
                 Bun.generateHeapSnapshot = console.profile = console.profileEnd = process.abort = () => {};
+                Bun.FFI = undefined;
                 """,
 
     codeSuffix: """

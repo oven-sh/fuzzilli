@@ -1046,13 +1046,13 @@ public class FuzzILLifter: Lifter {
 
         case .wasmJsCall(let op):
             var arguments: [Variable] = []
-            for i in 0..<op.functionSignature.parameterTypes.count {
-                arguments.append(instr.input(i + 1))
+            for i in 0..<op.parameterCount {
+                arguments.append(instr.input(i + 2))
             }
-            if op.functionSignature.outputTypes.isEmpty {
-                w.emit("WasmJsCall(\(op.functionSignature)) \(instr.input(0)) [\(liftCallArguments(arguments[...]))]")
+            if op.outputCount == 0 {
+                w.emit("WasmJsCall \(instr.input(1)) [\(liftCallArguments(arguments[...]))]")
             } else {
-                w.emit("\(output()) <- WasmJsCall(\(op.functionSignature)) \(instr.input(0)) [\(liftCallArguments(arguments[...]))]")
+                w.emit("\(output()) <- WasmJsCall \(instr.input(1)) [\(liftCallArguments(arguments[...]))]")
             }
 
         case .wasmCallIndirect(let op):
@@ -1073,9 +1073,9 @@ public class FuzzILLifter: Lifter {
                 w.emit("\(outputs) <- WasmCallDirect \(inputs)")
             }
 
-        case .wasmReturnCallDirect(let op):
+        case .wasmReturnCallDirect(_):
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
-            w.emit("WasmReturnCallDirect(\(op.signature)) \(inputs)")
+            w.emit("WasmReturnCallDirect \(inputs)")
 
         case .wasmReturnCallIndirect(let op):
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
@@ -1348,6 +1348,10 @@ public class FuzzILLifter: Lifter {
         case .wasmRefTest(let op):
             let typeInput = op.type.requiredInputCount() > 0 ? " (IndexType: \(input(1)))" : ""
             w.emit("\(output()) <- WasmRefTest \(op.type) \(input(0))\(typeInput)")
+
+        case .wasmRefCast(let op):
+            let typeInput = op.type.requiredInputCount() > 0 ? " (IndexType: \(input(1)))" : ""
+            w.emit("\(output()) <- WasmRefCast \(op.type) \(input(0))\(typeInput)")
 
         case .wasmBeginTypeGroup(_):
             w.emit("WasmBeginTypeGroup")

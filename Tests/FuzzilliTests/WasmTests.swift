@@ -441,7 +441,7 @@ class WasmFoundationTests: XCTestCase {
     }
 
     func testGlobalExnRef() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref"])
+        let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
 
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
@@ -3689,7 +3689,7 @@ class WasmFoundationTests: XCTestCase {
     }
 
     func testTryTableNoCatch() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref"])
+        let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
@@ -3718,7 +3718,7 @@ class WasmFoundationTests: XCTestCase {
     }
 
     func testTryTable() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref"])
+        let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
@@ -3757,7 +3757,7 @@ class WasmFoundationTests: XCTestCase {
     }
 
     func testTryTableRef() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref"])
+        let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
@@ -3797,7 +3797,7 @@ class WasmFoundationTests: XCTestCase {
     }
 
     func tagExportedToDifferentWasmModule(defineInWasm: Bool) throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref"])
+        let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
@@ -3865,7 +3865,7 @@ class WasmFoundationTests: XCTestCase {
 
     // Test that defining a Wasm tag in JS with all supported abstract ref types does not fail.
     func testTagAllRefTypesInJS() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref"])
+        let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
@@ -3882,7 +3882,7 @@ class WasmFoundationTests: XCTestCase {
     }
 
     func testThrowRef() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref"])
+        let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
@@ -4033,7 +4033,7 @@ class WasmFoundationTests: XCTestCase {
     // This test covers a bug where imported functions were not accounted for correctly when
     // lifting a direct call to a non-imported wasm function.
     func testCallDirectJSCall() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref"])
+        let runner = try GetJavaScriptExecutorOrSkipTest()
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
@@ -4803,7 +4803,7 @@ class WasmGCTests: XCTestCase {
     }
 
     func refNullAbstractTypes(sharedRef: Bool) throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-exnref", "--experimental-wasm-shared"])
+        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--experimental-wasm-shared"])
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let b = fuzzer.makeBuilder()
@@ -5043,6 +5043,77 @@ class WasmGCTests: XCTestCase {
         let prog = b.finalize()
         let jsProg = fuzzer.lifter.lift(prog)
         testForOutput(program: jsProg, runner: runner, outputString: "1011\n1\n0\n0\n1\n")
+    }
+
+    func testRefCast() throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest()
+        let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
+        let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
+        let b = fuzzer.makeBuilder()
+
+        let arrayType = b.wasmDefineTypeGroup {b.wasmDefineArrayType(elementType: .wasmi32, mutability: false)}[0]
+
+        let module = b.buildWasmModule { wasmModule in
+            wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmArrayRef()]) { function, label, args in
+                let array = function.wasmArrayNewFixed(arrayType: arrayType, elements: [args[0]])
+                return [array]
+            }
+            wasmModule.addWasmFunction(with: [.wasmEqRef()] => [.wasmi32]) { function, label, args in
+                let (refType, nonNullRefType, abstractRefType) = (
+                    ILType.wasmRef(.Index(), nullability: true),
+                    ILType.wasmRef(.Index(), nullability: false),
+                    ILType.wasmRef(.Abstract(HeapTypeInfo(.WasmArray, shared: false)), nullability: true),
+                )
+                let arrays = [
+                    function.wasmRefCast(args[0], refType: refType, typeDef: arrayType),
+                    function.wasmRefCast(args[0], refType: nonNullRefType, typeDef: arrayType),
+                    function.wasmRefCast(args[0], refType: abstractRefType),
+                ]
+                let value1 = function.wasmArrayGet(array: arrays[0], index: function.consti32(0))
+                let value2 = function.wasmArrayGet(array: arrays[1], index: function.consti32(0))
+                return [function.wasmi32BinOp(value1, value2, binOpKind: WasmIntegerBinaryOpKind.Add)]
+            }
+            wasmModule.addWasmFunction(with: [.wasmExternRef()] => [.wasmRefExtern()]) { function, label, args in
+                let cast = function.wasmRefCast(args[0], refType: .wasmRefExtern())
+                return [cast]
+            }
+        }
+
+        let exports = module.loadExports()
+        let outputFunc = b.createNamedVariable(forBuiltin: "output")
+        let arrayRef = b.callMethod(module.getExportedMethod(at: 0), on: exports, withArgs: [b.loadInt(21)])
+        let result = b.callMethod(module.getExportedMethod(at: 1), on: exports, withArgs: [arrayRef])
+        b.callFunction(outputFunc, withArgs: [result])
+        let ext = b.callMethod(module.getExportedMethod(at: 2), on: exports, withArgs: [b.loadInt(5)])
+        b.callFunction(outputFunc, withArgs: [ext])
+
+        let prog = b.finalize()
+        let jsProg = fuzzer.lifter.lift(prog)
+        testForOutput(program: jsProg, runner: runner, outputString: "42\n5\n")
+    }
+
+    func testRefCastError() throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest()
+        let jsProg = buildAndLiftProgram{ b in
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmFuncRef()]) { function, label, args in
+                    let funcref = function.wasmRefNull(type: ILType.wasmFuncRef())
+                    let nullFuncType = ILType.wasmRef(.Abstract(HeapTypeInfo.init(.WasmFunc, shared: false)), nullability: false)
+                    let cast = function.wasmRefCast(funcref, refType: nullFuncType)
+                    return [cast]
+                }
+            }
+            let exports = module.loadExports()
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+
+            b.buildTryCatchFinally {
+                let _ = b.callMethod(module.getExportedMethod(at: 0), on: exports)
+                b.callFunction(outputFunc, withArgs: [b.loadString("Not reached")])
+            } catchBody: { e in
+                b.callFunction(outputFunc, withArgs: [b.loadString("exception")])
+            }
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "exception\n")
     }
 }
 
@@ -6468,7 +6539,8 @@ class WasmSpliceTests: XCTestCase {
             module.addWasmFunction(with: [] => []) { function, label, args in
                 let argument = function.consti32(1337)
                 let signature = ProgramBuilder.convertJsSignatureToWasmSignature([.number] => .integer, availableTypes: WeightedList([(.wasmi32, 1)]))
-                splicePoint = b.indexOfNextInstruction()
+                // +1 for the wasm-gc signature type that is created implicitly.
+                splicePoint = b.indexOfNextInstruction() + 1
                 function.wasmJsCall(function: f, withArgs: [argument], withWasmSignature: signature)
                 return []
             }
@@ -6512,7 +6584,8 @@ class WasmSpliceTests: XCTestCase {
             module.addWasmFunction(with: [] => []) { function, label, args in
                 let argument = function.consti32(1337)
                 let signature = ProgramBuilder.convertJsSignatureToWasmSignature([.number] => .integer, availableTypes: WeightedList([(.wasmi32, 1)]))
-                splicePoint = b.indexOfNextInstruction()
+                // +1 for the wasm-gc signature type that is created implicitly.
+                splicePoint = b.indexOfNextInstruction() + 1
                 function.wasmJsCall(function: f, withArgs: [argument], withWasmSignature: signature)
                 return []
             }

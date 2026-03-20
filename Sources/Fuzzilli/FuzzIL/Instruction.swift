@@ -1131,8 +1131,8 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmReturn = Fuzzilli_Protobuf_WasmReturn()
             case .wasmJsCall(let op):
                 $0.wasmJsCall = Fuzzilli_Protobuf_WasmJsCall.with {
-                    $0.parameterTypes = op.functionSignature.parameterTypes.map(ILTypeToWasmTypeEnum)
-                    $0.outputTypes = op.functionSignature.outputTypes.map(ILTypeToWasmTypeEnum)
+                    $0.parameterCount = Int32(op.parameterCount)
+                    $0.outputCount = Int32(op.outputCount)
                 }
             case .wasmi32CompareOp(let op):
                 $0.wasmi32CompareOp = Fuzzilli_Protobuf_Wasmi32CompareOp.with { $0.compareOperator = Int32(op.compareOpKind.rawValue) }
@@ -1318,8 +1318,7 @@ extension Instruction: ProtobufConvertible {
                 }
             case .wasmReturnCallDirect(let op):
                 $0.wasmReturnCallDirect = Fuzzilli_Protobuf_WasmReturnCallDirect.with {
-                    $0.parameterTypes = op.signature.parameterTypes.map(ILTypeToWasmTypeEnum)
-                    $0.outputTypes = op.signature.outputTypes.map(ILTypeToWasmTypeEnum)
+                    $0.parameterCount = Int32(op.parameterCount)
                 }
             case .wasmReturnCallIndirect(let op):
                 $0.wasmReturnCallIndirect = Fuzzilli_Protobuf_WasmReturnCallIndirect.with {
@@ -1613,6 +1612,10 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmRefEq = Fuzzilli_Protobuf_WasmRefEq()
             case .wasmRefTest(let op):
                 $0.wasmRefTest = Fuzzilli_Protobuf_WasmRefTest.with {
+                    $0.type = ILTypeToWasmTypeEnum(op.type)
+                }
+            case .wasmRefCast(let op):
+                $0.wasmRefCast = Fuzzilli_Protobuf_WasmRefCast.with {
                     $0.type = ILTypeToWasmTypeEnum(op.type)
                 }
             case .wasmRefI31(let op):
@@ -2284,9 +2287,7 @@ extension Instruction: ProtobufConvertible {
         case .wasmReturn(_):
             op = WasmReturn(returnCount: inouts.count)
         case .wasmJsCall(let p):
-            let parameters = p.parameterTypes.map(WasmTypeEnumToILType)
-            let outputs = p.outputTypes.map(WasmTypeEnumToILType)
-            op = WasmJsCall(signature: parameters => outputs)
+            op = WasmJsCall(parameterCount: Int(p.parameterCount), outputCount: Int(p.outputCount))
 
         // Wasm Numerical Operations
         case .wasmi32CompareOp(let p):
@@ -2414,9 +2415,7 @@ extension Instruction: ProtobufConvertible {
         case .wasmCallDirect(let p):
             op = WasmCallDirect(parameterCount: Int(p.parameterCount), outputCount: Int(p.outputCount))
         case .wasmReturnCallDirect(let p):
-            let parameters = p.parameterTypes.map(WasmTypeEnumToILType)
-            let outputs = p.outputTypes.map(WasmTypeEnumToILType)
-            op = WasmReturnCallDirect(signature: parameters => outputs)
+            op = WasmReturnCallDirect(parameterCount: Int(p.parameterCount))
         case .wasmReturnCallIndirect(let p):
             let parameters = p.parameterTypes.map(WasmTypeEnumToILType)
             let outputs = p.outputTypes.map(WasmTypeEnumToILType)
@@ -2594,6 +2593,8 @@ extension Instruction: ProtobufConvertible {
             op = WasmRefEq()
         case .wasmRefTest(let p):
             op = WasmRefTest(refType: WasmTypeEnumToILType(p.type))
+        case .wasmRefCast(let p):
+            op = WasmRefCast(refType: WasmTypeEnumToILType(p.type))
         case .wasmRefI31(let p):
             op = WasmRefI31(isShared: p.isShared)
         case .wasmI31Get(let p):

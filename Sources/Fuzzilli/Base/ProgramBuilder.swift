@@ -487,6 +487,13 @@ public class ProgramBuilder {
         return chooseUniform(from: fuzzer.environment.customMethods)
     }
 
+    /// Returns a random custom private method name.
+    ///
+    /// As above but for private methods, where a # symbol will be prepended.
+    public func randomCustomPrivateMethodName() -> String {
+        return chooseUniform(from: fuzzer.environment.customPrivateMethods)
+    }
+
     /// Returns either a builtin or a custom method name, with equal probability.
     public func randomMethodName() -> String {
         return probability(0.5) ? randomBuiltinMethodName() : randomCustomMethodName()
@@ -730,6 +737,7 @@ public class ProgramBuilder {
                     let (pattern, flags) = self.randomRegExpPatternAndFlags()
                     return self.loadRegExp(pattern, flags)
                 }),
+            (.iterable, { return self.createArray(with: [self.randomJsVariable()]) }),
             (.function(), {
                     // TODO: We could technically generate a full function here but then we would enter the full code generation logic which could do anything.
                     // Because we want to avoid this, we will just pick anything that can be a function.
@@ -3779,7 +3787,7 @@ public class ProgramBuilder {
 
         public func wasmReturnCallDirect(signature: WasmSignature, function: Variable, functionArgs: [Variable]) {
             assert(self.signature.outputTypes == signature.outputTypes)
-            b.emit(WasmReturnCallDirect(signature: signature),
+            b.emit(WasmReturnCallDirect(parameterCount: signature.parameterTypes.count),
                 withInputs: [function] + functionArgs,
                 types: [.wasmFunctionDef(signature)] + signature.parameterTypes)
         }
@@ -3794,8 +3802,9 @@ public class ProgramBuilder {
 
         @discardableResult
         public func wasmJsCall(function: Variable, withArgs args: [Variable], withWasmSignature signature: WasmSignature) -> Variable? {
-            let instr = b.emit(WasmJsCall(signature: signature), withInputs: [function] + args,
-                types: [.function() | .object(ofGroup: "WasmSuspendingObject")] + signature.parameterTypes)
+            let signatureDef = b.wasmDefineAdHocSignatureType(signature: signature)
+            let instr = b.emit(WasmJsCall(parameterCount: signature.parameterTypes.count, outputCount: signature.outputTypes.count), withInputs: [signatureDef, function] + args,
+                types: [.wasmTypeDef(), .function() | .object(ofGroup: "WasmSuspendingObject")] + signature.parameterTypes)
             if signature.outputTypes.isEmpty {
                 assert(!instr.hasOutputs)
                 return nil
@@ -3913,11 +3922,6 @@ public class ProgramBuilder {
         public func wasmReassign(variable: Variable, to: Variable) {
             assert(b.type(of: to).Is(b.type(of: variable)))
             b.emit(WasmReassign(), withInputs: [variable, to])
-        }
-
-        public enum wasmBlockType {
-            case typeIdx(Int)
-            case valueType(ILType)
         }
 
         // The first innerOutput of this block is a label variable, which is just there to explicitly mark control-flow and allow branches.
@@ -4436,10 +4440,18 @@ public class ProgramBuilder {
 
         @discardableResult
         public func wasmRefTest(_ ref: Variable, refType: ILType, typeDef: Variable? = nil) -> Variable {
-            typeDef == nil
-                ? b.emit(WasmRefTest(refType: refType), withInputs: [ref]).output
-                : b.emit(WasmRefTest(refType: refType), withInputs: [ref, typeDef!]).output
+            let inputs = typeDef == nil ? [ref] : [ref, typeDef!]
+            let types: [ILType] = typeDef == nil ? [.wasmGenericRef] : [.wasmGenericRef, .wasmTypeDef()]
+            return b.emit(WasmRefTest(refType: refType), withInputs: inputs, types: types).output
         }
+
+        @discardableResult
+        public func wasmRefCast(_ ref: Variable, refType: ILType, typeDef: Variable? = nil) -> Variable {
+            let inputs = typeDef == nil ? [ref] : [ref, typeDef!]
+            let types: [ILType] = typeDef == nil ? [.wasmGenericRef] : [.wasmGenericRef, .wasmTypeDef()]
+            return b.emit(WasmRefCast(refType: refType), withInputs: inputs, types: types).output
+        }
+
     }
 
     public class WasmModule {
@@ -4595,6 +4607,29 @@ public class ProgramBuilder {
         return (dynamicOffset, alignedStaticOffset)
     }
 
+    func generateRandomWasmStructFields() -> (fields: [WasmStructTypeDescription.Field], indexTypes: [Variable]) {
+        var indexTypes: [Variable] = []
+
+        let fields = (0..<Int.random(in: 0...10)).map { _ in
+            var type: ILType
+            // TODO(mliedtke): Allow non-nullable reference types. Right now we can't do this as
+            // the WasmStructNewGenerator might then fail to generate a struct.
+            let nullability = true
+            if let elementType = randomVariable(ofType: .wasmTypeDef()), probability(0.25) {
+                indexTypes.append(elementType)
+                type = .wasmRef(.Index(), nullability: nullability)
+            } else {
+                type = chooseUniform(from: [
+                    .wasmPackedI8, .wasmPackedI16, .wasmi32, .wasmi64, .wasmf32, .wasmf64, .wasmSimd128,
+                ] + WasmAbstractHeapType.allCases.map {ILType.wasmRef($0, nullability: nullability)})
+            }
+            return WasmStructTypeDescription.Field(
+                type: type, mutability: probability(0.75))
+        }
+
+        return (fields, indexTypes)
+    }
+
     /// Produces a WasmGlobal that is valid to create in the given Context.
     public func randomWasmGlobal(forContext context: Context) -> WasmGlobal {
         // TODO(pawkra): enable shared element types.
@@ -4669,8 +4704,9 @@ public class ProgramBuilder {
                 indexTypes.append(elementType)
                 return ILType.wasmRef(.Index(), nullability: nullability)
             } else {
-                // TODO(mliedtke): Extend list with abstract heap types.
-                return chooseUniform(from: [.wasmi32, .wasmi64, .wasmf32, .wasmf64, .wasmSimd128])
+                let nullability = !allowNonNullable || probability(0.5)
+                return chooseUniform(from: [.wasmi32, .wasmi64, .wasmf32, .wasmf64, .wasmSimd128]
+                    + WasmAbstractHeapType.allCases.map {ILType.wasmRef($0, nullability: nullability)})
             }
         }
         let signature = (0..<parameterCount).map {_ in chooseType()}
@@ -5009,22 +5045,28 @@ public class ProgramBuilder {
     // so we instead register a generator that allows the fuzzer a greater chance of generating
     // one when needed.
     //
-    // These can be registered on the JavaScriptEnvironment with addProducingGenerator()
+    // These can be registered on the JavaScriptEnvironment with addProducingGenerator().
+    // argument `predefined`: Provide values that should be used for the given properties of the
+    //   options bag (if present) instead of finding or generating random values for them. The
+    //   property might still be filtered out.
     @discardableResult
-    func createOptionsBag(_ bag: OptionsBag) -> Variable {
+    func createOptionsBag(_ bag: OptionsBag, predefined: [String: Variable] = [:]) -> Variable {
         // We run .filter() to pick a subset of fields, but we generally want to set as many as possible
         // and let the mutator prune things
-        let dict: [String : Variable] = bag.properties.filter {_ in probability(0.8)}.mapValues {
-            if $0.isEnumeration {
-                return loadEnum($0)
+        let dict = [String : Variable](uniqueKeysWithValues: bag.properties.filter {_ in probability(0.8)}.map {
+            let (propertyName, type) = $0
+            if let predefinedVar = predefined[propertyName] {
+                return (propertyName, predefinedVar)
+            } else if type.isEnumeration {
+                return (propertyName, loadEnum(type))
             // relativeTo doesn't have an ObjectGroup so we cannot just register a producingGenerator for it
-            } else if $0.Is(OptionsBag.jsTemporalRelativeTo) {
-                return findOrGenerateType(chooseUniform(from: [.jsTemporalZonedDateTime, .jsTemporalPlainDateTime,
-                                          .jsTemporalPlainDate, .string]))
+            } else if type.Is(OptionsBag.jsTemporalRelativeTo) {
+                return (propertyName, findOrGenerateType(chooseUniform(from: [.jsTemporalZonedDateTime, .jsTemporalPlainDateTime,
+                                          .jsTemporalPlainDate, .string])))
             } else {
-                return findOrGenerateType($0)
+                return (propertyName, findOrGenerateType(type))
             }
-        }
+        })
         return createObject(with: dict)
     }
 
@@ -5393,6 +5435,29 @@ public class ProgramBuilder {
     fileprivate static let allScripts = ["Adlm", "Afak", "Aghb", "Ahom", "Arab", "Aran", "Armi", "Armn", "Avst", "Bali", "Bamu", "Bass", "Batk", "Beng", "Berf", "Bhks", "Blis", "Bopo", "Brah", "Brai", "Bugi", "Buhd", "Cakm", "Cans", "Cari", "Cham", "Cher", "Chis", "Chrs", "Cirt", "Copt", "Cpmn", "Cprt", "Cyrl", "Cyrs", "Deva", "Diak", "Dogr", "Dsrt", "Dupl", "Egyd", "Egyh", "Egyp", "Elba", "Elym", "Ethi", "Gara", "Geok", "Geor", "Glag", "Gong", "Gonm", "Goth", "Gran", "Grek", "Gujr", "Gukh", "Guru", "Hanb", "Hang", "Hani", "Hano", "Hans", "Hant", "Hatr", "Hebr", "Hira", "Hluw", "Hmng", "Hmnp", "Hntl", "Hrkt", "Hung", "Inds", "Ital", "Jamo", "Java", "Jpan", "Jurc", "Kali", "Kana", "Kawi", "Khar", "Khmr", "Khoj", "Kitl", "Kits", "Knda", "Kore", "Kpel", "Krai", "Kthi", "Lana", "Laoo", "Latf", "Latg", "Latn", "Leke", "Lepc", "Limb", "Lina", "Linb", "Lisu", "Loma", "Lyci", "Lydi", "Mahj", "Maka", "Mand", "Mani", "Marc", "Maya", "Medf", "Mend", "Merc", "Mero", "Mlym", "Modi", "Mong", "Moon", "Mroo", "Mtei", "Mult", "Mymr", "Nagm", "Nand", "Narb", "Nbat", "Newa", "Nkdb", "Nkgb", "Nkoo", "Nshu", "Ogam", "Olck", "Onao", "Orkh", "Orya", "Osge", "Osma", "Ougr", "Palm", "Pauc", "Pcun", "Pelm", "Perm", "Phag", "Phli", "Phlp", "Phlv", "Phnx", "Piqd", "Plrd", "Prti", "Psin", "Qaaa-Qabx", "Ranj", "Rjng", "Rohg", "Roro", "Runr", "Samr", "Sara", "Sarb", "Saur", "Seal", "Sgnw", "Shaw", "Shrd", "Shui", "Sidd", "Sidt", "Sind", "Sinh", "Sogd", "Sogo", "Sora", "Soyo", "Sund", "Sunu", "Sylo", "Syrc", "Syre", "Syrj", "Syrn", "Tagb", "Takr", "Tale", "Talu", "Taml", "Tang", "Tavt", "Tayo", "Telu", "Teng", "Tfng", "Tglg", "Thaa", "Thai", "Tibt", "Tirh", "Tnsa", "Todr", "Tols", "Toto", "Tutg", "Ugar", "Vaii", "Visp", "Vith", "Wara", "Wcho", "Wole", "Xpeo", "Xsux", "Yezi", "Yiii", "Zanb", "Zinh", "Zmth", "Zsye", "Zsym", "Zxxx", "Zyyy", "Zzzz"]
     fileprivate static let allAlpha = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     fileprivate static let allAlphaNum = allAlpha + "0123456789"
+    fileprivate static let allRegionsTwoDigit = [
+        "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT",
+        "AU", "AW", "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI",
+        "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY",
+        "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN",
+        "CO", "CR", "CU", "CV", "CW", "CX", "CY", "CZ", "DE", "DJ", "DK", "DM",
+        "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK",
+        "FM", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL",
+        "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HM",
+        "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR",
+        "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN",
+        "KP", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS",
+        "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK",
+        "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW",
+        "MX", "MY", "MZ", "NA", "NC", "NE", "NF", "NG", "NI", "NL", "NO", "NP",
+        "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM",
+        "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW",
+        "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM",
+        "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF",
+        "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW",
+        "TZ", "UA", "UG", "UM", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VI",
+        "VN", "VU", "WF", "WS", "YE", "YT", "ZA", "ZM", "ZW",
+    ]
 
     @discardableResult
     static func constructIntlUnit() -> String {
@@ -5419,7 +5484,7 @@ public class ProgramBuilder {
     static func constructIntlRegionString() -> String {
         // either two letters or three digits
         if probability(0.5) {
-            return String((0..<2).map { _ in allAlpha.randomElement()! })
+            return allRegionsTwoDigit.randomElement()!
         } else {
             return String(format: "%03d", Int.random(in: 0...999))
         }
@@ -5486,6 +5551,11 @@ public class ProgramBuilder {
     }
 
     @discardableResult
+    func constructIntlDisplayNames() -> Variable {
+        return constructIntlType(type: "DisplayNames", optionsBag: .jsIntlDisplayNamesSettings)
+    }
+
+    @discardableResult
     func constructIntlListFormat() -> Variable {
         return constructIntlType(type: "ListFormat", optionsBag: .jsIntlListFormatSettings)
     }
@@ -5509,6 +5579,37 @@ public class ProgramBuilder {
     func constructIntlSegmenter() -> Variable {
         return constructIntlType(type: "Segmenter", optionsBag: .jsIntlSegmenterSettings)
     }
+
+    // Fuzz calls with the pattern new Intl.DisplayNames(locale, settings).of(code).
+    // These need to be generated together as there is a tight coupling between the `type` property
+    // in the settings optionsbag and the valid code values passed to the `of` method.
+    @discardableResult
+    func fuzzIntlDisplayNamesOf() -> Variable {
+        let intl = createNamedVariable(forBuiltin: "Intl")
+        let ctor = getProperty("DisplayNames", of: intl)
+        let types = fuzzer.environment.getEnum(ofName: "IntlDisplayNamesTypeEnum")!.enumValues
+        let type = types.randomElement()!
+        let locale = loadString(ProgramBuilder.constructIntlLocaleString())
+        let options = createOptionsBag(.jsIntlDisplayNamesSettings,
+            predefined: ["type": loadString(type)])
+        construct(ctor, withArgs: [locale, options])
+        let code = switch type {
+            case "language":
+                ProgramBuilder.constructIntlLanguageString()
+            case "region":
+                ProgramBuilder.constructIntlRegionString()
+            case "script":
+                ProgramBuilder.constructIntlScriptString()
+            case "currency":
+                Locale.commonISOCurrencyCodes.randomElement()!
+            case "calendar":
+                fuzzer.environment.getEnum(ofName: "temporalCalendar")!.enumValues.randomElement()!
+            case "dateTimeField":
+                ["era", "year", "quarter", "month", "weekOfYear", "weekday", "day",
+                 "dayPeriod", "hour", "minute", "second", "timeZoneName"].randomElement()!
+            default:
+                String.random(ofLength: 4)
+        }
+        return callMethod("of", on: ctor, withArgs: [loadString(code)])
+    }
 }
-
-

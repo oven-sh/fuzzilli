@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Fuzzilli
 
-let v8Profile = Profile(
+public let v8Profile = Profile(
     processArgs: {randomize in
       v8ProcessArgs(randomize: randomize, forSandbox: false)
     },
@@ -61,6 +60,7 @@ let v8Profile = Profile(
         (ForceJITCompilationThroughLoopGenerator,  5),
         (ForceTurboFanCompilationGenerator,        5),
         (ForceMaglevCompilationGenerator,          5),
+        (ForceOsrGenerator,                        5),
         (TurbofanVerifyTypeGenerator,             10),
 
         (WorkerGenerator,                         10),
@@ -75,18 +75,20 @@ let v8Profile = Profile(
         (HoleNanGenerator,                         5),
         (UndefinedNanGenerator,                    5),
         (StringShapeGenerator,                     5),
+        (HeapNumberGenerator,                      5),
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([
-        (MapTransitionFuzzer,     1),
-        (ValueSerializerFuzzer,   1),
-        (V8RegExpFuzzer,          1),
-        (WasmFastCallFuzzer,      1),
-        (FastApiCallFuzzer,       1),
-        (LazyDeoptFuzzer,         1),
-        (WasmDeoptFuzzer,         1),
-        (WasmTurbofanFuzzer,      1),
-        (ProtoAssignSeqOptFuzzer, 1),
+        (MapTransitionFuzzer,                1),
+        (ValueSerializerFuzzer,              1),
+        (V8RegExpFuzzer,                     1),
+        (WasmFastCallFuzzer,                 1),
+        (FastApiCallFuzzer,                  1),
+        (LazyDeoptFuzzer,                    1),
+        (WasmDeoptFuzzer,                    1),
+        (WasmTurbofanFuzzer,                 1),
+        (ProtoAssignSeqOptFuzzer,            1),
+        (TurbofanTierUpNonInlinedCallFuzzer, 1),
     ]),
 
     disabledCodeGenerators: [],
@@ -96,10 +98,15 @@ let v8Profile = Profile(
     additionalBuiltins: [
         "gc"    : .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise)),
         "d8"    : .jsD8,
-        "Worker": .constructor([.jsAnything, .object()] => .object(withMethods: ["postMessage","getMessage"])),
+        "Worker": .jsWorkerConstructor,
+        // via --expose-externalize-string:
+        "externalizeString": .function([.plain(.jsString)] => .jsString),
+        "isOneByteString": .function([.plain(.jsString)] => .boolean),
+        "createExternalizableString": .function([.plain(.jsString)] => .jsString),
+        "createExternalizableTwoByteString": .function([.plain(.jsString)] => .jsString),
     ],
 
-    additionalObjectGroups: [jsD8, jsD8Test, jsD8FastCAPI, gcOptions],
+    additionalObjectGroups: [jsD8, jsD8Test, jsD8FastCAPI, gcOptions, .jsWorkers, .jsWorkerPrototype, .jsWorkerConstructors],
 
     additionalEnumerations: [.gcTypeEnum, .gcExecutionEnum],
 

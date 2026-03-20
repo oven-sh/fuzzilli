@@ -841,6 +841,7 @@ public let bunServerGroup = ObjectGroup(
         "ref":       [] => .undefined,
         "unref":     [] => .undefined,
         "requestIP": [.jsAnything] => .jsAnything,
+        "upgrade":   [.jsAnything, .opt(.object())] => .boolean,
     ]
 )
 
@@ -864,9 +865,11 @@ public let bunCookieGroup = ObjectGroup(
         "value":    .string,
         "domain":   .string,
         "path":     .string,
+        "expires":  .jsAnything,
         "secure":   .boolean,
         "httpOnly": .boolean,
         "sameSite": .string,
+        "maxAge":   .integer,
     ],
     methods: [
         "toString": [] => .string,

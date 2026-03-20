@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Foundation
+
 // Generator stubs for disposable and async-disposable object variables.
 func disposableObjVariableGeneratorStubs(
         inContext contextRequirement : Context,
@@ -351,7 +353,18 @@ public let CodeGenerators: [CodeGenerator] = [
     },
 
     CodeGenerator("BuiltinIntlGenerator") { b in
-        let _ = chooseUniform(from: [b.constructIntlDateTimeFormat, b.constructIntlCollator, b.constructIntlListFormat, b.constructIntlLocale, b.constructIntlNumberFormat, b.constructIntlPluralRules, b.constructIntlRelativeTimeFormat, b.constructIntlSegmenter])()
+        let _ = chooseUniform(from: [
+            b.constructIntlDateTimeFormat,
+            b.constructIntlCollator,
+            b.constructIntlListFormat,
+            b.constructIntlLocale,
+            b.constructIntlNumberFormat,
+            b.constructIntlPluralRules,
+            b.constructIntlRelativeTimeFormat,
+            b.constructIntlSegmenter,
+            b.constructIntlDisplayNames,
+            b.fuzzIntlDisplayNamesOf,
+        ])()
     },
 
     CodeGenerator("HexGenerator") { b in
@@ -1236,8 +1249,8 @@ public let CodeGenerators: [CodeGenerator] = [
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
-                // Try to find a private field that hasn't already been added to this class.
-                let methodName = b.generateString(b.randomCustomMethodName,
+                // Try to find a private method that hasn't already been added to this class.
+                let methodName = b.generateString(b.randomCustomPrivateMethodName,
                     notIn: b.currentClassDefinition.privateFields)
                 let parameters = b.randomParameters()
                 b.emit(
@@ -1273,8 +1286,8 @@ public let CodeGenerators: [CodeGenerator] = [
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
-                // Try to find a private field that hasn't already been added to this class.
-                let methodName = b.generateString(b.randomCustomMethodName,
+                // Try to find a private method that hasn't already been added to this class.
+                let methodName = b.generateString(b.randomCustomPrivateMethodName,
                     notIn: b.currentClassDefinition.privateFields)
                 let parameters = b.randomParameters()
                 b.emit(

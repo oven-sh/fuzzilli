@@ -803,14 +803,15 @@ public struct JSTyper: Analyzer {
                 registerWasmMemoryUse(for: instr.input(0))
                 setType(of: instr.output, to: isMemory64 ? .wasmi64 : .wasmi32)
             case .wasmJsCall(let op):
-                let sigOutputTypes = op.functionSignature.outputTypes
+                let wasmSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+                let sigOutputTypes = wasmSignature.outputTypes
                 assert(sigOutputTypes.count < 2, "multi-return js calls are not supported")
                 if !sigOutputTypes.isEmpty {
                     setType(of: instr.output, to: sigOutputTypes[0])
                 }
-                let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
+                let definingInstruction = defUseAnalyzer.definition(of: instr.input(1))
                 // Here we query the typer for the signature of the instruction as that is the correct "JS" Signature instead of taking the call-site specific converted wasm signature.
-                dynamicObjectGroupManager.addWasmFunction(withSignature: type(of: instr.input(0)).signature ?? Signature.forUnknownFunction, forDefinition: definingInstruction, forVariable: instr.input(0))
+                dynamicObjectGroupManager.addWasmFunction(withSignature: type(of: instr.input(1)).signature ?? Signature.forUnknownFunction, forDefinition: definingInstruction, forVariable: instr.input(1))
             case .beginWasmFunction(let op):
                 wasmTypeBeginBlock(instr, op.signature)
             case .endWasmFunction(let op):
@@ -880,14 +881,11 @@ public struct JSTyper: Analyzer {
                 // exnref in the standard exception handling spec.)
                 setType(of: instr.innerOutput(1), to: .exceptionLabel)
                 // Type the tag parameters.
-                guard let labelParameters = type(of: instr.input(1)).wasmTagType?.parameters else {
-                    // TODO(mliedtke): I believe that sooner or later we will run into this fatal
-                    // error. A tag can be defined in JavaScript and then be used in Wasm. Later on
-                    // the varaible defining the tag can be reassigned to with a different type,
-                    // loosening the inferred type information suddenly not being a tag any more.
-                    fatalError("Input into WasmBeginCatch not a tag type, actual "
-                        + "\(type(of: instr.input(1))), defined in \(definingInstruction)")
-                }
+                // If the input isn't typed as a Wasm tag any more (this can happen as tags can be
+                // defined in JS and there a reassign as part of a CodeGenMutator run can loosen the
+                // inferred type), just act as if there weren't any label parameters. In that case
+                // the lifter will fail and the test case will be discarded.
+                let labelParameters = type(of: instr.input(1)).wasmTagType?.parameters ?? []
                 for (innerOutput, paramType) in zip(instr.innerOutputs.dropFirst(2), labelParameters) {
                     setType(of: innerOutput, to: paramType)
                 }
@@ -949,6 +947,13 @@ public struct JSTyper: Analyzer {
                 setType(of: instr.output, to: .wasmi32)
             case .wasmRefTest(_):
                 setType(of: instr.output, to: .wasmi32)
+            case .wasmRefCast(let op):
+                if op.type.requiredInputCount() == 1 {
+                    let nullable = op.type.wasmReferenceType!.nullability
+                    setReferenceType(of: instr.output, typeDef: instr.input(1), nullability: nullable)
+                } else {
+                    setType(of: instr.output, to: op.type)
+                }
             case .wasmAnyConvertExtern(_):
                 // TODO(pawkra): forward shared bit & update the comment
                 // any.convert_extern forwards the nullability bit from the input.

@@ -19,6 +19,30 @@ import WinSDK
 #endif /* os(Windows) */
 
 public class JavaScriptExecutor {
+    // helper to support program output larger than the Pipe()'s buffer.
+    private final class OutputBuffer: @unchecked Sendable {
+        private var data = Data()
+        private let lock = NSLock()
+
+        func append(_ newData: Data) {
+            lock.lock()
+            defer { lock.unlock() }
+            data.append(newData)
+        }
+
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return data.count
+        }
+
+        var currentData: Data {
+            lock.lock()
+            defer { lock.unlock() }
+            return data
+        }
+    }
+
     /// Path to the js shell binary.
     let executablePath: String
 
@@ -84,6 +108,11 @@ public class JavaScriptExecutor {
         let outputPipe = Pipe()
         let errorPipe = Pipe()
 
+        let outputData = OutputBuffer()
+        outputPipe.fileHandleForReading.readabilityHandler = { handle in
+            outputData.append(handle.availableData)
+        }
+
         // Write input into file.
         let url = FileManager.default.temporaryDirectory
                .appendingPathComponent(UUID().uuidString)
@@ -138,19 +167,11 @@ public class JavaScriptExecutor {
         try FileManager.default.removeItem(at: url)
 
         // Fetch and return the output.
-        var output = ""
-        if let data = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
-            output = data
-        } else {
-            output = "Process output is not valid UTF-8"
-        }
-        var error = ""
-        if let data = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
-            error = data
-        } else {
-            error = "Process stderr is not valid UTF-8"
-        }
-        var outcome: Result.Outcome
+        var output = String(data: outputData.currentData, encoding: .utf8)
+            ?? "Process output is not valid UTF-8"
+        let error = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+            ?? "Process stderr is not valid UTF-8"
+        let outcome: Result.Outcome
         if timedOut {
             outcome = .timedOut
             output += "\nError: Timed out"
@@ -187,22 +208,22 @@ public class JavaScriptExecutor {
 
     /// The Result of a JavaScript Execution, the exit code and any associated output.
     public struct Result {
-        enum Outcome: Equatable {
+        public enum Outcome: Equatable {
             case terminated(status: Int32)
             case timedOut
         }
 
-        let outcome: Outcome
-        let output: String
-        let error: String
+        public let outcome: Outcome
+        public let output: String
+        public let error: String
 
-        var isSuccess: Bool {
+        public var isSuccess: Bool {
             return outcome == .terminated(status: 0)
         }
-        var isFailure: Bool {
+        public var isFailure: Bool {
             return !isSuccess
         }
-        var isTimeOut: Bool {
+        public var isTimeOut: Bool {
             return outcome == .timedOut
         }
     }

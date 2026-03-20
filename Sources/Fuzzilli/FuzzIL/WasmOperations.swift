@@ -972,12 +972,12 @@ final class WasmCallDirect: WasmOperation {
 
 final class WasmReturnCallDirect: WasmOperation {
     override var opcode: Opcode { .wasmReturnCallDirect(self) }
-    let signature: WasmSignature
 
-    init(signature: WasmSignature) {
-        self.signature = signature
-        super.init(numInputs: 1 + signature.parameterTypes.count, numOutputs: 0, attributes: [.isJump], requiredContext: [.wasmFunction])
+    init(parameterCount: Int) {
+        super.init(numInputs: 1 + parameterCount, numOutputs: 0, attributes: [.isJump], requiredContext: [.wasmFunction])
     }
+
+    var parameterCount: Int {numInputs - 1}
 }
 
 final class WasmReturnCallIndirect: WasmOperation {
@@ -1225,12 +1225,12 @@ final class WasmDropDataSegment: WasmOperation {
 final class WasmJsCall: WasmOperation {
     override var opcode: Opcode { .wasmJsCall(self) }
 
-    let functionSignature: WasmSignature
-
-    init(signature: WasmSignature) {
-        self.functionSignature = signature
-        super.init(numInputs: 1 + signature.parameterTypes.count, numOutputs: signature.outputTypes.count, requiredContext: [.wasmFunction])
+    init(parameterCount: Int, outputCount: Int) {
+        super.init(numInputs: 2 + parameterCount, numOutputs: outputCount, requiredContext: [.wasmFunction])
     }
+
+    var parameterCount: Int { numInputs - 2 }
+    var outputCount: Int { numOutputs }
 }
 
 final class WasmSelect: WasmOperation {
@@ -2330,6 +2330,15 @@ class WasmRefTest: WasmOperation {
     override var opcode: Opcode { .wasmRefTest(self) }
     let type: ILType
 
+    init(refType: ILType) {
+        self.type = refType
+        super.init(numInputs: 1 + type.requiredInputCount(), numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
+class WasmRefCast: WasmOperation {
+    override var opcode: Opcode { .wasmRefCast(self) }
+    let type: ILType
     init(refType: ILType) {
         self.type = refType
         super.init(numInputs: 1 + type.requiredInputCount(), numOutputs: 1, requiredContext: [.wasmFunction])

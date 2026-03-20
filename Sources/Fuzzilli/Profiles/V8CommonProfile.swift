@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Fuzzilli
 
 public extension ILType {
     static let jsD8 = ILType.object(ofGroup: "D8", withProperties: ["test"], withMethods: [])
@@ -25,6 +24,10 @@ public extension ILType {
 
     static let gcTypeEnum = ILType.enumeration(ofName: "gcType", withValues: ["minor", "major"])
     static let gcExecutionEnum = ILType.enumeration(ofName: "gcExecution", withValues: ["async", "sync"])
+
+    static let jsWorker = object(ofGroup: "Worker", withMethods: ["postMessage","getMessage", "terminate", "terminateAndWait"])
+    static let jsWorkerConstructor = constructor([.jsAnything, .object()] => jsWorker)
+        + object(ofGroup: "WorkerConstructor", withProperties: ["prototype"])
 }
 
 public let gcOptions = ObjectGroup(
@@ -33,6 +36,33 @@ public let gcOptions = ObjectGroup(
     properties: ["type": .gcTypeEnum,
                  "execution": .gcExecutionEnum],
     methods: [:])
+
+public extension ObjectGroup {
+    static let jsWorkers = ObjectGroup(
+        name: "Worker",
+        instanceType: .jsWorker,
+        properties: [:],
+        methods: [
+            "postMessage": [.jsAnything] => .undefined,
+            "getMessage": [] => .jsAnything,
+            "terminate": [] => .undefined,
+            "terminateAndWait": [] => .undefined
+        ]
+    )
+
+    static let jsWorkerPrototype =
+        ObjectGroup.createPrototypeObjectGroup(jsWorkers, constructor: .jsWorkerConstructor)
+
+    static let jsWorkerConstructors = ObjectGroup(
+            name: "WorkerConstructor",
+            constructorPath: "Worker",
+            instanceType: .jsWorkerConstructor,
+            properties: [
+                "prototype" : jsWorkerPrototype.instanceType,
+            ],
+            methods: [:]
+        )
+}
 
 public let fastCallables : [(group: ILType, method: String)] = [
     (group: .jsD8FastCAPI, method: "throw_no_fallback"),
@@ -118,6 +148,34 @@ public let ForceTurboFanCompilationGenerator = forceCompilationGenerator(
 public let ForceMaglevCompilationGenerator = forceCompilationGenerator(
     "ForceMaglevCompilationGenerator", optimizeName: "OptimizeMaglevOnNextCall")
 
+// Create a loop and force OSR in one of the iterations.
+public let ForceOsrGenerator = CodeGenerator("ForceOsrGenerator", [
+    GeneratorStub(
+        "ForceOsrBeginGenerator",
+        inContext: .single(.javascript),
+        provides: [.javascript]
+    ) { b in
+        let numIterations = Int.random(in: 2...50)
+        let loopVar = b.emit(BeginRepeatLoop(iterations: numIterations)).innerOutput
+        let condition = b.compare(
+            loopVar, with: b.loadInt(Int64.random(in: 0..<Int64(numIterations))),
+            using: .equal)
+        b.buildIf(condition) {
+            if probability(0.8) {
+                b.eval("%OptimizeOsr()");
+            } else {
+                b.eval("%OptimizeOsr(%@)", with: [b.loadInt(1)]);
+            }
+        }
+    },
+    GeneratorStub(
+        "ForceOsrEndGenerator",
+        inContext: .single([.javascript])
+    ) { b in
+        b.emit(EndRepeatLoop())
+    },
+])
+
 public let TurbofanVerifyTypeGenerator = CodeGenerator("TurbofanVerifyTypeGenerator", inputs: .one) { b, v in
     b.eval("%VerifyType(%@)", with: [v])
 }
@@ -175,6 +233,13 @@ public let HoleNanGenerator = CodeGenerator("HoleNanGenerator") { b in
 
 public let UndefinedNanGenerator = CodeGenerator("UndefinedNanGenerator") { b in
     b.eval("%GetUndefinedNaN()", hasOutput: true);
+}
+
+public let HeapNumberGenerator = CodeGenerator("HeapNumberGenerator", inputs: .preferred(.integer))
+{ b, value in
+    // This generator prefers an integer input as these have a high chance of being representable as
+    // a Smi, meaning that we often end up with a HeapNumber that didn't have to be materialized.
+    b.eval("%AllocateHeapNumberWithValue(%@)", with: [value], hasOutput: true);
 }
 
 public let StringShapeGenerator = CodeGenerator("StringShapeGenerator") { b in
@@ -668,7 +733,7 @@ public let WasmFastCallFuzzer = WasmProgramTemplate("WasmFastCallFuzzer") { b in
                   return [ret]
                 }
             } else {
-                logger.error("Arguments should have been generated")
+                Logger(withLabel: "V8CommonProfile").error("Arguments should have been generated")
             }
             return wasmSignature.outputTypes.map(fbuilder.findOrGenerateWasmVar)
         }
@@ -760,6 +825,37 @@ public let ProtoAssignSeqOptFuzzer = ProgramTemplate("ProtoAssignSeqOptFuzzer") 
     b.build(n: 10)
 }
 
+public let TurbofanTierUpNonInlinedCallFuzzer =
+    ProgramTemplate("TurbofanTierUpNonInlinedCallFuzzer") { b in
+    b.buildPrefix()
+    b.build(n: 50)
+    // Find a function (or generate a new one) to be marked as "never optimize".
+    let unoptimizedFunction = b.randomVariable(ofType: .function())
+        ?? b.buildPlainFunction(with: .parameters(n: 2)) { _ in
+            b.build(n: 20)
+            b.doReturn(b.randomJsVariable())
+        }
+    b.eval("%NeverOptimizeFunction(%@)", with: [unoptimizedFunction])
+    // Create another function that calls the unoptimized function. This will always create a real
+    // call instead of inlining it.
+    let optimizedFunction = b.buildPlainFunction(with: .parameters(n: 0)) { _ in
+        // This should be able to generate interesting things including calls to the unoptimized
+        // function in all kinds of control flow.
+        b.build(n: 30)
+        // Also explicitly emit a call to the unoptimized function.
+        b.callFunction(unoptimizedFunction, withArgs: b.randomArguments(forCalling: unoptimizedFunction))
+        b.build(n: 10)
+    }
+    // Collect feedback and optimize the function.
+    // Guard all calls. The path where they throw is still interesting as there are
+    // optimizations that affect the unwinding logic which we'd like to get coverage for as well.
+    b.eval("%PrepareFunctionForOptimization(%@)", with: [optimizedFunction]);
+    b.callFunction(optimizedFunction, guard: true)
+    b.callFunction(optimizedFunction, guard: true)
+    b.eval("%OptimizeFunctionOnNextCall(%@)", with: [optimizedFunction]);
+    b.callFunction(optimizedFunction, guard: true)
+}
+
 // Configure V8 invocation arguments. `forSandbox` is used by the V8SandboxProfile. As the sandbox
 // fuzzer does not crash on regular assertions, most validation flags do not make sense in that
 // configuraiton.
@@ -795,6 +891,10 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
         if probability(0.5) {
             args.append("--maglev-as-top-tier")
         }
+    } else if probability(0.1) {
+        args.append(probability(0.5)
+            ? "--turbo-instruction-scheduling"
+            : "--turbo-stress-instruction-scheduling")
     }
 
     if probability(0.1) {
@@ -846,6 +946,12 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
     }
 
     if !args.contains("--no-maglev") {
+        if probability(0.5) {
+            args.append("--maglev-untagged-phis")
+        }
+        if probability(0.1) {
+            args.append("--no-maglev-loop-peeling")
+        }
         if probability(0.25) {
             args.append("--maglev-future")
         }
@@ -867,7 +973,7 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
         args.append("--turboshaft-typed-optimizations")
     }
 
-    if probability(0.5) {
+    if probability(0.7) {
         args.append("--turbolev")
         if probability(0.82) {
             args.append("--turbolev-future")
@@ -927,10 +1033,14 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
     }
 
     if probability(0.5) {
-        args.append("--proto-assign-seq-opt")
+        args.append("--proto-assign-seq-lazy-func-opt")
         if probability(0.5) {
             args.append("--proto-assign-seq-opt-count=1")
         }
+    }
+
+    if probability(0.5) {
+        args.append("--private-field-bytecodes")
     }
 
     //
@@ -1039,7 +1149,6 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
         // Maglev related flags
         chooseBooleanFlag("maglev-inline-api-calls")
         chooseBooleanFlag("maglev-inlining")
-        chooseBooleanFlag("maglev-loop-peeling")
         chooseBooleanFlag("maglev-optimistic-peeled-loops")
         chooseBooleanFlag("maglev-pretenure-store-values")
         chooseBooleanFlag("maglev-poly-calls")
@@ -1048,7 +1157,6 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
         chooseBooleanFlag("maglev-range-analysis")
         chooseBooleanFlag("maglev-escape-analysis")
         chooseBooleanFlag("maglev-licm")
-        chooseBooleanFlag("maglev-untagged-phis")
 
         // Compiler related flags
         chooseBooleanFlag("turbo-move-optimization")

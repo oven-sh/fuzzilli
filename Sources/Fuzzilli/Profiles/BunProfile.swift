@@ -1180,7 +1180,7 @@ public let BunSleepGenerator = CodeGenerator("BunSleepGenerator") { b in
 
 // Generator that exercises Bun hash APIs with specific algorithm strings
 public let BunHashGenerator = CodeGenerator("BunHashGenerator") { b in
-    let algorithms = ["md4", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "sha512-256", "blake2b256", "blake2b512"]
+    let algorithms = ["md4", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "sha512-256", "blake2b256", "blake2b512", "sha3-224", "sha3-256", "sha3-384", "sha3-512"]
     let digestFormats = ["hex", "base64"]
 
     let algorithm = b.loadString(algorithms.randomElement()!)
@@ -1569,7 +1569,31 @@ public let BunMarkdownGenerator = CodeGenerator("BunMarkdownGenerator") { b in
         "~~strike~~ **bold** *italic*",
     ]
     let input = b.loadString(inputs.randomElement()!)
-    b.callMethod("html", on: markdown, withArgs: [input])
+    b.callMethod(chooseUniform(from: ["html", "ansi"]), on: markdown, withArgs: [input])
+}
+
+// Generator that exercises crypto.subtle with SHA3 digests and X25519 key derivation
+public let BunSubtleCryptoGenerator = CodeGenerator("BunSubtleCryptoGenerator") { b in
+    let crypto = b.createNamedVariable(forBuiltin: "crypto")
+    let subtle = b.getProperty("subtle", of: crypto)
+
+    if probability(0.6) {
+        let algos = ["SHA-1", "SHA-256", "SHA-384", "SHA-512", "SHA3-256", "SHA3-384", "SHA3-512"]
+        let encoder = b.construct(b.createNamedVariable(forBuiltin: "TextEncoder"))
+        let data = b.callMethod("encode", on: encoder, withArgs: [b.loadString(b.randomString())])
+        b.callMethod("digest", on: subtle, withArgs: [b.loadString(algos.randomElement()!), data])
+    } else {
+        let algo = b.createObject(with: ["name": b.loadString("X25519")])
+        let usages = b.createArray(with: [b.loadString("deriveBits")])
+        let keyPairP = b.callMethod("generateKey", on: subtle, withArgs: [algo, b.loadBool(true), usages])
+        b.callMethod("then", on: keyPairP, withArgs: [b.buildArrowFunction(with: .parameters(n: 1)) { args in
+            let kp = args[0]
+            let priv = b.getProperty("privateKey", of: kp)
+            let pub = b.getProperty("publicKey", of: kp)
+            let params = b.createObject(with: ["name": b.loadString("X25519"), "public": pub])
+            b.callMethod("deriveBits", on: subtle, withArgs: [params, priv, b.loadInt(256)])
+        }])
+    }
 }
 
 // Generator that exercises Bun.CSRF
@@ -1694,6 +1718,7 @@ let bunProfile = Profile(
                 delete globalThis.Loader;
                 Bun.generateHeapSnapshot = console.profile = console.profileEnd = process.abort = () => {};
                 Bun.FFI = undefined;
+                Bun.WebView = undefined;
                 """,
 
     codeSuffix: """
@@ -1732,6 +1757,7 @@ let bunProfile = Profile(
         (BunServeGenerator,          10),
         (BunShellGenerator,           5),
         (BunMarkdownGenerator,       10),
+        (BunSubtleCryptoGenerator,    5),
         (BunCSRFGenerator,            5),
         (BunStreamConversionGenerator, 10),
         (BunArchiveGenerator,         5),
@@ -1819,6 +1845,7 @@ let bunProfile = Profile(
         "Bun.hash.xxHash3"    : .function([.jsAnything, .opt(.integer)] => .integer),
         "Bun.hash.murmur32v3" : .function([.jsAnything, .opt(.integer)] => .integer),
         "Bun.hash.murmur64v2" : .function([.jsAnything, .opt(.integer)] => .integer),
+        "Bun.hash.rapidhash"  : .function([.jsAnything, .opt(.bigint)] => .bigint),
 
         // String utilities
         "Bun.escapeHTML"    : .function([.string] => .string),
@@ -1935,7 +1962,7 @@ let bunProfile = Profile(
         "Bun.readableStreamToBytes"       : .function([.jsAnything] => .jsPromise),
 
         // Markdown
-        "Bun.markdown"      : .object(withMethods: ["html", "render"]),
+        "Bun.markdown"      : .object(withMethods: ["html", "render", "ansi"]),
 
         // CSRF
         "Bun.CSRF"          : .object(withMethods: ["generate", "verify"]),

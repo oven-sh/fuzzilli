@@ -250,6 +250,13 @@ public extension ILType {
         withMethods: ["text", "json", "arrayBuffer", "slice", "stream"]
     )
 
+    // BunCronJob - in-process cron handle returned by Bun.cron(schedule, handler)
+    static let bunCronJob = ILType.object(
+        ofGroup: "BunCronJob",
+        withProperties: ["cron"],
+        withMethods: ["stop", "ref", "unref"]
+    )
+
     // Hash constructor instance types (each needs its own group to match builtin name)
     static let bunMD4 = ILType.object(ofGroup: "Bun.MD4", withProperties: [], withMethods: ["update", "digest", "copy"])
     static let bunMD5 = ILType.object(ofGroup: "Bun.MD5", withProperties: [], withMethods: ["update", "digest", "copy"])
@@ -767,8 +774,10 @@ public let bunJSONLGroup = ObjectGroup(
     instanceType: .bunJSONL,
     properties: [:],
     methods: [
-        "parse": [.string] => .jsAnything,
-        "parseChunk": [.string] => .jsAnything,
+        // parse/parseChunk accept string | TypedArray | DataView | ArrayBuffer,
+        // with optional start/end offsets (bytes for typed arrays, chars for strings).
+        "parse":      [.jsAnything, .opt(.integer), .opt(.integer)] => .jsArray,
+        "parseChunk": [.jsAnything, .opt(.integer), .opt(.integer)] => .object(),
     ]
 )
 
@@ -1117,6 +1126,19 @@ public let bunBuildArtifactGroup = ObjectGroup(
         "arrayBuffer": [] => .jsPromise,
         "slice":       [.opt(.integer), .opt(.integer)] => .bunBlob,
         "stream":      [] => .object(),
+    ]
+)
+
+public let bunCronJobGroup = ObjectGroup(
+    name: "BunCronJob",
+    instanceType: .bunCronJob,
+    properties: [
+        "cron": .string,
+    ],
+    methods: [
+        "stop":  [] => .bunCronJob,
+        "ref":   [] => .bunCronJob,
+        "unref": [] => .bunCronJob,
     ]
 )
 
@@ -2036,7 +2058,7 @@ let bunProfile = Profile(
         "Bun.fetch"         : .function([.string, .opt(.object())] => .jsPromise),
         "Bun.build"         : .function([.object()] => .jsPromise),
         "Bun.mmap"          : .function([.string] => .object()),
-        "Bun.udpSocket"     : .function([.object()] => .bunUDPSocket),
+        "Bun.udpSocket"     : .function([.object()] => .jsPromise),
 
         // SQL
         "Bun.sql"           : .function([.opt(.string)] => .jsAnything),
@@ -2059,7 +2081,12 @@ let bunProfile = Profile(
         "Bun.CSRF"          : .object(withMethods: ["generate", "verify"]),
 
         // Cron
-        "Bun.cron"          : .function([.string, .string, .string] => .jsPromise),
+        // Bun.cron has two overloads: (schedule, handler) => CronJob (in-process,
+        // synchronous) and (path, schedule, title) => Promise (OS-level). A Fuzzilli
+        // builtin maps to a single signature, so we model the in-process callback form:
+        // it has no host side effects (the OS-level form writes to crontab/launchd/Task
+        // Scheduler) and returns a CronJob the fuzzer can keep operating on.
+        "Bun.cron"          : .function([.string, .function()] => .bunCronJob),
         "Bun.cron.remove"   : .function([.string] => .jsPromise),
         "Bun.cron.parse"    : .function([.string, .opt(.jsAnything)] => .jsAnything),
 
@@ -2132,6 +2159,7 @@ let bunProfile = Profile(
         bunListenerGroup,
         bunUDPSocketGroup,
         bunBuildArtifactGroup,
+        bunCronJobGroup,
         bunArrayBufferSinkGroup,
         bunCookieGroup,
         bunCookieMapGroup,

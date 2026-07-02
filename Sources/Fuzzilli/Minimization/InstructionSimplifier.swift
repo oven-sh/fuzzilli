@@ -20,6 +20,7 @@ struct InstructionSimplifier: Reducer {
         simplifyGuardedInstructions(with: helper)
         simplifySingleInstructions(with: helper)
         simplifyMultiInstructions(with: helper)
+        simplifyWasmInstructions(with: helper)
     }
 
     func simplifyFunctionDefinitions(with helper: MinimizationHelper) {
@@ -30,11 +31,14 @@ struct InstructionSimplifier: Reducer {
             if begin is BeginPlainFunction { continue }
 
             let functionName = (begin as? BeginAnyNamedFunction)?.functionName ?? nil
-            let newBegin = Instruction(BeginPlainFunction(parameters: begin.parameters, functionName: functionName), inouts: helper.code[group.head].inouts, flags: .empty)
+            let newBegin = Instruction(
+                BeginPlainFunction(parameters: begin.parameters, functionName: functionName),
+                inouts: helper.code[group.head].inouts)
             let newEnd = Instruction(EndPlainFunction())
 
             // The resulting code may be invalid as we may be changing the context inside the body (e.g. turning an async function into a plain one).
-            helper.tryReplacements([(group.head, newBegin), (group.tail, newEnd)], expectCodeToBeValid: false)
+            helper.tryReplacements(
+                [(group.head, newBegin), (group.tail, newEnd)], expectCodeToBeValid: false)
         }
     }
 
@@ -45,6 +49,8 @@ struct InstructionSimplifier: Reducer {
             switch instr.op.opcode {
             case .beginPlainFunction(let op) where op.functionName != nil:
                 newOp = BeginPlainFunction(parameters: op.parameters, functionName: nil)
+            case .beginWorkerFunction(let op) where op.functionName != nil:
+                newOp = BeginWorkerFunction(parameters: op.parameters, functionName: nil)
             case .beginGeneratorFunction(let op) where op.functionName != nil:
                 newOp = BeginGeneratorFunction(parameters: op.parameters, functionName: nil)
             case .beginAsyncFunction(let op) where op.functionName != nil:
@@ -56,7 +62,9 @@ struct InstructionSimplifier: Reducer {
             }
 
             if let op = newOp {
-                helper.tryReplacing(instructionAt: instr.index, with: Instruction(op, inouts: instr.inouts, flags: .empty))
+                helper.tryReplacing(
+                    instructionAt: instr.index,
+                    with: Instruction(op, inouts: instr.inouts))
             }
         }
     }
@@ -78,7 +86,9 @@ struct InstructionSimplifier: Reducer {
             case .constructWithSpread(let op):
                 newOp = Construct(numArguments: op.numArguments, isGuarded: op.isGuarded)
             case .callMethodWithSpread(let op):
-                newOp = CallMethod(methodName: op.methodName, numArguments: op.numArguments, isGuarded: op.isGuarded)
+                newOp = CallMethod(
+                    methodName: op.methodName, numArguments: op.numArguments,
+                    isGuarded: op.isGuarded)
             case .callComputedMethodWithSpread(let op):
                 newOp = CallComputedMethod(numArguments: op.numArguments, isGuarded: op.isGuarded)
 
@@ -91,7 +101,9 @@ struct InstructionSimplifier: Reducer {
             }
 
             if let op = newOp {
-                helper.tryReplacing(instructionAt: instr.index, with: Instruction(op, inouts: instr.inouts, flags: .empty))
+                helper.tryReplacing(
+                    instructionAt: instr.index,
+                    with: Instruction(op, inouts: instr.inouts))
             }
         }
     }
@@ -103,7 +115,9 @@ struct InstructionSimplifier: Reducer {
             guard let op = instr.op as? GuardableOperation else { continue }
             let newOp = GuardableOperation.disableGuard(of: op)
             if newOp !== op {
-                helper.tryReplacing(instructionAt: instr.index, with: Instruction(newOp, inouts: instr.inouts, flags: .empty))
+                helper.tryReplacing(
+                    instructionAt: instr.index,
+                    with: Instruction(newOp, inouts: instr.inouts))
             }
         }
     }
@@ -116,40 +130,111 @@ struct InstructionSimplifier: Reducer {
         // All simplifications are performed at once to keep this logic simple.
         // This logic needs to be somewhat careful not to perform no-op replacements as
         // these would cause the fixpoint iteration to not terminate.
-        var newCode = Code()
+        var newCode = Code(isBundle: helper.code.isBundle)
         var numCopiedInstructions = 0
         for instr in helper.code {
             var keepInstruction = true
             switch instr.op.opcode {
-            case .destructObject(let op):
-                guard op.properties.count > 0 else {
-                    // Cannot simplify this as it would be a no-op
-                    break
-                }
 
-                let outputs = Array(instr.outputs)
-                for (i, propertyName) in op.properties.enumerated() {
-                    newCode.append(Instruction(GetProperty(propertyName: propertyName, isGuarded: false), output: outputs[i], inputs: [instr.input(0)]))
-                }
-                if op.hasRestElement {
-                    newCode.append(Instruction(DestructObject(properties: [], hasRestElement: true), output: outputs.last!, inputs: [instr.input(0)]))
-                }
-                keepInstruction = false
-            case .destructArray(let op):
-                guard op.indices.count > 1 || !op.lastIsRest else {
-                    // Cannot simplify this as it would be a no-op
-                    break
-                }
+            // TODO(rherouart): Also simplify DestructAndReassign in a similar way (by converting flat targets into individual assignment operations).
+            // TODO(rherouart): Consider a secondary simplification step that tries to drop default values.
+            case .destruct(let op):
+                guard !op.pattern.hasNestedDestructuring else { break }
+                guard
+                    instr.outputs.count > 1
+                        || (instr.outputs.count == 1 && !op.pattern.hasRestElement)
+                else { break }
 
-                let outputs = Array(instr.outputs)
-                for (i, idx) in op.indices.enumerated() {
-                    if i == op.indices.count - 1 && op.lastIsRest {
-                        newCode.append(Instruction(DestructArray(indices: [idx], lastIsRest: true), output: outputs.last!, inputs: [instr.input(0)]))
-                    } else {
-                        newCode.append(Instruction(GetElement(index: idx, isGuarded: false), output: outputs[i], inputs: [instr.input(0)]))
+                var outputs = instr.outputs.makeIterator()
+
+                switch op.pattern {
+                case .object(let obj):
+                    var leftOverProperties: [DestructuringPattern.ObjectProperty] = []
+                    var leftOverOutputs: [Variable] = []
+                    var simplifiedAny = false
+
+                    for property in obj.properties {
+                        let output = outputs.next()!
+                        if case .string(let propertyName) = property.key, !property.hasDefaultValue
+                        {
+                            newCode.append(
+                                Instruction(
+                                    GetProperty(propertyName: propertyName, isGuarded: false),
+                                    output: output, inputs: [instr.input(0)]))
+                            simplifiedAny = true
+                        } else {
+                            leftOverProperties.append(property)
+                            leftOverOutputs.append(output)
+                        }
+                    }
+
+                    if obj.hasRestElement {
+                        leftOverOutputs.append(outputs.next()!)
+                    }
+
+                    if simplifiedAny {
+                        if !leftOverProperties.isEmpty || obj.hasRestElement {
+                            newCode.append(
+                                Instruction(
+                                    Destruct(
+                                        pattern: DestructuringPattern.object(
+                                            DestructuringPattern.ObjectPattern(
+                                                properties: leftOverProperties,
+                                                hasRestElement: obj.hasRestElement)),
+                                        numInputs: instr.inputs.count,
+                                        numOutputs: leftOverOutputs.count),
+                                    inouts: Array(instr.inputs) + leftOverOutputs))
+                        }
+                        keepInstruction = false
+                    }
+
+                case .array(let arr):
+                    var leftOverElements: [DestructuringPattern.ArrayElement] = []
+                    var leftOverOutputs: [Variable] = []
+                    var currentIndex = 0
+                    var simplifiedAny = false
+
+                    for element in arr.elements {
+                        if case .flatBinding = element.target, !element.hasDefaultValue {
+                            let output = outputs.next()!
+                            newCode.append(
+                                Instruction(
+                                    GetElement(index: Int64(currentIndex), isGuarded: false),
+                                    output: output, inputs: [instr.input(0)]))
+                            leftOverElements.append(
+                                DestructuringPattern.ArrayElement(target: nil))
+                            simplifiedAny = true
+                        } else {
+                            if element.target == nil {
+                                // No output variable for elisions
+                            } else {
+                                leftOverOutputs.append(outputs.next()!)
+                            }
+                            leftOverElements.append(element)
+                        }
+                        currentIndex += 1
+                    }
+
+                    if arr.restTarget != .none {
+                        leftOverOutputs.append(outputs.next()!)
+                    }
+
+                    if simplifiedAny {
+                        if !leftOverOutputs.isEmpty {
+                            newCode.append(
+                                Instruction(
+                                    Destruct(
+                                        pattern: DestructuringPattern.array(
+                                            DestructuringPattern.ArrayPattern(
+                                                elements: leftOverElements,
+                                                restTarget: arr.restTarget)),
+                                        numInputs: instr.inputs.count,
+                                        numOutputs: leftOverOutputs.count),
+                                    inouts: Array(instr.inputs) + leftOverOutputs))
+                        }
+                        keepInstruction = false
                     }
                 }
-                keepInstruction = false
             default:
                 break
             }
@@ -163,6 +248,20 @@ struct InstructionSimplifier: Reducer {
         let didMakeChanges = numCopiedInstructions != helper.code.count
         if didMakeChanges {
             helper.testAndCommit(newCode)
+        }
+    }
+
+    func simplifyWasmInstructions(with helper: MinimizationHelper) {
+        for instr in helper.code {
+            if let op = instr.op as? WasmDefineArrayType, op.hasSuperType {
+                let newOp = WasmDefineArrayType(
+                    elementType: op.elementType, mutability: op.mutability, hasSuperType: false,
+                    isFinal: op.isFinal)
+                let newInouts = instr.inputs.dropFirst() + instr.outputs
+                helper.tryReplacing(
+                    instructionAt: instr.index,
+                    with: Instruction(newOp, inouts: Array(newInouts)))
+            }
         }
     }
 }

@@ -17,15 +17,23 @@ import Foundation
 /// Purely generative fuzzing engine, mostly used for initial corpus generation when starting without an existing corpus.
 public class GenerativeEngine: FuzzEngine {
     /// Approximate number of instructions to generate in additional to any prefix code.
-    private let numInstructionsToGenerate = 10
+    private var numInstructionsToGenerate = 10
 
-    public init() {
+    private let generateBundle: Bool
+
+    public init(generateBundle: Bool) {
+        self.generateBundle = generateBundle
         super.init(name: "GenerativeEngine")
     }
 
     /// Perform one round of fuzzing: simply generate a new program and execute it
-    public override func fuzzOne(_ group: DispatchGroup) {
+    public override func fuzzOne() {
         let b = fuzzer.makeBuilder()
+
+        if generateBundle {
+            // Increase the budget so that we are more likely to generate more items inside a bundle.
+            numInstructionsToGenerate = 100
+        }
 
         // Start by building a prefix that creates some variables (of known types) that the following CodeGenerators can then make use of.
         b.buildPrefix()

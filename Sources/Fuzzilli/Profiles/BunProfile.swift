@@ -2039,5 +2039,7 @@ let bunProfile = Profile(
         .colorFormatEnum,
     ],
 
+    additionalOptionsBags: [],
+
     optionalPostProcessor: nil
 )

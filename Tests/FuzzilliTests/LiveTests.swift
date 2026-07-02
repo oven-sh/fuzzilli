@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import XCTest
+
 @testable import Fuzzilli
 
 class LiveTests: XCTestCase {
@@ -26,12 +27,13 @@ class LiveTests: XCTestCase {
 
     /// Meta-test ensuring that the test framework can successfully terminate an endless loop.
     func testEndlessLoopTermination() throws {
-        let runner =  try GetJavaScriptExecutorOrSkipTest()
+        let runner = try GetJavaScriptExecutorOrSkipTest()
 
-        let results = try Self.runLiveTest(iterations: 1, withRunner: runner, timeoutInSeconds: 1) { b in
-            b.loadInt(123) // prefix
+        let results = try Self.runLiveTest(iterations: 1, withRunner: runner, timeoutInSeconds: 1) {
+            b in
+            b.loadInt(123)  // prefix
 
-            let module = b.buildWasmModule() { module in
+            let module = b.buildWasmModule { module in
                 module.addWasmFunction(with: [] => []) { function, label, args in
                     function.wasmBuildLoop(with: [] => [], args: []) { label, args in
                         function.wasmBranch(to: label)
@@ -58,7 +60,13 @@ class LiveTests: XCTestCase {
     }
 
     func testWasmCodeGenerationAndCompilation() throws {
-        let runner =  try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--wasm-allow-mixed-eh-for-testing"])
+        let runner = try GetJavaScriptExecutorOrSkipTest(
+            type: .any,
+            withArguments: [
+                "--experimental-fuzzing", "--wasm-allow-mixed-eh-for-testing",
+                "--experimental-wasm-acquire-release",
+            ]
+        )
 
         let results = try Self.runLiveTest(withRunner: runner) { b in
             // Fuzzilli can't handle situations where there aren't any variables available.
@@ -80,13 +88,15 @@ class LiveTests: XCTestCase {
             b.createWasmJSTag()
             b.createWasmTag(parameterTypes: [.wasmi32, .wasmf64])
 
-            b.buildWasmModule() { module in
-                module.addMemory(minPages: 2, maxPages: probability(0.5) ? nil : 5, isMemory64: probability(0.5))
+            b.buildWasmModule { module in
+                module.addMemory(
+                    minPages: 2, maxPages: probability(0.5) ? nil : 5, isMemory64: probability(0.5))
                 let signature = b.randomWasmSignature()
                 module.addWasmFunction(with: signature) { function, label, args in
-                    b.buildPrefix()
                     b.build(n: 40)
-                    return signature.outputTypes.map {b.randomVariable(ofType: $0) ?? function.generateRandomWasmVar(ofType: $0)!}
+                    return signature.outputTypes.map {
+                        b.randomVariable(ofType: $0) ?? function.generateRandomWasmVar(ofType: $0)!
+                    }
                 }
             }
         }
@@ -96,7 +106,13 @@ class LiveTests: XCTestCase {
     }
 
     func testWasmCodeGenerationAndCompilationAndExecution() throws {
-        let runner =  try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--wasm-allow-mixed-eh-for-testing"])
+        let runner = try GetJavaScriptExecutorOrSkipTest(
+            type: .any,
+            withArguments: [
+                "--experimental-fuzzing", "--wasm-allow-mixed-eh-for-testing",
+                "--experimental-wasm-acquire-release",
+            ]
+        )
 
         let results = try Self.runLiveTest(withRunner: runner) { b in
             // Fuzzilli can't handle situations where there aren't any variables available.
@@ -119,12 +135,14 @@ class LiveTests: XCTestCase {
             b.createWasmTag(parameterTypes: [.wasmi32, .wasmf64])
 
             let wasmSignature = b.randomWasmSignature()
-            let m = b.buildWasmModule() { module in
-                module.addMemory(minPages: 2, maxPages: probability(0.5) ? nil : 5, isMemory64: probability(0.5))
+            let m = b.buildWasmModule { module in
+                module.addMemory(
+                    minPages: 2, maxPages: probability(0.5) ? nil : 5, isMemory64: probability(0.5))
                 module.addWasmFunction(with: wasmSignature) { function, label, args in
-                    b.buildPrefix()
                     b.build(n: 40)
-                    return wasmSignature.outputTypes.map {b.randomVariable(ofType: $0) ?? function.generateRandomWasmVar(ofType: $0)!}
+                    return wasmSignature.outputTypes.map {
+                        b.randomVariable(ofType: $0) ?? function.generateRandomWasmVar(ofType: $0)!
+                    }
                 }
             }
 
@@ -136,16 +154,16 @@ class LiveTests: XCTestCase {
                 // TODO(pawkra): support shared refs.
                 let args = wasmSignature.parameterTypes.map {
                     switch $0 {
-                        case .wasmi64:
-                            return b.loadBigInt(123)
-                        case ILType.wasmFuncRef():
-                            return jsFunction
-                        case ILType.wasmNullExternRef(), ILType.wasmNullFuncRef(), ILType.wasmNullRef():
-                            return b.loadNull()
-                        case ILType.wasmExternRef(), ILType.wasmAnyRef():
-                            return b.createObject(with: [:])
-                        default:
-                            return b.loadInt(321)
+                    case .wasmi64:
+                        return b.loadBigInt(123)
+                    case ILType.wasmFuncRef():
+                        return jsFunction
+                    case ILType.wasmNullExternRef(), ILType.wasmNullFuncRef(), ILType.wasmNullRef():
+                        return b.loadNull()
+                    case ILType.wasmExternRef(), ILType.wasmAnyRef():
+                        return b.createObject(with: [:])
+                    default:
+                        return b.loadInt(321)
                     }
                 }
                 b.callMethod(m.getExportedMethod(at: 0), on: m.loadExports(), withArgs: args)
@@ -163,11 +181,151 @@ class LiveTests: XCTestCase {
         checkFailureRate(testResults: results, maxFailureRate: 0.35)
     }
 
+    func testBinaryenWasmCodeGenerationAndCompilation() throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest(
+            type: .any,
+            withArguments: [
+                "--wasm-staging", "--wasm-allow-mixed-eh-for-testing",
+                "--experimental-fuzzing",
+            ]
+        )
+
+        guard findWasmOptInPath() != nil else {
+            throw XCTSkip(
+                "wasm-opt not found in PATH. To run this test, please ensure that the directory containing wasm-opt is added to your PATH environment variable. Skipping test for now."
+            )
+        }
+
+        let results = try Self.runLiveTest(withRunner: runner) { b in
+            b.loadInt(123)  // dummy prefix
+            if runBinaryenWasmGenerator(b: b) == nil {
+                let errorMsg = b.loadString("BinaryenWasmGenerator failed to generate Wasm module")
+                b.throwException(errorMsg)
+            }
+        }
+
+        // For now, we expect a maximum of 10% of Wasm compilation attempts to fail.
+        checkFailureRate(testResults: results, maxFailureRate: 0.1)
+    }
+
+    func testBinaryenWasmCodeGenerationAndCompilationAndExecution() throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest(
+            type: .any,
+            withArguments: [
+                "--wasm-staging", "--wasm-allow-mixed-eh-for-testing",
+                "--experimental-fuzzing",
+            ]
+        )
+
+        guard findWasmOptInPath() != nil else {
+            throw XCTSkip(
+                "wasm-opt not found in PATH. To run this test, please ensure that the directory containing wasm-opt is added to your PATH environment variable. Skipping test for now."
+            )
+        }
+
+        let results = try Self.runLiveTest(withRunner: runner) { b in
+            b.loadInt(123)  // dummy prefix
+
+            guard let metadata = runBinaryenWasmGenerator(b: b) else {
+                let errorMsg = b.loadString("BinaryenWasmGenerator failed to generate Wasm module")
+                b.throwException(errorMsg)
+                return
+            }
+
+            // The last instruction in our generator was `b.getProperty("exports", of: instance)`.
+            let exports = b.lastInstruction().output
+
+            Self.generateACallToWasmExport(b: b, metadata: metadata, exports: exports)
+        }
+
+        // For now, we expect a maximum of 50% of Wasm execution attempts to fail.
+        checkFailureRate(testResults: results, maxFailureRate: 0.50)
+    }
+
+    func testBinaryenWasmMutator() throws {
+        let runner = try GetJavaScriptExecutorOrSkipTest(
+            type: .any,
+            withArguments: [
+                "--wasm-staging", "--wasm-allow-mixed-eh-for-testing",
+                "--experimental-fuzzing",
+            ]
+        )
+
+        guard let wasmOptPath = findWasmOptInPath() else {
+            throw XCTSkip("wasm-opt not found in PATH")
+        }
+
+        let liveTestConfig = Configuration(
+            logLevel: .error,
+            enableInspection: true,
+            wasmOptPath: wasmOptPath
+        )
+        let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
+        let mutator = BinaryenWasmMutator()
+
+        let results = try Self.runLiveTest(withRunner: runner) { b in
+            // Generate program in a separate builder.
+            let genBuilder = fuzzer.makeBuilder()
+            guard let metadata = runBinaryenWasmGenerator(b: genBuilder) else {
+                let errorMsg = b.loadString("BinaryenWasmGenerator failed to generate Wasm module")
+                b.throwException(errorMsg)
+                return
+            }
+            let program = genBuilder.finalize()
+
+            // Verify original metadata.
+            var originalMetadata: WasmModuleMetadata? = nil
+            for instr in program.code {
+                if let op = instr.op as? RawWasmModule {
+                    originalMetadata = op.metadata
+                    break
+                }
+            }
+            XCTAssertNotNil(originalMetadata, "Generated program should contain a Wasm module")
+
+            // Mutate the program.
+            let mutBuilder = fuzzer.makeBuilder(forMutating: program)
+            guard let mutatedProgram = mutator.mutate(program, using: mutBuilder, for: fuzzer)
+            else {
+                fatalError("Mutator failed to produce program")
+            }
+
+            // Verify metadata preservation.
+            var mutatedMetadata: WasmModuleMetadata? = nil
+            for instr in mutatedProgram.code {
+                if let op = instr.op as? RawWasmModule {
+                    mutatedMetadata = op.metadata
+                    break
+                }
+            }
+            XCTAssertNotNil(mutatedMetadata, "Mutated program should contain a Wasm module")
+            XCTAssertEqual(
+                originalMetadata, mutatedMetadata,
+                "Wasm metadata should NOT have changed after mutation")
+
+            // Append the mutated program onto the ProgramBuilder.
+            b.append(mutatedProgram)
+
+            // Generate a call to the exported Wasm function.
+            let exports = b.lastInstruction().output
+            Self.generateACallToWasmExport(b: b, metadata: metadata, exports: exports)
+        }
+
+        checkFailureRate(testResults: results, maxFailureRate: 0.65)
+    }
+
     // The closure can use the ProgramBuilder to emit a program of a specific
     // shape that is then executed with the given runner. We then check that
     // we stay below the maximum failure rate over the given number of iterations.
-    static func runLiveTest(iterations n: Int = 250, withRunner runner: JavaScriptExecutor, timeoutInSeconds: Int = 5, body: (ProgramBuilder) -> Void) throws -> (failureRate: Double, failureMessages: [String: Int]) {
-        let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
+    static func runLiveTest(
+        iterations n: Int = 250, withRunner runner: JavaScriptExecutor, timeoutInSeconds: Int = 5,
+        body: (ProgramBuilder) -> Void
+    ) throws -> (failureRate: Double, failureMessages: [String: Int]) {
+        let liveTestConfig = Configuration(
+            logLevel: .error,
+            enableInspection: true,
+            wasmOptPath: findWasmOptInPath()
+        )
 
         // We have to use the proper JavaScriptEnvironment here.
         // This ensures that we use the available builtins.
@@ -178,11 +336,13 @@ class LiveTests: XCTestCase {
         var failureDirectory: URL? = nil
 
         if ProcessInfo.processInfo.environment["FUZZILLI_TEST_DEBUG"] != nil {
-            failureDirectory = FileManager().temporaryDirectory.appendingPathComponent("fuzzilli_livetest_failures")
+            failureDirectory = FileManager().temporaryDirectory.appendingPathComponent(
+                "fuzzilli_livetest_failures")
             print("Saving LiveTest failures to \(String(describing: failureDirectory!)).")
             do {
                 try? FileManager.default.removeItem(at: failureDirectory!)
-                try FileManager.default.createDirectory(at: failureDirectory!, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    at: failureDirectory!, withIntermediateDirectories: true)
             } catch {}
         }
 
@@ -202,7 +362,8 @@ class LiveTests: XCTestCase {
         }
 
         DispatchQueue.concurrentPerform(iterations: n) { i in
-            let result = executeAndParseResults(program: programs[i], runner: runner, timeoutInSeconds: timeoutInSeconds)
+            let result = executeAndParseResults(
+                program: programs[i], runner: runner, timeoutInSeconds: timeoutInSeconds)
             results[i] = result
         }
 
@@ -210,7 +371,8 @@ class LiveTests: XCTestCase {
             switch result! {
             case .failed(let message):
                 if let path = failureDirectory {
-                    programs[i].program.storeToDisk(atPath: path.appendingPathComponent("failure_\(i).fzil").path)
+                    programs[i].program.storeToDisk(
+                        atPath: path.appendingPathComponent("failure_\(i).fzil").path)
                 }
                 failures += 1
                 failureMessages[message] = (failureMessages[message] ?? 0) + 1
@@ -224,24 +386,33 @@ class LiveTests: XCTestCase {
         return (failureRate, failureMessages)
     }
 
-    func checkFailureRate(testResults: (failureRate: Double, failureMessages: [String: Int]), maxFailureRate: Double) {
+    func checkFailureRate(
+        testResults: (failureRate: Double, failureMessages: [String: Int]), maxFailureRate: Double
+    ) {
         if testResults.failureRate >= maxFailureRate {
-            var message = "Failure rate is too high. Should be below \(String(format: "%.2f", maxFailureRate * 100))% but we observed \(String(format: "%.2f", testResults.failureRate * 100))%\n"
+            var message =
+                "Failure rate is too high. Should be below \(String(format: "%.2f", maxFailureRate * 100))% but we observed \(String(format: "%.2f", testResults.failureRate * 100))%\n"
             message += "Observed failures:\n"
-            for (signature, count) in testResults.failureMessages.sorted(by: { $0.value > $1.value }) {
+            for (signature, count) in testResults.failureMessages.sorted(by: { $0.value > $1.value }
+            ) {
                 message += "    \(count)x \(signature)\n"
             }
             if ProcessInfo.processInfo.environment["FUZZILLI_TEST_DEBUG"] == nil {
-                message += "If you want to dump failing programs to disk you can set FUZZILLI_TEST_DEBUG=1 in your environment."
+                message +=
+                    "If you want to dump failing programs to disk you can set FUZZILLI_TEST_DEBUG=1 in your environment."
             }
             XCTFail(message)
         }
     }
 
-    static func executeAndParseResults(program: (program: Program, jsProgram: String), runner: JavaScriptExecutor, timeoutInSeconds: Int) -> ExecutionResult {
+    static func executeAndParseResults(
+        program: (program: Program, jsProgram: String), runner: JavaScriptExecutor,
+        timeoutInSeconds: Int
+    ) -> ExecutionResult {
 
         do {
-            let result = try runner.executeScript(program.jsProgram,
+            let result = try runner.executeScript(
+                program.jsProgram,
                 withTimeout: Double(timeoutInSeconds) * Seconds)
             if result.isFailure {
                 var signature: String? = nil
@@ -276,5 +447,59 @@ class LiveTests: XCTestCase {
         }
 
         return .succeeded
+    }
+
+    // Generates a call to an exported function or accesses an exported global if no simple function is available.
+    private static func generateACallToWasmExport(
+        b: ProgramBuilder,
+        metadata: WasmModuleMetadata,
+        exports: Variable
+    ) {
+        let simpleTypes: [ILType] = [.integer, .bigint, .float]
+
+        // Find a function with simple parameters to call.
+        let simpleFunc = metadata.functions.first { funcExport in
+            let paramsOk = funcExport.signature.parameters.allSatisfy { param in
+                guard case .plain(let type) = param else {
+                    fatalError("Unexpected Wasm parameter type")
+                }
+                return simpleTypes.contains(type)
+            }
+            return paramsOk
+        }
+
+        // Call the method inside a try-catch block to ignore expected WebAssembly runtime exceptions.
+        b.buildTryCatchFinally {
+            if let targetFunc = simpleFunc {
+                let args = targetFunc.signature.parameters.map { param in
+                    guard case .plain(let type) = param else {
+                        fatalError("Unexpected Wasm parameter type")
+                    }
+
+                    if let randomVar = b.randomVariable(ofType: type) {
+                        return randomVar
+                    }
+
+                    if type.Is(.integer) {
+                        return b.loadInt(0)
+                    } else if type.Is(.bigint) {
+                        return b.loadBigInt(0)
+                    } else {
+                        // type.Is(.float)
+                        return b.loadFloat(0.0)
+                    }
+                }
+                b.callMethod(targetFunc.name, on: exports, withArgs: args)
+            } else if let firstGlobal = metadata.globals.first {
+                let globalObj = b.getProperty(firstGlobal, of: exports)
+                b.getProperty("value", of: globalObj)
+            }
+        } catchBody: { exception in
+            let wasmGlobal = b.createNamedVariable(forBuiltin: "WebAssembly")
+            let wasmException = b.getProperty("Exception", of: wasmGlobal)
+            b.buildIf(b.unary(.LogicalNot, b.testInstanceOf(exception, wasmException))) {
+                b.throwException(exception)
+            }
+        }
     }
 }

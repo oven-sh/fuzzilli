@@ -19,10 +19,10 @@ import PackageDescription
 let package = Package(
     name: "Fuzzilli",
     platforms: [
-        .macOS(.v13),
+        .macOS(.v13)
     ],
     products: [
-        .library(name: "Fuzzilli",targets: ["Fuzzilli"]),
+        .library(name: "Fuzzilli", targets: ["Fuzzilli"])
     ],
     dependencies: [
         // We use an exact version here as we also use this version to generate the .pb.swift to
@@ -31,62 +31,78 @@ let package = Package(
         // regenerated, whenever the version is bumped.
         .package(url: "https://github.com/apple/swift-protobuf.git", exact: "1.35.0"),
         .package(
-          url: "https://github.com/apple/swift-collections.git",
-          .upToNextMinor(from: "1.2.0")
+            url: "https://github.com/apple/swift-collections.git",
+            .upToNextMinor(from: "1.2.0")
+        ),
+        .package(
+            url: "https://github.com/apple/swift-algorithms.git",
+            .upToNextMinor(from: "1.2.1")
         ),
     ],
     targets: [
-        .target(name: "libsocket",
-                dependencies: []),
+        .target(
+            name: "libsocket",
+            dependencies: []),
 
-        .target(name: "libreprl",
-                dependencies: []),
+        .target(
+            name: "libreprl",
+            dependencies: []),
 
-        .target(name: "libcoverage",
-                dependencies: [],
-                cSettings: [.unsafeFlags(["-O3"])],     // Using '-c release' when building uses '-O2', so '-O3' provides a performance gain
-                linkerSettings: [.linkedLibrary("rt", .when(platforms: [.linux]))]),
+        .target(
+            name: "libcoverage",
+            dependencies: [],
+            cSettings: [.unsafeFlags(["-O3"])],  // Using '-c release' when building uses '-O2', so '-O3' provides a performance gain
+            linkerSettings: [.linkedLibrary("rt", .when(platforms: [.linux]))]),
 
-        .target(name: "Fuzzilli",
-                dependencies: [
-                    .product(name: "SwiftProtobuf", package: "swift-protobuf"),
-                    .product(name: "Collections", package: "swift-collections"),
-                    "libsocket",
-                    "libreprl",
-                    "libcoverage"],
-                exclude: [
-                    "Protobuf/operations.proto",
-                    "Protobuf/program.proto",
-                    "Protobuf/sync.proto",
-                    "Protobuf/README.md",
-                    "Protobuf/gen_programproto.py"],
-                resources: [
-                    // The ast.proto file is required by the node.js parser
-                    .copy("Protobuf/ast.proto"),
-                    .copy("Compiler/Parser")]),
+        .target(
+            name: "Fuzzilli",
+            dependencies: [
+                .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+                .product(name: "Collections", package: "swift-collections"),
+                "libsocket",
+                "libreprl",
+                "libcoverage",
+            ],
+            exclude: [
+                "Protobuf/operations.proto",
+                "Protobuf/program.proto",
+                "Protobuf/sync.proto",
+                "Protobuf/README.md",
+                "Protobuf/gen_programproto.py",
+            ],
+            resources: [
+                // The ast.proto file is required by the node.js parser
+                .copy("Protobuf/ast.proto"),
+                .copy("Compiler/Parser"),
+            ]),
 
-        .executableTarget(name: "REPRLRun",
-                dependencies: ["libreprl"]),
+        .executableTarget(
+            name: "REPRLRun",
+            dependencies: ["libreprl"]),
 
-        .executableTarget(name: "FuzzilliCli",
-                dependencies: ["Fuzzilli"]),
+        .executableTarget(
+            name: "FuzzilliCli",
+            dependencies: ["Fuzzilli"]),
 
-        .executableTarget(name: "FuzzILTool",
-                dependencies: ["Fuzzilli"]),
+        .executableTarget(
+            name: "FuzzILTool",
+            dependencies: ["Fuzzilli"]),
 
         // Tool that runs d8 in Dumpling mode. First time it runs with Maglev
         // and Turbofan. Second time without. In both runs frames are dumped
         // in certain points to the files. The dumps are later compared for
         // equality. If they are not equal, it means that there's likely a bug
         // in V8.
-        .executableTarget(name: "RelateTool",
-                dependencies: ["Fuzzilli"]),
+        .executableTarget(
+            name: "RelateTool",
+            dependencies: ["Fuzzilli"]),
 
         .executableTarget(name: "FuzzilliDetectMissingBuiltins", dependencies: ["Fuzzilli"]),
 
-        .testTarget(name: "FuzzilliTests",
-                    dependencies: ["Fuzzilli"],
-                    resources: [.copy("CompilerTests")]),
+        .testTarget(
+            name: "FuzzilliTests",
+            dependencies: ["Fuzzilli", .product(name: "Algorithms", package: "swift-algorithms")],
+            resources: [.copy("CompilerTests")]),
     ],
     swiftLanguageVersions: [.v5]
 )

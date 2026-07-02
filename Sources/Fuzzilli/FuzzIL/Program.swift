@@ -46,20 +46,27 @@ public final class Program: CustomStringConvertible {
     /// Each program has a unique ID to identify it even accross different fuzzer instances.
     public private(set) lazy var id = UUID()
 
+    /// The current version of the FuzzIL/Protobuf schema.
+    /// This version should be bumped whenever a breaking change is made to the protobuf format.
+    public static let protobufVersion: UInt32 = 6
+
     /// Constructs an empty program.
-    public init() {
-        self.code = Code()
+    public init(isBundle: Bool) {
+        self.code = Code(isBundle: isBundle)
         self.parent = nil
     }
 
     /// Constructs a program with the given code. The code must be statically valid.
     public init(with code: Code) {
-        assert(code.isStaticallyValid())
+        code.assertIsStaticallyValid()
         self.code = code
     }
 
     /// Construct a program with the given code and type information.
-    public convenience init(code: Code, parent: Program? = nil, comments: ProgramComments = ProgramComments(), contributors: Contributors = Contributors()) {
+    public convenience init(
+        code: Code, parent: Program? = nil, comments: ProgramComments = ProgramComments(),
+        contributors: Contributors = Contributors()
+    ) {
         // We should never see instructions with set flags here, as Flags are currently only used temporarily (e.g. Minimizer)
         assert(code.allSatisfy { instr in instr.flags == Instruction.Flags.empty })
         self.init(with: code)
@@ -138,6 +145,8 @@ extension Program: ProtobufConvertible {
             if let parent = parent {
                 $0.parent = parent.asProtobuf(opCache: opCache)
             }
+            $0.isBundle = code.isBundle
+            $0.version = Program.protobufVersion
         }
     }
 
@@ -146,19 +155,27 @@ extension Program: ProtobufConvertible {
     }
 
     convenience init(from proto: ProtobufType, opCache: OperationCache? = nil) throws {
-        var code = Code()
+        if proto.version != Program.protobufVersion {
+            throw FuzzilliError.programDecodingError(
+                "Incompatible protobuf version: expected \(Program.protobufVersion), but found \(proto.version)"
+            )
+        }
+
+        var code = Code(isBundle: proto.isBundle)
         for (i, protoInstr) in proto.code.enumerated() {
             do {
                 code.append(try Instruction(from: protoInstr, with: opCache))
             } catch FuzzilliError.instructionDecodingError(let reason) {
-                throw FuzzilliError.programDecodingError("could not decode instruction #\(i): \(reason)")
+                throw FuzzilliError.programDecodingError(
+                    "could not decode instruction #\(i): \(reason)")
             }
         }
 
         do {
             try code.check()
         } catch FuzzilliError.codeVerificationError(let reason) {
-            throw FuzzilliError.programDecodingError("decoded code is not statically valid: \(reason)")
+            throw FuzzilliError.programDecodingError(
+                "decoded code is not statically valid: \(reason)")
         }
 
         self.init(code: code)

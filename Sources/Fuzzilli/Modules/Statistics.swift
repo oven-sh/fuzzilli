@@ -15,6 +15,9 @@
 import Foundation
 
 public class Statistics: Module {
+    /// The fuzzer instance this module belongs to.
+    private var fuzzer: Fuzzer?
+
     /// The data just for this instance.
     private var ownData = Fuzzilli_Protobuf_Statistics()
 
@@ -64,7 +67,7 @@ public class Statistics: Module {
 
     public init() {}
 
-    static func percentageOrNa(_ percentage: Double?, _ padding: Int) -> String {
+    public static func percentageOrNa(_ percentage: Double?, _ padding: Int) -> String {
         return if let percentage = percentage {
             String(format: "%.2f%%", percentage * 100).leftPadded(toLength: padding)
         } else {
@@ -76,7 +79,7 @@ public class Statistics: Module {
     public func compute() -> Fuzzilli_Protobuf_Statistics {
         assert(nodes.count - inactiveNodes.count == ownData.numChildNodes)
 
-        // Compute local statistics data
+        // Update local statistics data
         ownData.avgCorpusSize = Double(corpusSize)
         ownData.avgProgramSize = programSizeAvg.currentValue
         ownData.avgCorpusProgramSize = corpusProgramSizeAvg.currentValue
@@ -86,8 +89,40 @@ public class Statistics: Module {
         ownData.correctnessRate = correctnessRate.currentValue
         ownData.timeoutRate = timeoutRate.currentValue
 
+        if let fuzzer = fuzzer {
+            ownData.contributorStats = []
+            for generator in fuzzer.codeGenerators {
+                for stub in generator.parts {
+                    var stats = Fuzzilli_Protobuf_Statistics.ContributorStats()
+                    stats.name = stub.name
+                    stats.invocationCount = UInt64(stub.invocationCount)
+                    stats.successfulGenerationCount = UInt64(stub.successfulGenerationCount)
+                    stats.totalSamples = UInt64(stub.totalSamples)
+                    stats.correctSamples = UInt64(stub.correctSamples)
+                    stats.isCodeGenerator = true
+                    ownData.contributorStats.append(stats)
+                }
+            }
+            for template in fuzzer.programTemplates {
+                var stats = Fuzzilli_Protobuf_Statistics.ContributorStats()
+                stats.name = template.name
+                stats.invocationCount = UInt64(template.invocationCount)
+                stats.successfulGenerationCount = UInt64(template.successfulGenerationCount)
+                stats.totalSamples = UInt64(template.totalSamples)
+                stats.correctSamples = UInt64(template.correctSamples)
+                stats.isCodeGenerator = false
+                ownData.contributorStats.append(stats)
+
+            }
+        }
+
         // Compute global statistics data
         var data = ownData
+
+        var contributorStatsByName = [String: Fuzzilli_Protobuf_Statistics.ContributorStats]()
+        for stats in ownData.contributorStats {
+            contributorStatsByName[stats.name] = stats
+        }
 
         for (id, node) in nodes {
             // Add "global" fields, even from nodes that are no longer active
@@ -95,6 +130,19 @@ public class Statistics: Module {
             data.validSamples += node.validSamples
             data.timedOutSamples += node.timedOutSamples
             data.totalExecs += node.totalExecs
+
+            for stats in node.contributorStats {
+                if var existing = contributorStatsByName[stats.name] {
+                    assert(existing.isCodeGenerator == stats.isCodeGenerator)
+                    existing.invocationCount += stats.invocationCount
+                    existing.successfulGenerationCount += stats.successfulGenerationCount
+                    existing.totalSamples += stats.totalSamples
+                    existing.correctSamples += stats.correctSamples
+                    contributorStatsByName[stats.name] = existing
+                } else {
+                    contributorStatsByName[stats.name] = stats
+                }
+            }
 
             if !inactiveNodes.contains(id) {
                 // Add fields that only have meaning for active nodes
@@ -118,6 +166,8 @@ public class Statistics: Module {
             // All other fields are already indirectly synchronized (e.g. number of interesting samples founds)
         }
 
+        data.contributorStats = Array(contributorStatsByName.values)
+
         // Divide each average by the toal number of nodes. See above.
         let totalNumberOfNodes = Double(data.numChildNodes + 1)
         data.avgCorpusSize /= totalNumberOfNodes
@@ -133,6 +183,7 @@ public class Statistics: Module {
     }
 
     public func initialize(with fuzzer: Fuzzer) {
+        self.fuzzer = fuzzer
         fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { _ in
             self.ownData.crashingSamples += 1
         }
@@ -201,7 +252,7 @@ public class Statistics: Module {
             let now = Date()
             let interval = Double(now.timeIntervalSince(self.lastEpsUpdate))
             guard interval >= 1.0 else {
-                return // This can happen due to delays in queue processing
+                return  // This can happen due to delays in queue processing
             }
 
             let execsPerSecond = self.currentExecs / interval
@@ -217,17 +268,25 @@ public class Statistics: Module {
             fuzzer.timers.scheduleTask(every: 15 * Minutes) {
                 self.logger.info("Mutator Statistics:")
                 let nameMaxLength = fuzzer.mutators.map({ $0.name.count }).max()!
-                let maxSamplesGeneratedStringLength = fuzzer.mutators.map({ String($0.totalSamples).count }).max()!
+                let maxSamplesGeneratedStringLength = fuzzer.mutators.map({
+                    String($0.totalSamples).count
+                }).max()!
                 for mutator in fuzzer.mutators {
                     let name = mutator.name.rightPadded(toLength: nameMaxLength)
                     let correctnessRate = Self.percentageOrNa(mutator.correctnessRate, 7)
                     let failureRate = Self.percentageOrNa(mutator.failureRate, 7)
                     let timeoutRate = Self.percentageOrNa(mutator.timeoutRate, 6)
-                    let interestingSamplesRate = Self.percentageOrNa(mutator.interestingSamplesRate, 7)
-                    let avgInstructionsAdded = String(format: "%.2f", mutator.avgNumberOfInstructionsGenerated).leftPadded(toLength: 5)
-                    let samplesGenerated = String(mutator.totalSamples).leftPadded(toLength: maxSamplesGeneratedStringLength)
+                    let interestingSamplesRate = Self.percentageOrNa(
+                        mutator.interestingSamplesRate, 7)
+                    let avgInstructionsAdded = String(
+                        format: "%.2f", mutator.avgNumberOfInstructionsGenerated
+                    ).leftPadded(toLength: 5)
+                    let samplesGenerated = String(mutator.totalSamples).leftPadded(
+                        toLength: maxSamplesGeneratedStringLength)
                     let crashesFound = mutator.crashesFound
-                    self.logger.info("    \(name) : Correctness rate: \(correctnessRate), Failure rate: \(failureRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated), Total # of crashes found: \(crashesFound)")
+                    self.logger.info(
+                        "    \(name) : Correctness rate: \(correctnessRate), Failure rate: \(failureRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated), Total # of crashes found: \(crashesFound)"
+                    )
                 }
             }
 
@@ -241,12 +300,18 @@ public class Statistics: Module {
                     for stub in generator.parts {
                         let name = stub.name.rightPadded(toLength: nameMaxLength)
                         let correctnessRate = Self.percentageOrNa(stub.correctnessRate, 7)
-                        let interestingSamplesRate = Self.percentageOrNa(stub.interestingSamplesRate, 7)
+                        let interestingSamplesRate = Self.percentageOrNa(
+                            stub.interestingSamplesRate, 7)
                         let timeoutRate = Self.percentageOrNa(stub.timeoutRate, 6)
-                        let avgInstructionsAdded = String(format: "%.2f", stub.avgNumberOfInstructionsGenerated).leftPadded(toLength: 5)
-                        let invocationSuccessRate = Self.percentageOrNa(stub.invocationSuccessRate, 6)
+                        let avgInstructionsAdded = String(
+                            format: "%.2f", stub.avgNumberOfInstructionsGenerated
+                        ).leftPadded(toLength: 5)
+                        let invocationSuccessRate = Self.percentageOrNa(
+                            stub.invocationSuccessRate, 6)
                         let samplesGenerated = stub.totalSamples
-                        self.logger.verbose("    \(name) : Invocation Success: \(invocationSuccessRate), Correctness rate: \(correctnessRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated)")
+                        self.logger.verbose(
+                            "    \(name) : Invocation Success: \(invocationSuccessRate), Correctness rate: \(correctnessRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated)"
+                        )
                     }
                 }
             }

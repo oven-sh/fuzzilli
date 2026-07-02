@@ -12,32 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
+import Testing
+
 @testable import Fuzzilli
 
-class EnvironmentTests: XCTestCase {
+@Suite struct EnvironmentTests {
 
-    func testJSEnvironmentConsistency() {
+    @Test func testJSEnvironmentConsistency() {
         // The constructor will already perform various consistency checks, so we don't repeat them here.
-        let _ = JavaScriptEnvironment(additionalBuiltins: [:], additionalObjectGroups: [])
+        _ = JavaScriptEnvironment(additionalBuiltins: [:], additionalObjectGroups: [])
     }
 
     /// Test all the builtin objects that are reachable from the global this.
     /// (This does not include anything that needs a constructor to be called.)
+    @Test(
+        .enabled(
+            if: JavaScriptExecutor(
+                type: .any, withArguments: ["--harmony", "--wasm-test-streaming", "--js-staging"])
+                != nil))
     func testJSEnvironmentLive() throws {
         let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--harmony", "--wasm-test-streaming", "--js-staging"])
         let jsProg = buildAndLiftProgram(withLiftingOptions: [.includeComments]) { b in
             let jsEnvironment = b.fuzzer.environment
             var seenTypeGroups = Set<String>()
             var propertiesToCheck: [(Variable, String, String)] = []
-            let enqueueProperties = {(builtin: Variable, path: String, type: ILType) in
+            let enqueueProperties = { (builtin: Variable, path: String, type: ILType) in
                 if type.group == nil || seenTypeGroups.insert(type.group!).inserted {
-                    propertiesToCheck.append(contentsOf:
-                        type.properties.sorted().map {(builtin, $0, "\(path).\($0)")} +
-                        type.methods.sorted().map {(builtin, $0, "\(path).\($0)")})
+                    propertiesToCheck.append(
+                        contentsOf:
+                            type.properties.sorted().map { (builtin, $0, "\(path).\($0)") }
+                            + type.methods.sorted().map { (builtin, $0, "\(path).\($0)") })
                 }
             }
-            let handleBuiltin = {builtin, path in
+            let handleBuiltin = { builtin, path in
                 // Do something with the builtin to check that it exists (even if it might not have any
                 // registered properties or methods).
                 // The .LogicOr is only done for error reporting, e.g.:
@@ -50,7 +57,7 @@ class EnvironmentTests: XCTestCase {
                 if type.Is(.constructor()), let signature = type.constructorSignature {
                     // If the object is default-constructible, instantiate it.
                     // Otherwise we can't know how to construct a valid instance.
-                    if (signature.parameters.allSatisfy {$0.isOptionalParameter}) {
+                    if (signature.parameters.allSatisfy { $0.isOptionalParameter }) {
                         let instance = b.construct(builtin)
                         enqueueProperties(instance, "(new \(path)())", b.type(of: instance))
                     }
@@ -59,7 +66,7 @@ class EnvironmentTests: XCTestCase {
             for builtinName in jsEnvironment.builtins.sorted() where builtinName != "undefined" {
                 handleBuiltin(b.createNamedVariable(forBuiltin: builtinName), builtinName)
             }
-            let blockList : Set = ["arguments", "caller"]
+            let blockList: Set = ["arguments", "caller"]
             while let (builtinVar, name, path) = propertiesToCheck.popLast() {
                 if blockList.contains(name) { continue }
                 let builtin = b.getProperty(name, of: builtinVar)
@@ -76,25 +83,29 @@ class EnvironmentTests: XCTestCase {
     func convertTypedArrayToHex(_ b: ProgramBuilder, _ array: Variable) -> Variable {
         let toHex = b.buildArrowFunction(with: .parameters(n: 1)) { args in
             let hex = b.callMethod("toString", on: args[0], withArgs: [b.loadInt(16)])
-            let hexPadded = b.callMethod("padStart", on: hex, withArgs: [b.loadInt(2), b.loadString("0")])
+            let hexPadded = b.callMethod(
+                "padStart", on: hex, withArgs: [b.loadInt(2), b.loadString("0")])
             b.doReturn(hexPadded)
         }
-        let untypedArray = b.construct(b.createNamedVariable(forBuiltin: "Array"),
+        let untypedArray = b.construct(
+            b.createNamedVariable(forBuiltin: "Array"),
             withArgs: [array], spreading: [true])
         let hexArray = b.callMethod("map", on: untypedArray, withArgs: [toHex])
         return b.callMethod("join", on: hexArray, withArgs: [b.loadString("")])
     }
 
+    @Test(.enabled(if: JavaScriptExecutor(type: .any, withArguments: ["--js-base-64"]) != nil))
     func testBase64OptionsBag() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(type: .any, withArguments: ["--js-base-64"])
+        let runner = try #require(JavaScriptExecutor(type: .any, withArguments: ["--js-base-64"]))
         let jsProg = buildAndLiftProgram { b in
             let arrayConstructor = b.createNamedVariable(forBuiltin: "Uint8Array")
             // Whatever the options object looks like, it should construct something valid.
             // With the provided input string, the actual options should not matter.
             let options = b.createOptionsBag(OptionsBag.fromBase64Settings)
             let inputString = b.loadString("qxI0VniQq83v")
-            let array = b.callMethod("fromBase64", on: arrayConstructor, withArgs: [inputString, options])
-            XCTAssert(b.type(of: array).Is(.object(ofGroup: "Uint8Array")))
+            let array = b.callMethod(
+                "fromBase64", on: arrayConstructor, withArgs: [inputString, options])
+            #expect(b.type(of: array).Is(.object(ofGroup: "Uint8Array")))
             let outputFunc = b.createNamedVariable(forBuiltin: "output")
             b.callFunction(outputFunc, withArgs: [convertTypedArrayToHex(b, array)])
 
@@ -103,7 +114,8 @@ class EnvironmentTests: XCTestCase {
             b.callMethod("setFromBase64", on: array, withArgs: [inputString2, options2])
             b.callFunction(outputFunc, withArgs: [convertTypedArrayToHex(b, array)])
         }
-        testForOutput(program: jsProg, runner: runner,
+        testForOutput(
+            program: jsProg, runner: runner,
             outputString: "ab1234567890abcdef\nbaaddeadbeefabcdef\n")
     }
 }

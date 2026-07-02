@@ -14,8 +14,15 @@
 
 /// A JavaScript operation in the FuzzIL language.
 class JsOperation: Operation {
-    override init(numInputs: Int = 0, numOutputs: Int = 0, numInnerOutputs: Int = 0, firstVariadicInput: Int = -1, attributes: Attributes = [], requiredContext: Context = .javascript, contextOpened: Context = .empty) {
-        super.init(numInputs: numInputs, numOutputs: numOutputs, numInnerOutputs: numInnerOutputs, firstVariadicInput: firstVariadicInput, attributes: attributes, requiredContext: requiredContext, contextOpened: contextOpened)
+    override init(
+        numInputs: Int = 0, numOutputs: Int = 0, numInnerOutputs: Int = 0,
+        firstVariadicInput: Int = -1, attributes: Attributes = [],
+        requiredContext: Context = .javascript, contextOpened: Context = .empty
+    ) {
+        super.init(
+            numInputs: numInputs, numOutputs: numOutputs, numInnerOutputs: numInnerOutputs,
+            firstVariadicInput: firstVariadicInput, attributes: attributes,
+            requiredContext: requiredContext, contextOpened: contextOpened)
     }
 }
 
@@ -50,10 +57,19 @@ class GuardableOperation: JsOperation {
     /// is emitted around the operation or not.
     let isGuarded: Bool
 
-    init(isGuarded: Bool, numInputs: Int = 0, numOutputs: Int = 0, numInnerOutputs: Int = 0, firstVariadicInput: Int = -1, attributes: Attributes = [], requiredContext: Context = .javascript) {
-        assert(attributes.isDisjoint(with: [.isBlockStart, .isBlockEnd]), "Only simple operations can be guardable")
+    init(
+        isGuarded: Bool, numInputs: Int = 0, numOutputs: Int = 0, numInnerOutputs: Int = 0,
+        firstVariadicInput: Int = -1, attributes: Attributes = [],
+        requiredContext: Context = .javascript
+    ) {
+        assert(
+            attributes.isDisjoint(with: [.isBlockStart, .isBlockEnd]),
+            "Only simple operations can be guardable")
         self.isGuarded = isGuarded
-        super.init(numInputs: numInputs, numOutputs: numOutputs, numInnerOutputs: numInnerOutputs, firstVariadicInput: firstVariadicInput, attributes: attributes, requiredContext: requiredContext)
+        super.init(
+            numInputs: numInputs, numOutputs: numOutputs, numInnerOutputs: numInnerOutputs,
+            firstVariadicInput: firstVariadicInput, attributes: attributes,
+            requiredContext: requiredContext)
     }
 
     // Helper functions to enable guards.
@@ -82,19 +98,25 @@ class GuardableOperation: JsOperation {
         case .callFunction(let op):
             return CallFunction(numArguments: op.numArguments, isGuarded: true)
         case .callFunctionWithSpread(let op):
-            return CallFunctionWithSpread(numArguments: op.numArguments, spreads: op.spreads, isGuarded: true)
+            return CallFunctionWithSpread(
+                numArguments: op.numArguments, spreads: op.spreads, isGuarded: true)
         case .construct(let op):
             return Construct(numArguments: op.numArguments, isGuarded: true)
         case .constructWithSpread(let op):
-            return ConstructWithSpread(numArguments: op.numArguments, spreads: op.spreads, isGuarded: true)
+            return ConstructWithSpread(
+                numArguments: op.numArguments, spreads: op.spreads, isGuarded: true)
         case .callMethod(let op):
-            return CallMethod(methodName: op.methodName, numArguments: op.numArguments, isGuarded: true)
+            return CallMethod(
+                methodName: op.methodName, numArguments: op.numArguments, isGuarded: true)
         case .callMethodWithSpread(let op):
-            return CallMethodWithSpread(methodName: op.methodName, numArguments: op.numArguments, spreads: op.spreads, isGuarded: true)
+            return CallMethodWithSpread(
+                methodName: op.methodName, numArguments: op.numArguments, spreads: op.spreads,
+                isGuarded: true)
         case .callComputedMethod(let op):
             return CallComputedMethod(numArguments: op.numArguments, isGuarded: true)
         case .callComputedMethodWithSpread(let op):
-            return CallComputedMethodWithSpread(numArguments: op.numArguments, spreads: op.spreads, isGuarded: true)
+            return CallComputedMethodWithSpread(
+                numArguments: op.numArguments, spreads: op.spreads, isGuarded: true)
         default:
             fatalError("All guardable operations should be handled")
         }
@@ -126,19 +148,25 @@ class GuardableOperation: JsOperation {
         case .callFunction(let op):
             return CallFunction(numArguments: op.numArguments, isGuarded: false)
         case .callFunctionWithSpread(let op):
-            return CallFunctionWithSpread(numArguments: op.numArguments, spreads: op.spreads, isGuarded: false)
+            return CallFunctionWithSpread(
+                numArguments: op.numArguments, spreads: op.spreads, isGuarded: false)
         case .construct(let op):
             return Construct(numArguments: op.numArguments, isGuarded: false)
         case .constructWithSpread(let op):
-            return ConstructWithSpread(numArguments: op.numArguments, spreads: op.spreads, isGuarded: false)
+            return ConstructWithSpread(
+                numArguments: op.numArguments, spreads: op.spreads, isGuarded: false)
         case .callMethod(let op):
-            return CallMethod(methodName: op.methodName, numArguments: op.numArguments, isGuarded: false)
+            return CallMethod(
+                methodName: op.methodName, numArguments: op.numArguments, isGuarded: false)
         case .callMethodWithSpread(let op):
-            return CallMethodWithSpread(methodName: op.methodName, numArguments: op.numArguments, spreads: op.spreads, isGuarded: false)
+            return CallMethodWithSpread(
+                methodName: op.methodName, numArguments: op.numArguments, spreads: op.spreads,
+                isGuarded: false)
         case .callComputedMethod(let op):
             return CallComputedMethod(numArguments: op.numArguments, isGuarded: false)
         case .callComputedMethodWithSpread(let op):
-            return CallComputedMethodWithSpread(numArguments: op.numArguments, spreads: op.spreads, isGuarded: false)
+            return CallComputedMethodWithSpread(
+                numArguments: op.numArguments, spreads: op.spreads, isGuarded: false)
         default:
             fatalError("All guardable operations should be handled")
         }
@@ -149,9 +177,11 @@ final class LoadInteger: JsOperation {
     override var opcode: Opcode { .loadInteger(self) }
 
     let value: Int64
+    let customName: String?
 
-    init(value: Int64) {
+    init(value: Int64, customName: String? = nil) {
         self.value = value
+        self.customName = customName
         super.init(numOutputs: 1, attributes: [.isMutable])
     }
 }
@@ -272,7 +302,7 @@ final class LoadArguments: JsOperation {
 ///    baz += "bla";
 ///    print(baz);
 ///
-public enum NamedVariableDeclarationMode : CaseIterable {
+public enum NamedVariableDeclarationMode: CaseIterable {
     // The variable is assumed to already exist and therefore is not declared again.
     // This is for example used for global variables and builtins, but also to support
     // variable and function hoisting where an identifier is used before it is defined.
@@ -304,7 +334,8 @@ final class CreateNamedVariable: JsOperation {
     init(_ name: String, declarationMode: NamedVariableDeclarationMode) {
         self.variableName = name
         self.declarationMode = declarationMode
-        super.init(numInputs: declarationMode == .none ? 0 : 1, numOutputs: 1, attributes: .isMutable)
+        super.init(
+            numInputs: declarationMode == .none ? 0 : 1, numOutputs: 1, attributes: .isMutable)
     }
 }
 
@@ -340,7 +371,7 @@ final class LoadAsyncDisposableVariable: JsOperation {
     override var opcode: Opcode { .loadAsyncDisposableVariable(self) }
 
     init() {
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: [.javascript, .asyncFunction])
+        super.init(numInputs: 1, numOutputs: 1, requiredContext: [.javascript, .async])
     }
 }
 
@@ -351,7 +382,7 @@ final class CreateNamedAsyncDisposableVariable: JsOperation {
 
     init(_ name: String) {
         self.variableName = name
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: [.javascript, .asyncFunction])
+        super.init(numInputs: 1, numOutputs: 1, requiredContext: [.javascript, .async])
     }
 }
 
@@ -405,42 +436,44 @@ public struct RegExpFlags: OptionSet, Hashable {
         return flags
     }
 
-    static let empty           = RegExpFlags([])
-    static let caseInsensitive = RegExpFlags(rawValue: 1 << 0) // i
-    static let global          = RegExpFlags(rawValue: 1 << 1) // g
-    static let multiline       = RegExpFlags(rawValue: 1 << 2) // m
-    static let dotall          = RegExpFlags(rawValue: 1 << 3) // s
-    static let unicode         = RegExpFlags(rawValue: 1 << 4) // u
-    static let sticky          = RegExpFlags(rawValue: 1 << 5) // y
-    static let hasIndices      = RegExpFlags(rawValue: 1 << 6) // d
-    static let unicodeSets     = RegExpFlags(rawValue: 1 << 7) // v
+    static let empty = RegExpFlags([])
+    static let caseInsensitive = RegExpFlags(rawValue: 1 << 0)  // i
+    static let global = RegExpFlags(rawValue: 1 << 1)  // g
+    static let multiline = RegExpFlags(rawValue: 1 << 2)  // m
+    static let dotall = RegExpFlags(rawValue: 1 << 3)  // s
+    static let unicode = RegExpFlags(rawValue: 1 << 4)  // u
+    static let sticky = RegExpFlags(rawValue: 1 << 5)  // y
+    static let hasIndices = RegExpFlags(rawValue: 1 << 6)  // d
+    static let unicodeSets = RegExpFlags(rawValue: 1 << 7)  // v
 
     public static func random() -> RegExpFlags {
-        var flags = RegExpFlags(rawValue: UInt32.random(in: 0..<(1<<8)))
+        var flags = RegExpFlags(rawValue: UInt32.random(in: 0..<(1 << 8)))
         if flags.contains(.unicode) && flags.contains(.unicodeSets) {
             // clear one of them as they are mutually exclusive, they will throw a runtime exception if used together.
-            withEqualProbability({
-                flags.subtract(.unicode)
-            }, {
-                flags.subtract(.unicodeSets)
-            })
+            withEqualProbability(
+                {
+                    flags.subtract(.unicode)
+                },
+                {
+                    flags.subtract(.unicodeSets)
+                })
         }
         return flags
     }
 
-    private static let flagToCharDict: [RegExpFlags:String] = [
-        .empty:           "",
+    private static let flagToCharDict: [RegExpFlags: String] = [
+        .empty: "",
         .caseInsensitive: "i",
-        .global:          "g",
-        .multiline:       "m",
-        .dotall:          "s",
-        .unicode:         "u",
-        .sticky:          "y",
-        .hasIndices:      "d",
-        .unicodeSets:     "v",
+        .global: "g",
+        .multiline: "m",
+        .dotall: "s",
+        .unicode: "u",
+        .sticky: "y",
+        .hasIndices: "d",
+        .unicodeSets: "v",
     ]
 
-    static func |(lhs: RegExpFlags, rhs: RegExpFlags) -> RegExpFlags {
+    static func | (lhs: RegExpFlags, rhs: RegExpFlags) -> RegExpFlags {
         return RegExpFlags(rawValue: lhs.rawValue | rhs.rawValue)
     }
 }
@@ -528,7 +561,6 @@ final class ObjectLiteralAddComputedProperty: JsOperation {
     }
 }
 
-
 // A spread operation (e.g. `...v13,`) copying the properties from another object
 final class ObjectLiteralCopyProperties: JsOperation {
     override var opcode: Opcode { .objectLiteralCopyProperties(self) }
@@ -557,7 +589,10 @@ final class BeginObjectLiteralMethod: BeginAnySubroutine {
     init(methodName: String, parameters: Parameters) {
         self.methodName = methodName
         // First inner output is the explicit |this| parameter
-        super.init(parameters: parameters, numInnerOutputs: parameters.count + 1, attributes: [.isBlockStart, .isMutable], requiredContext: .objectLiteral, contextOpened: [.javascript, .subroutine, .method])
+        super.init(
+            parameters: parameters, numInnerOutputs: parameters.count + 1,
+            attributes: [.isBlockStart, .isMutable], requiredContext: .objectLiteral,
+            contextOpened: [.javascript, .subroutine, .method])
     }
 }
 
@@ -571,7 +606,11 @@ final class BeginObjectLiteralComputedMethod: BeginAnySubroutine {
 
     init(parameters: Parameters) {
         // First inner output is the explicit |this| parameter
-        super.init(parameters: parameters, numInputs: 1, numInnerOutputs: parameters.count + 1, attributes: .isBlockStart, requiredContext: .objectLiteral, contextOpened: [.javascript, .subroutine, .method])
+        super.init(
+            parameters: parameters, numInputs: 1 + parameters.numDefaultParameters,
+            numInnerOutputs: parameters.count + 1,
+            attributes: .isBlockStart, requiredContext: .objectLiteral,
+            contextOpened: [.javascript, .subroutine, .method])
     }
 }
 
@@ -588,12 +627,32 @@ final class BeginObjectLiteralGetter: BeginAnySubroutine {
     init(propertyName: String) {
         self.propertyName = propertyName
         // First inner output is the explicit |this| parameter
-        super.init(parameters: Parameters(count: 0), numInnerOutputs: 1, attributes: [.isBlockStart, .isMutable], requiredContext: .objectLiteral, contextOpened: [.javascript, .subroutine, .method])
+        super.init(
+            parameters: Parameters(count: 0), numInnerOutputs: 1,
+            attributes: [.isBlockStart, .isMutable], requiredContext: .objectLiteral,
+            contextOpened: [.javascript, .subroutine, .method])
     }
 }
 
 final class EndObjectLiteralGetter: EndAnySubroutine {
     override var opcode: Opcode { .endObjectLiteralGetter(self) }
+}
+
+final class BeginObjectLiteralComputedGetter: BeginAnySubroutine {
+    override var opcode: Opcode { .beginObjectLiteralComputedGetter(self) }
+
+    init() {
+        // First inner output is the explicit |this| parameter
+        // The first input is the computed property name
+        super.init(
+            parameters: Parameters(count: 0), numInputs: 1, numInnerOutputs: 1,
+            attributes: .isBlockStart, requiredContext: .objectLiteral,
+            contextOpened: [.javascript, .subroutine, .method])
+    }
+}
+
+final class EndObjectLiteralComputedGetter: EndAnySubroutine {
+    override var opcode: Opcode { .endObjectLiteralComputedGetter(self) }
 }
 
 // A setter, for example `set prop(a5) {`
@@ -605,12 +664,32 @@ final class BeginObjectLiteralSetter: BeginAnySubroutine {
     init(propertyName: String) {
         self.propertyName = propertyName
         // First inner output is the explicit |this| parameter
-        super.init(parameters: Parameters(count: 1), numInnerOutputs: 2, attributes: [.isBlockStart, .isMutable], requiredContext: .objectLiteral, contextOpened: [.javascript, .subroutine, .method])
+        super.init(
+            parameters: Parameters(count: 1), numInnerOutputs: 2,
+            attributes: [.isBlockStart, .isMutable], requiredContext: .objectLiteral,
+            contextOpened: [.javascript, .subroutine, .method])
     }
 }
 
 final class EndObjectLiteralSetter: EndAnySubroutine {
     override var opcode: Opcode { .endObjectLiteralSetter(self) }
+}
+
+final class BeginObjectLiteralComputedSetter: BeginAnySubroutine {
+    override var opcode: Opcode { .beginObjectLiteralComputedSetter(self) }
+
+    init() {
+        // First inner output is the explicit |this| parameter
+        // The first input is the computed property name
+        super.init(
+            parameters: Parameters(count: 1), numInputs: 1, numInnerOutputs: 2,
+            attributes: .isBlockStart, requiredContext: .objectLiteral,
+            contextOpened: [.javascript, .subroutine, .method])
+    }
+}
+
+final class EndObjectLiteralComputedSetter: EndAnySubroutine {
+    override var opcode: Opcode { .endObjectLiteralComputedSetter(self) }
 }
 
 final class EndObjectLiteral: JsOperation {
@@ -679,7 +758,9 @@ final class BeginClassDefinition: JsOperation {
     init(hasSuperclass: Bool, isExpression: Bool) {
         self.hasSuperclass = hasSuperclass
         self.isExpression = isExpression
-        super.init(numInputs: hasSuperclass ? 1 : 0, numOutputs: 1, attributes: .isBlockStart, contextOpened: .classDefinition)
+        super.init(
+            numInputs: hasSuperclass ? 1 : 0, numOutputs: 1, attributes: .isBlockStart,
+            contextOpened: .classDefinition)
     }
 }
 
@@ -688,7 +769,10 @@ final class BeginClassConstructor: BeginAnySubroutine {
 
     init(parameters: Parameters) {
         // First inner output is the explicit |this| parameter
-        super.init(parameters: parameters, numInnerOutputs: parameters.count + 1, attributes: [.isBlockStart, .isSingular], requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
+        super.init(
+            parameters: parameters, numInnerOutputs: parameters.count + 1,
+            attributes: [.isBlockStart, .isSingular], requiredContext: .classDefinition,
+            contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
 }
 
@@ -696,145 +780,172 @@ final class EndClassConstructor: EndAnySubroutine {
     override var opcode: Opcode { .endClassConstructor(self) }
 }
 
-final class ClassAddInstanceProperty: JsOperation {
-    override var opcode: Opcode { .classAddInstanceProperty(self) }
+final class ClassAddProperty: JsOperation {
+    override var opcode: Opcode { .classAddProperty(self) }
 
     let propertyName: String
     var hasValue: Bool {
         return numInputs == 1
     }
+    let isStatic: Bool
 
-    init(propertyName: String, hasValue: Bool) {
+    init(propertyName: String, hasValue: Bool, isStatic: Bool) {
         self.propertyName = propertyName
-        super.init(numInputs: hasValue ? 1 : 0, attributes: .isMutable, requiredContext: .classDefinition)
+        self.isStatic = isStatic
+        super.init(
+            numInputs: hasValue ? 1 : 0, attributes: .isMutable, requiredContext: .classDefinition)
     }
 }
 
-final class ClassAddInstanceElement: JsOperation {
-    override var opcode: Opcode { .classAddInstanceElement(self) }
+final class ClassAddElement: JsOperation {
+    override var opcode: Opcode { .classAddElement(self) }
 
     let index: Int64
     var hasValue: Bool {
         return numInputs == 1
     }
+    let isStatic: Bool
 
-    init(index: Int64, hasValue: Bool) {
+    init(index: Int64, hasValue: Bool, isStatic: Bool) {
         self.index = index
-        super.init(numInputs: hasValue ? 1 : 0, attributes: .isMutable, requiredContext: .classDefinition)
+        self.isStatic = isStatic
+        super.init(
+            numInputs: hasValue ? 1 : 0, attributes: .isMutable, requiredContext: .classDefinition)
     }
 }
 
-final class ClassAddInstanceComputedProperty: JsOperation {
-    override var opcode: Opcode { .classAddInstanceComputedProperty(self) }
+final class ClassAddComputedProperty: JsOperation {
+    override var opcode: Opcode { .classAddComputedProperty(self) }
 
     var hasValue: Bool {
         return numInputs == 2
     }
+    let isStatic: Bool
 
-    init(hasValue: Bool) {
+    init(hasValue: Bool, isStatic: Bool) {
+        self.isStatic = isStatic
         super.init(numInputs: hasValue ? 2 : 1, requiredContext: .classDefinition)
     }
 }
 
-final class BeginClassInstanceMethod: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassInstanceMethod(self) }
+final class BeginClassMethod: BeginAnySubroutine {
+    override var opcode: Opcode { .beginClassMethod(self) }
 
     let methodName: String
+    let isStatic: Bool
 
-    init(methodName: String, parameters: Parameters) {
+    init(methodName: String, parameters: Parameters, isStatic: Bool) {
         self.methodName = methodName
+        self.isStatic = isStatic
         // First inner output is the explicit |this| parameter
-        super.init(parameters: parameters, numInnerOutputs: parameters.count + 1, attributes: [.isMutable, .isBlockStart], requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
+        super.init(
+            parameters: parameters, numInnerOutputs: parameters.count + 1,
+            attributes: [.isMutable, .isBlockStart], requiredContext: .classDefinition,
+            contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
 }
 
-final class EndClassInstanceMethod: EndAnySubroutine {
-    override var opcode: Opcode { .endClassInstanceMethod(self) }
+final class EndClassMethod: EndAnySubroutine {
+    override var opcode: Opcode { .endClassMethod(self) }
 }
 
-final class BeginClassInstanceComputedMethod: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassInstanceComputedMethod(self) }
+final class BeginClassComputedMethod: BeginAnySubroutine {
+    override var opcode: Opcode { .beginClassComputedMethod(self) }
+    let isStatic: Bool
 
-    init(parameters: Parameters) {
+    init(parameters: Parameters, isStatic: Bool) {
+        self.isStatic = isStatic
         // First inner output is the explicit |this| parameter
-        super.init(parameters: parameters, numInputs: 1, numInnerOutputs: parameters.count + 1, attributes: [.isBlockStart], requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
+        super.init(
+            parameters: parameters, numInputs: 1 + parameters.numDefaultParameters,
+            numInnerOutputs: parameters.count + 1,
+            attributes: [.isBlockStart], requiredContext: .classDefinition,
+            contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
 }
 
-final class EndClassInstanceComputedMethod: EndAnySubroutine {
-    override var opcode: Opcode { .endClassInstanceComputedMethod(self) }
+final class EndClassComputedMethod: EndAnySubroutine {
+    override var opcode: Opcode { .endClassComputedMethod(self) }
 }
 
-final class BeginClassInstanceGetter: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassInstanceGetter(self) }
+final class BeginClassGetter: BeginAnySubroutine {
+    override var opcode: Opcode { .beginClassGetter(self) }
 
     let propertyName: String
+    let isStatic: Bool
 
-    init(propertyName: String) {
+    init(propertyName: String, isStatic: Bool) {
         self.propertyName = propertyName
+        self.isStatic = isStatic
         // First inner output is the explicit |this| parameter
-        super.init(parameters: Parameters(count: 0), numInnerOutputs: 1, attributes: [.isBlockStart, .isMutable], requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
+        super.init(
+            parameters: Parameters(count: 0), numInnerOutputs: 1,
+            attributes: [.isBlockStart, .isMutable], requiredContext: .classDefinition,
+            contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
 }
 
-final class EndClassInstanceGetter: EndAnySubroutine {
-    override var opcode: Opcode { .endClassInstanceGetter(self) }
+final class EndClassGetter: EndAnySubroutine {
+    override var opcode: Opcode { .endClassGetter(self) }
 }
 
-final class BeginClassInstanceSetter: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassInstanceSetter(self) }
+final class BeginClassComputedGetter: BeginAnySubroutine {
+    override var opcode: Opcode { .beginClassComputedGetter(self) }
+    let isStatic: Bool
+
+    init(isStatic: Bool) {
+        self.isStatic = isStatic
+        // First inner output is the explicit |this| parameter
+        // The first input is the computed property name
+        super.init(
+            parameters: Parameters(count: 0), numInputs: 1, numInnerOutputs: 1,
+            attributes: .isBlockStart, requiredContext: .classDefinition,
+            contextOpened: [.javascript, .subroutine, .method, .classMethod])
+    }
+}
+
+final class EndClassComputedGetter: EndAnySubroutine {
+    override var opcode: Opcode { .endClassComputedGetter(self) }
+}
+
+final class BeginClassSetter: BeginAnySubroutine {
+    override var opcode: Opcode { .beginClassSetter(self) }
 
     let propertyName: String
+    let isStatic: Bool
 
-    init(propertyName: String) {
+    init(propertyName: String, isStatic: Bool) {
         self.propertyName = propertyName
+        self.isStatic = isStatic
         // First inner output is the explicit |this| parameter
-        super.init(parameters: Parameters(count: 1), numInnerOutputs: 2, attributes: [.isBlockStart, .isMutable], requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
+        super.init(
+            parameters: Parameters(count: 1), numInnerOutputs: 2,
+            attributes: [.isBlockStart, .isMutable], requiredContext: .classDefinition,
+            contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
 }
 
-final class EndClassInstanceSetter: EndAnySubroutine {
-    override var opcode: Opcode { .endClassInstanceSetter(self) }
+final class EndClassSetter: EndAnySubroutine {
+    override var opcode: Opcode { .endClassSetter(self) }
 }
 
-final class ClassAddStaticProperty: JsOperation {
-    override var opcode: Opcode { .classAddStaticProperty(self) }
+final class BeginClassComputedSetter: BeginAnySubroutine {
+    override var opcode: Opcode { .beginClassComputedSetter(self) }
+    let isStatic: Bool
 
-    let propertyName: String
-    var hasValue: Bool {
-        return numInputs == 1
-    }
-
-    init(propertyName: String, hasValue: Bool) {
-        self.propertyName = propertyName
-        super.init(numInputs: hasValue ? 1 : 0, attributes: .isMutable, requiredContext: .classDefinition)
-    }
-}
-
-final class ClassAddStaticElement: JsOperation {
-    override var opcode: Opcode { .classAddStaticElement(self) }
-
-    let index: Int64
-    var hasValue: Bool {
-        return numInputs == 1
-    }
-
-    init(index: Int64, hasValue: Bool) {
-        self.index = index
-        super.init(numInputs: hasValue ? 1 : 0, attributes: .isMutable, requiredContext: .classDefinition)
+    init(isStatic: Bool) {
+        self.isStatic = isStatic
+        // First inner output is the explicit |this| parameter
+        // The first input is the computed property name
+        super.init(
+            parameters: Parameters(count: 1), numInputs: 1, numInnerOutputs: 2,
+            attributes: .isBlockStart, requiredContext: .classDefinition,
+            contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
 }
 
-final class ClassAddStaticComputedProperty: JsOperation {
-    override var opcode: Opcode { .classAddStaticComputedProperty(self) }
-
-    var hasValue: Bool {
-        return numInputs == 2
-    }
-
-    init(hasValue: Bool) {
-        super.init(numInputs: hasValue ? 2 : 1, requiredContext: .classDefinition)
-    }
+final class EndClassComputedSetter: EndAnySubroutine {
+    override var opcode: Opcode { .endClassComputedSetter(self) }
 }
 
 final class BeginClassStaticInitializer: JsOperation {
@@ -843,7 +954,9 @@ final class BeginClassStaticInitializer: JsOperation {
     init() {
         // Inner output is the explicit |this| parameter
         // Static initializer blocks do not have .subroutine context as `return` is disallowed inside of them.
-        super.init(numInnerOutputs: 1, attributes: .isBlockStart, requiredContext: .classDefinition, contextOpened: [.javascript, .method, .classMethod])
+        super.init(
+            numInnerOutputs: 1, attributes: .isBlockStart, requiredContext: .classDefinition,
+            contextOpened: [.javascript, .method, .classMethod])
     }
 }
 
@@ -855,130 +968,44 @@ final class EndClassStaticInitializer: JsOperation {
     }
 }
 
-final class BeginClassStaticMethod: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassStaticMethod(self) }
-
-    let methodName: String
-
-    init(methodName: String, parameters: Parameters) {
-        self.methodName = methodName
-        // First inner output is the explicit |this| parameter
-        super.init(parameters: parameters, numInnerOutputs: parameters.count + 1, attributes: [.isMutable, .isBlockStart], requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
-    }
-}
-
-final class EndClassStaticMethod: EndAnySubroutine {
-    override var opcode: Opcode { .endClassStaticMethod(self) }
-}
-
-final class BeginClassStaticComputedMethod: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassStaticComputedMethod(self) }
-
-    init(parameters: Parameters) {
-        // First inner output is the explicit |this| parameter
-        super.init(parameters: parameters, numInputs: 1, numInnerOutputs: parameters.count + 1, attributes: [.isBlockStart], requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
-    }
-}
-
-final class EndClassStaticComputedMethod: EndAnySubroutine {
-    override var opcode: Opcode { .endClassStaticComputedMethod(self) }
-}
-
-final class BeginClassStaticGetter: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassStaticGetter(self) }
-
-    let propertyName: String
-
-    init(propertyName: String) {
-        self.propertyName = propertyName
-        // First inner output is the explicit |this| parameter
-        super.init(parameters: Parameters(count: 0), numInnerOutputs: 1, attributes: [.isBlockStart, .isMutable], requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
-    }
-}
-
-final class EndClassStaticGetter: EndAnySubroutine {
-    override var opcode: Opcode { .endClassStaticGetter(self) }
-}
-
-final class BeginClassStaticSetter: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassStaticSetter(self) }
-
-    let propertyName: String
-
-    init(propertyName: String) {
-        self.propertyName = propertyName
-        // First inner output is the explicit |this| parameter
-        super.init(parameters: Parameters(count: 1), numInnerOutputs: 2, attributes: [.isBlockStart, .isMutable], requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
-    }
-}
-
-final class EndClassStaticSetter: EndAnySubroutine {
-    override var opcode: Opcode { .endClassStaticSetter(self) }
-}
-
-final class ClassAddPrivateInstanceProperty: JsOperation {
-    override var opcode: Opcode { .classAddPrivateInstanceProperty(self) }
+final class ClassAddPrivateProperty: JsOperation {
+    override var opcode: Opcode { .classAddPrivateProperty(self) }
 
     let propertyName: String
     var hasValue: Bool {
         return numInputs == 1
     }
+    let isStatic: Bool
 
-    init(propertyName: String, hasValue: Bool) {
+    init(propertyName: String, hasValue: Bool, isStatic: Bool) {
         self.propertyName = propertyName
+        self.isStatic = isStatic
         // We currently don't want to change the names of private properties since that has a good chance of making
         // following code _syntactically_ incorrect (if it uses them) because an undeclared private field is accessed.
         super.init(numInputs: hasValue ? 1 : 0, requiredContext: .classDefinition)
     }
 }
 
-final class BeginClassPrivateInstanceMethod: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassPrivateInstanceMethod(self) }
+final class BeginClassPrivateMethod: BeginAnySubroutine {
+    override var opcode: Opcode { .beginClassPrivateMethod(self) }
 
     let methodName: String
+    let isStatic: Bool
 
-    init(methodName: String, parameters: Parameters) {
+    init(methodName: String, parameters: Parameters, isStatic: Bool) {
         self.methodName = methodName
+        self.isStatic = isStatic
         // First inner output is the explicit |this| parameter.
-        // See comment in ClassAddPrivateInstanceProperty for why this operation isn't mutable.
-        super.init(parameters: parameters, numInnerOutputs: parameters.count + 1, attributes: .isBlockStart, requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
+        // See comment in ClassAddPrivateProperty for why this operation isn't mutable.
+        super.init(
+            parameters: parameters, numInnerOutputs: parameters.count + 1,
+            attributes: .isBlockStart, requiredContext: .classDefinition,
+            contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
 }
 
-final class EndClassPrivateInstanceMethod: EndAnySubroutine {
-    override var opcode: Opcode { .endClassPrivateInstanceMethod(self) }
-}
-
-final class ClassAddPrivateStaticProperty: JsOperation {
-    override var opcode: Opcode { .classAddPrivateStaticProperty(self) }
-
-    let propertyName: String
-    var hasValue: Bool {
-        return numInputs == 1
-    }
-
-    init(propertyName: String, hasValue: Bool) {
-        self.propertyName = propertyName
-        // See comment in ClassAddPrivateInstanceProperty for why this operation isn't mutable.
-        super.init(numInputs: hasValue ? 1 : 0, requiredContext: .classDefinition)
-    }
-}
-
-final class BeginClassPrivateStaticMethod: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassPrivateStaticMethod(self) }
-
-    let methodName: String
-
-    init(methodName: String, parameters: Parameters) {
-        self.methodName = methodName
-        // First inner output is the explicit |this| parameter.
-        // See comment in ClassAddPrivateInstanceProperty for why this operation isn't mutable.
-        super.init(parameters: parameters, numInnerOutputs: parameters.count + 1, attributes: .isBlockStart, requiredContext: .classDefinition, contextOpened: [.javascript, .subroutine, .method, .classMethod])
-    }
-}
-
-final class EndClassPrivateStaticMethod: EndAnySubroutine {
-    override var opcode: Opcode { .endClassPrivateStaticMethod(self) }
+final class EndClassPrivateMethod: EndAnySubroutine {
+    override var opcode: Opcode { .endClassPrivateMethod(self) }
 }
 
 final class EndClassDefinition: JsOperation {
@@ -996,8 +1023,13 @@ final class CreateArray: JsOperation {
         return numInputs
     }
 
-    init(numInitialValues: Int) {
-        super.init(numInputs: numInitialValues, numOutputs: 1, firstVariadicInput: 0, attributes: [.isVariadic])
+    let elementGroupName: String?
+
+    init(numInitialValues: Int, elementGroupName: String? = nil) {
+        self.elementGroupName = elementGroupName
+        super.init(
+            numInputs: numInitialValues, numOutputs: 1, firstVariadicInput: 0,
+            attributes: [.isVariadic])
     }
 }
 
@@ -1035,7 +1067,8 @@ final class CreateArrayWithSpread: JsOperation {
         if spreads.count > 0 {
             flags.insert(.isMutable)
         }
-        super.init(numInputs: spreads.count, numOutputs: 1, firstVariadicInput: 0, attributes: flags)
+        super.init(
+            numInputs: spreads.count, numOutputs: 1, firstVariadicInput: 0, attributes: flags)
     }
 }
 
@@ -1052,7 +1085,9 @@ final class CreateTemplateString: JsOperation {
     init(parts: [String]) {
         assert(parts.count > 0)
         self.parts = parts
-        super.init(numInputs: parts.count - 1, numOutputs: 1, firstVariadicInput: 0, attributes: [.isMutable, .isVariadic])
+        super.init(
+            numInputs: parts.count - 1, numOutputs: 1, firstVariadicInput: 0,
+            attributes: [.isMutable, .isVariadic])
     }
 }
 
@@ -1109,9 +1144,9 @@ public struct PropertyFlags: OptionSet {
         self.rawValue = rawValue
     }
 
-    static let writable         = PropertyFlags(rawValue: 1 << 0)
-    static let configurable     = PropertyFlags(rawValue: 1 << 1)
-    static let enumerable       = PropertyFlags(rawValue: 1 << 2)
+    static let writable = PropertyFlags(rawValue: 1 << 0)
+    static let configurable = PropertyFlags(rawValue: 1 << 1)
+    static let enumerable = PropertyFlags(rawValue: 1 << 2)
 
     public static func random() -> PropertyFlags {
         return PropertyFlags(rawValue: UInt8.random(in: 0..<8))
@@ -1292,15 +1327,32 @@ public struct Parameters {
     private let numParameters: UInt32
     /// Whether the last parameter is a rest parameter.
     let hasRestParameter: Bool
+    /// Indices of parameters that have a default value.
+    /// The n-th default parameter will be the n-th input to the BeginAnySubroutine instruction.
+    let defaultParameterIndices: [Int]
 
     /// The total number of parameters. This is equivalent to the number of inner outputs produced from the parameters.
     var count: Int {
         return Int(numParameters)
     }
 
-    init(count: Int, hasRestParameter: Bool = false) {
+    var numDefaultParameters: Int {
+        return defaultParameterIndices.count
+    }
+
+    init(count: Int, hasRestParameter: Bool = false, defaultParameterIndices: [Int] = []) {
+        assert(
+            !hasRestParameter || !defaultParameterIndices.contains(count - 1),
+            "Rest parameter cannot have a default value")
+        assert(
+            defaultParameterIndices.allSatisfy({ $0 >= 0 && $0 < count }),
+            "Invalid default parameter index")
+        assert(
+            defaultParameterIndices == defaultParameterIndices.sorted(),
+            "Default parameter indices must be sorted")
         self.numParameters = UInt32(count)
         self.hasRestParameter = hasRestParameter
+        self.defaultParameterIndices = defaultParameterIndices
     }
 }
 
@@ -1310,11 +1362,18 @@ public struct Parameters {
 class BeginAnySubroutine: JsOperation {
     let parameters: Parameters
 
-    init(parameters: Parameters, numInputs: Int = 0, numOutputs: Int = 0, numInnerOutputs: Int = 0, attributes: Operation.Attributes = .isBlockStart, requiredContext: Context = .javascript, contextOpened: Context) {
+    init(
+        parameters: Parameters, numInputs: Int? = nil, numOutputs: Int = 0,
+        numInnerOutputs: Int = 0, attributes: Operation.Attributes = .isBlockStart,
+        requiredContext: Context = .javascript, contextOpened: Context
+    ) {
         assert(contextOpened.contains(.subroutine))
         assert(attributes.contains(.isBlockStart))
         self.parameters = parameters
-        super.init(numInputs: numInputs, numOutputs: numOutputs, numInnerOutputs: numInnerOutputs, attributes: attributes, requiredContext: requiredContext, contextOpened: contextOpened)
+        super.init(
+            numInputs: numInputs ?? parameters.numDefaultParameters, numOutputs: numOutputs,
+            numInnerOutputs: numInnerOutputs, attributes: attributes,
+            requiredContext: requiredContext, contextOpened: contextOpened)
     }
 }
 
@@ -1329,11 +1388,12 @@ class EndAnySubroutine: JsOperation {
 // Functions beginnings are not considered mutable since it likely makes little sense to change things like the number of parameters.
 class BeginAnyFunction: BeginAnySubroutine {
     init(parameters: Parameters, contextOpened: Context = [.javascript, .subroutine]) {
-        super.init(parameters: parameters,
-                   numInputs: 0,
-                   numOutputs: 1,
-                   numInnerOutputs: parameters.count,
-                   contextOpened: contextOpened)
+        super.init(
+            parameters: parameters,
+            numInputs: parameters.numDefaultParameters,
+            numOutputs: 1,
+            numInnerOutputs: parameters.count,
+            contextOpened: contextOpened)
     }
 }
 class EndAnyFunction: EndAnySubroutine {}
@@ -1347,7 +1407,10 @@ class BeginAnyNamedFunction: BeginAnyFunction {
     // lifter cannot guarantee that there are no name collisions with other named functions.
     let functionName: String?
 
-    init(parameters: Parameters, functionName: String?, contextOpened: Context = [.javascript, .subroutine]) {
+    init(
+        parameters: Parameters, functionName: String?,
+        contextOpened: Context = [.javascript, .subroutine]
+    ) {
         assert(functionName == nil || !functionName!.isEmpty)
         self.functionName = functionName
         super.init(parameters: parameters, contextOpened: contextOpened)
@@ -1360,6 +1423,21 @@ final class BeginPlainFunction: BeginAnyNamedFunction {
 }
 final class EndPlainFunction: EndAnyFunction {
     override var opcode: Opcode { .endPlainFunction(self) }
+}
+
+// A plain function which doesn't use any variables from the outside.
+// Suitable for converting to a string and transmitting to a Worker.
+final class BeginWorkerFunction: BeginAnyNamedFunction {
+    override var opcode: Opcode { .beginWorkerFunction(self) }
+
+    init(parameters: Parameters, functionName: String?) {
+        super.init(
+            parameters: parameters, functionName: functionName,
+            contextOpened: [.javascript, .subroutine, .workerFunction])
+    }
+}
+final class EndWorkerFunction: EndAnyFunction {
+    override var opcode: Opcode { .endWorkerFunction(self) }
 }
 
 // A ES6 arrow function
@@ -1375,7 +1453,9 @@ final class BeginGeneratorFunction: BeginAnyNamedFunction {
     override var opcode: Opcode { .beginGeneratorFunction(self) }
 
     init(parameters: Parameters, functionName: String?) {
-        super.init(parameters: parameters, functionName: functionName, contextOpened: [.javascript, .subroutine, .generatorFunction])
+        super.init(
+            parameters: parameters, functionName: functionName,
+            contextOpened: [.javascript, .subroutine, .generatorFunction])
     }
 }
 final class EndGeneratorFunction: EndAnyFunction {
@@ -1387,7 +1467,9 @@ final class BeginAsyncFunction: BeginAnyNamedFunction {
     override var opcode: Opcode { .beginAsyncFunction(self) }
 
     init(parameters: Parameters, functionName: String?) {
-        super.init(parameters: parameters, functionName: functionName, contextOpened: [.javascript, .subroutine, .asyncFunction])
+        super.init(
+            parameters: parameters, functionName: functionName,
+            contextOpened: [.javascript, .subroutine, .async])
     }
 }
 final class EndAsyncFunction: EndAnyFunction {
@@ -1399,7 +1481,8 @@ final class BeginAsyncArrowFunction: BeginAnyFunction {
     override var opcode: Opcode { .beginAsyncArrowFunction(self) }
 
     init(parameters: Parameters) {
-        super.init(parameters: parameters, contextOpened: [.javascript, .subroutine, .asyncFunction])
+        super.init(
+            parameters: parameters, contextOpened: [.javascript, .subroutine, .async])
     }
 }
 final class EndAsyncArrowFunction: EndAnyFunction {
@@ -1411,7 +1494,9 @@ final class BeginAsyncGeneratorFunction: BeginAnyNamedFunction {
     override var opcode: Opcode { .beginAsyncGeneratorFunction(self) }
 
     init(parameters: Parameters, functionName: String?) {
-        super.init(parameters: parameters, functionName: functionName, contextOpened: [.javascript, .subroutine, .asyncFunction, .generatorFunction])
+        super.init(
+            parameters: parameters, functionName: functionName,
+            contextOpened: [.javascript, .subroutine, .async, .generatorFunction])
     }
 }
 final class EndAsyncGeneratorFunction: EndAnyFunction {
@@ -1425,7 +1510,9 @@ final class BeginConstructor: BeginAnySubroutine {
     override var opcode: Opcode { .beginConstructor(self) }
 
     init(parameters: Parameters) {
-        super.init(parameters: parameters, numOutputs: 1, numInnerOutputs: parameters.count + 1, contextOpened: [.javascript, .subroutine])
+        super.init(
+            parameters: parameters, numOutputs: 1, numInnerOutputs: parameters.count + 1,
+            contextOpened: [.javascript, .subroutine])
     }
 }
 final class EndConstructor: EndAnySubroutine {
@@ -1467,7 +1554,9 @@ final class Return: JsOperation {
     }
 
     init(hasReturnValue: Bool) {
-        super.init(numInputs: hasReturnValue ? 1 : 0, attributes: [.isJump], requiredContext: [.javascript, .subroutine])
+        super.init(
+            numInputs: hasReturnValue ? 1 : 0, attributes: [.isJump],
+            requiredContext: [.javascript, .subroutine])
     }
 }
 
@@ -1481,7 +1570,9 @@ final class Yield: JsOperation {
     }
 
     init(hasArgument: Bool) {
-        super.init(numInputs: hasArgument ? 1 : 0, numOutputs: 1, attributes: [], requiredContext: [.javascript, .generatorFunction])
+        super.init(
+            numInputs: hasArgument ? 1 : 0, numOutputs: 1, attributes: [],
+            requiredContext: [.javascript, .generatorFunction])
     }
 }
 
@@ -1490,7 +1581,8 @@ final class YieldEach: JsOperation {
     override var opcode: Opcode { .yieldEach(self) }
 
     init() {
-        super.init(numInputs: 1, attributes: [], requiredContext: [.javascript, .generatorFunction])
+        super.init(
+            numInputs: 1, attributes: [], requiredContext: [.javascript, .generatorFunction])
     }
 }
 
@@ -1498,7 +1590,9 @@ final class Await: JsOperation {
     override var opcode: Opcode { .await(self) }
 
     init() {
-        super.init(numInputs: 1, numOutputs: 1, attributes: [], requiredContext: [.javascript, .asyncFunction])
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [],
+            requiredContext: [.javascript, .async])
     }
 }
 
@@ -1511,7 +1605,9 @@ final class CallFunction: GuardableOperation {
 
     init(numArguments: Int, isGuarded: Bool) {
         // The called function is the first input.
-        super.init(isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1, attributes: [.isVariadic, .isCall])
+        super.init(
+            isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
+            attributes: [.isVariadic, .isCall])
     }
 }
 
@@ -1529,7 +1625,9 @@ final class CallFunctionWithSpread: GuardableOperation {
         assert(spreads.count == numArguments)
         self.spreads = spreads
         // The called function is the first input.
-        super.init(isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1, attributes: [.isVariadic, .isCall, .isMutable])
+        super.init(
+            isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
+            attributes: [.isVariadic, .isCall, .isMutable])
     }
 }
 
@@ -1542,7 +1640,9 @@ final class Construct: GuardableOperation {
 
     init(numArguments: Int, isGuarded: Bool) {
         // The constructor is the first input
-        super.init(isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1, attributes: [.isVariadic, .isCall])
+        super.init(
+            isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
+            attributes: [.isVariadic, .isCall])
     }
 }
 
@@ -1560,7 +1660,9 @@ final class ConstructWithSpread: GuardableOperation {
         assert(spreads.count == numArguments)
         self.spreads = spreads
         // The constructor is the first input
-        super.init(isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1, attributes: [.isVariadic, .isCall, .isMutable])
+        super.init(
+            isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
+            attributes: [.isVariadic, .isCall, .isMutable])
     }
 }
 
@@ -1576,7 +1678,9 @@ final class CallMethod: GuardableOperation {
     init(methodName: String, numArguments: Int, isGuarded: Bool) {
         self.methodName = methodName
         // The reference object is the first input
-        super.init(isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1, attributes: [.isMutable, .isVariadic, .isCall])
+        super.init(
+            isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
+            attributes: [.isMutable, .isVariadic, .isCall])
     }
 }
 
@@ -1596,7 +1700,9 @@ final class CallMethodWithSpread: GuardableOperation {
         self.methodName = methodName
         self.spreads = spreads
         // The reference object is the first input
-        super.init(isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1, attributes: [.isMutable, .isVariadic, .isCall])
+        super.init(
+            isGuarded: isGuarded, numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
+            attributes: [.isMutable, .isVariadic, .isCall])
     }
 }
 
@@ -1609,7 +1715,9 @@ final class CallComputedMethod: GuardableOperation {
 
     init(numArguments: Int, isGuarded: Bool) {
         // The reference object is the first input and the method name is the second input
-        super.init(isGuarded: isGuarded, numInputs: numArguments + 2, numOutputs: 1, firstVariadicInput: 2, attributes: [.isVariadic, .isCall])
+        super.init(
+            isGuarded: isGuarded, numInputs: numArguments + 2, numOutputs: 1, firstVariadicInput: 2,
+            attributes: [.isVariadic, .isCall])
     }
 }
 
@@ -1627,19 +1735,21 @@ final class CallComputedMethodWithSpread: GuardableOperation {
         assert(spreads.count == numArguments)
         self.spreads = spreads
         // The reference object is the first input and the method name is the second input
-        super.init(isGuarded: isGuarded, numInputs: numArguments + 2, numOutputs: 1, firstVariadicInput: 2, attributes: [.isMutable, .isVariadic, .isCall])
+        super.init(
+            isGuarded: isGuarded, numInputs: numArguments + 2, numOutputs: 1, firstVariadicInput: 2,
+            attributes: [.isMutable, .isVariadic, .isCall])
     }
 }
 
 public enum UnaryOperator: String, CaseIterable {
-    case PreInc     = "++"
-    case PreDec     = "--"
-    case PostInc    = "++ "     // Raw value must be unique
-    case PostDec    = "-- "     // Raw value must be unique
+    case PreInc = "++"
+    case PreDec = "--"
+    case PostInc = "++ "  // Raw value must be unique
+    case PostDec = "-- "  // Raw value must be unique
     case LogicalNot = "!"
     case BitwiseNot = "~"
-    case Plus       = "+"
-    case Minus      = "-"
+    case Plus = "+"
+    case Minus = "-"
 
     var token: String {
         return self.rawValue.trimmingCharacters(in: [" "])
@@ -1666,19 +1776,19 @@ final class UnaryOperation: JsOperation {
 }
 
 public enum BinaryOperator: String, CaseIterable {
-    case Add      = "+"
-    case Sub      = "-"
-    case Mul      = "*"
-    case Div      = "/"
-    case Mod      = "%"
-    case BitAnd   = "&"
-    case BitOr    = "|"
+    case Add = "+"
+    case Sub = "-"
+    case Mul = "*"
+    case Div = "/"
+    case Mod = "%"
+    case BitAnd = "&"
+    case BitOr = "|"
     case LogicAnd = "&&"
-    case LogicOr  = "||"
-    case Xor      = "^"
-    case LShift   = "<<"
-    case RShift   = ">>"
-    case Exp      = "**"
+    case LogicOr = "||"
+    case Xor = "^"
+    case LShift = "<<"
+    case RShift = ">>"
+    case Exp = "**"
     case UnRShift = ">>>"
     // Nullish coalescing operator (??)
     case NullCoalesce = "??"
@@ -1738,80 +1848,15 @@ final class Dup: JsOperation {
     }
 }
 
-/// Destructs an array into n output variables.
-final class DestructArray: JsOperation {
-    override var opcode: Opcode { .destructArray(self) }
-
-    let indices: [Int64]
-    let lastIsRest: Bool
-
-    init(indices: [Int64], lastIsRest: Bool) {
-        assert(indices == indices.sorted(), "Indices must be sorted in ascending order")
-        assert(indices.count == Set(indices).count, "Indices must not have duplicates")
-        assert(!lastIsRest || !indices.isEmpty, "DestructArray with lastIsRest requires at least one index")
-        self.indices = indices
-        self.lastIsRest = lastIsRest
-        super.init(numInputs: 1, numOutputs: indices.count)
-    }
-}
-
-/// Destructs an array and reassigns the output to n existing variables.
-final class DestructArrayAndReassign: JsOperation {
-    override var opcode: Opcode { .destructArrayAndReassign(self) }
-
-    let indices: [Int64]
-    let lastIsRest: Bool
-
-    init(indices: [Int64], lastIsRest:Bool) {
-        assert(indices == indices.sorted(), "Indices must be sorted in ascending order")
-        assert(indices.count == Set(indices).count, "Indices must not have duplicates")
-        assert(!lastIsRest || !indices.isEmpty, "DestructArray with lastIsRest requires at least one index")
-        self.indices = indices
-        self.lastIsRest = lastIsRest
-        // The first input is the array being destructed
-        super.init(numInputs: 1 + indices.count, numOutputs: 0)
-    }
-}
-
-/// Destructs an object into n output variables
-final class DestructObject: JsOperation {
-    override var opcode: Opcode { .destructObject(self) }
-
-    let properties: [String]
-    let hasRestElement: Bool
-
-    init(properties: [String], hasRestElement: Bool) {
-        assert(!properties.isEmpty || hasRestElement, "Must have at least one output")
-        self.properties = properties
-        self.hasRestElement = hasRestElement
-        super.init(numInputs: 1, numOutputs: properties.count + (hasRestElement ? 1 : 0))
-    }
-}
-
-/// Destructs an object and reassigns the output to n existing variables
-final class DestructObjectAndReassign: JsOperation {
-    override var opcode: Opcode { .destructObjectAndReassign(self) }
-
-    let properties: [String]
-    let hasRestElement: Bool
-
-    init(properties: [String], hasRestElement:Bool) {
-        self.properties = properties
-        self.hasRestElement = hasRestElement
-        // The first input is the object being destructed
-        super.init(numInputs: 1 + properties.count + (hasRestElement ? 1 : 0), numOutputs: 0)
-    }
-}
-
 // This array must be kept in sync with the Comparator Enum in operations.proto
 public enum Comparator: String, CaseIterable {
-    case equal              = "=="
-    case strictEqual        = "==="
-    case notEqual           = "!="
-    case strictNotEqual     = "!=="
-    case lessThan           = "<"
-    case lessThanOrEqual    = "<="
-    case greaterThan        = ">"
+    case equal = "=="
+    case strictEqual = "==="
+    case notEqual = "!="
+    case strictNotEqual = "!=="
+    case lessThan = "<"
+    case lessThanOrEqual = "<="
+    case greaterThan = ">"
     case greaterThanOrEqual = ">="
 
     var token: String {
@@ -1852,7 +1897,9 @@ final class BeginWith: JsOperation {
     override var opcode: Opcode { .beginWith(self) }
 
     init() {
-        super.init(numInputs: 1, attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: [.javascript])
+        super.init(
+            numInputs: 1, attributes: [.isBlockStart, .propagatesSurroundingContext],
+            contextOpened: [.javascript])
     }
 }
 
@@ -1872,7 +1919,9 @@ final class CallSuperConstructor: JsOperation {
     }
 
     init(numArguments: Int) {
-        super.init(numInputs: numArguments, firstVariadicInput: 0, attributes: [.isVariadic, .isCall], requiredContext: [.javascript, .method])
+        super.init(
+            numInputs: numArguments, firstVariadicInput: 0, attributes: [.isVariadic, .isCall],
+            requiredContext: [.javascript, .method])
     }
 }
 
@@ -1887,7 +1936,9 @@ final class CallSuperMethod: JsOperation {
 
     init(methodName: String, numArguments: Int) {
         self.methodName = methodName
-        super.init(numInputs: numArguments, numOutputs: 1, firstVariadicInput: 0, attributes: [.isCall, .isMutable, .isVariadic], requiredContext: [.javascript, .method])
+        super.init(
+            numInputs: numArguments, numOutputs: 1, firstVariadicInput: 0,
+            attributes: [.isCall, .isMutable, .isVariadic], requiredContext: [.javascript, .method])
     }
 }
 
@@ -1944,7 +1995,9 @@ final class CallPrivateMethod: JsOperation {
         self.methodName = methodName
         // The reference object is the first input.
         // See comment in GetPrivateProperty for why these aren't mutable.
-        super.init(numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1, attributes: [.isVariadic, .isCall], requiredContext: [.javascript, .classMethod])
+        super.init(
+            numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
+            attributes: [.isVariadic, .isCall], requiredContext: [.javascript, .classMethod])
     }
 }
 
@@ -1986,7 +2039,6 @@ final class GetComputedSuperProperty: JsOperation {
     }
 }
 
-
 final class UpdateSuperProperty: JsOperation {
     override var opcode: Opcode { .updateSuperProperty(self) }
 
@@ -2008,7 +2060,11 @@ final class BeginIf: JsOperation {
 
     init(inverted: Bool) {
         self.inverted = inverted
-        super.init(numInputs: 1, attributes: [.isBlockStart, .isMutable, .propagatesSurroundingContext], contextOpened: .javascript)
+        super.init(
+            numInputs: 1,
+            numInnerOutputs: 1,
+            attributes: [.isBlockStart, .isMutable, .propagatesSurroundingContext],
+            contextOpened: .javascript)
     }
 }
 
@@ -2016,7 +2072,10 @@ final class BeginElse: JsOperation {
     override var opcode: Opcode { .beginElse(self) }
 
     init() {
-        super.init(attributes: [.isBlockEnd, .isBlockStart, .propagatesSurroundingContext], contextOpened: .javascript)
+        super.init(
+            numInnerOutputs: 1,
+            attributes: [.isBlockEnd, .isBlockStart, .propagatesSurroundingContext],
+            contextOpened: .javascript)
     }
 }
 
@@ -2073,16 +2132,21 @@ final class BeginWhileLoopHeader: JsOperation {
     override var opcode: Opcode { .beginWhileLoopHeader(self) }
 
     init() {
-        super.init(attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: .javascript)
+        super.init(
+            attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: .javascript)
     }
 }
 
 // The input is the loop condition. This also prevents empty loop headers which are forbidden by the language.
+// The innerOutput is the label of the loop.
 final class BeginWhileLoopBody: JsOperation {
     override var opcode: Opcode { .beginWhileLoopBody(self) }
 
     init() {
-        super.init(numInputs: 1, attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext], contextOpened: [.javascript, .loop])
+        super.init(
+            numInputs: 1, numInnerOutputs: 1,
+            attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext],
+            contextOpened: [.javascript, .loop])
     }
 }
 
@@ -2094,11 +2158,15 @@ final class EndWhileLoop: JsOperation {
     }
 }
 
+// The innerOutput is the label of the loop.
 final class BeginDoWhileLoopBody: JsOperation {
     override var opcode: Opcode { .beginDoWhileLoopBody(self) }
 
     init() {
-        super.init(attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: [.javascript, .loop])
+        super.init(
+            numInnerOutputs: 1,
+            attributes: [.isBlockStart, .propagatesSurroundingContext],
+            contextOpened: [.javascript, .loop])
     }
 }
 
@@ -2106,7 +2174,9 @@ final class BeginDoWhileLoopHeader: JsOperation {
     override var opcode: Opcode { .beginDoWhileLoopHeader(self) }
 
     init() {
-        super.init(attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext], contextOpened: .javascript)
+        super.init(
+            attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext],
+            contextOpened: .javascript)
     }
 }
 
@@ -2155,7 +2225,8 @@ final class BeginForLoopInitializer: JsOperation {
     override var opcode: Opcode { .beginForLoopInitializer(self) }
 
     init() {
-        super.init(attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: .javascript)
+        super.init(
+            attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: .javascript)
     }
 }
 
@@ -2167,7 +2238,10 @@ final class BeginForLoopCondition: JsOperation {
     }
 
     init(numLoopVariables: Int) {
-        super.init(numInputs: numLoopVariables, numInnerOutputs: numLoopVariables, attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext], contextOpened: .javascript)
+        super.init(
+            numInputs: numLoopVariables, numInnerOutputs: numLoopVariables,
+            attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext],
+            contextOpened: .javascript)
     }
 }
 
@@ -2179,19 +2253,26 @@ final class BeginForLoopAfterthought: JsOperation {
     }
 
     init(numLoopVariables: Int) {
-        super.init(numInputs: 1, numInnerOutputs: numLoopVariables, attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext], contextOpened: .javascript)
+        super.init(
+            numInputs: 1, numInnerOutputs: numLoopVariables,
+            attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext],
+            contextOpened: .javascript)
     }
 }
 
+// Note: The last innerOutput is the label of the loop.
 final class BeginForLoopBody: JsOperation {
     override var opcode: Opcode { .beginForLoopBody(self) }
 
     var numLoopVariables: Int {
-        return numInnerOutputs
+        return numInnerOutputs - 1
     }
 
     init(numLoopVariables: Int) {
-        super.init(numInnerOutputs: numLoopVariables, attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext], contextOpened: [.javascript, .loop])
+        super.init(
+            numInnerOutputs: numLoopVariables + 1,
+            attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext],
+            contextOpened: [.javascript, .loop])
     }
 }
 
@@ -2203,55 +2284,123 @@ final class EndForLoop: JsOperation {
     }
 }
 
-final class BeginForInLoop: JsOperation {
-    override var opcode: Opcode { .beginForInLoop(self) }
+public enum ForInOfLoopType: CaseIterable {
+    case forOf
+    case forIn
+}
 
-    init() {
-        super.init(numInputs: 1, numInnerOutputs: 1, attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: [.javascript, .loop])
+public enum UsingType: String, Hashable, CaseIterable {
+    case none = ""
+    case using = "using"
+    case awaitUsing = "await using"
+}
+
+// Note: The last innerOutput is the label of the loop.
+public enum LoopHeader: Hashable {
+    case simple
+    case destruct(pattern: DestructuringPattern)
+
+    // Legacy helper methods to allow tests to use the old concise syntax
+    public static func arrayDestruct(indices: [Int64], hasRestElement: Bool) -> LoopHeader {
+        var elements = [DestructuringPattern.ArrayElement]()
+        var elementIndices = indices
+        if hasRestElement && !elementIndices.isEmpty {
+            elementIndices.removeLast()
+        }
+
+        // In the old format, the rest element's index dictated how many elements came before it.
+        let maxIndex =
+            hasRestElement && !indices.isEmpty
+            ? Int(indices.last!) - 1 : Int(elementIndices.max() ?? -1)
+
+        if maxIndex >= 0 {
+            for i in 0...maxIndex {
+                if elementIndices.contains(Int64(i)) {
+                    elements.append(
+                        DestructuringPattern.ArrayElement(
+                            target: .flatBinding))
+                } else {
+                    elements.append(
+                        DestructuringPattern.ArrayElement(
+                            target: nil))
+                }
+            }
+        }
+        return .destruct(
+            pattern: .array(
+                DestructuringPattern.ArrayPattern(
+                    elements: elements, restTarget: hasRestElement ? .flatBinding : .none))
+        )
+    }
+
+    public static func objectDestruct(properties: [String], hasRestElement: Bool) -> LoopHeader {
+        let props = properties.map {
+            DestructuringPattern.ObjectProperty(
+                key: .string($0), target: .flatBinding)
+        }
+        return .destruct(
+            pattern: .object(
+                DestructuringPattern.ObjectPattern(
+                    properties: props, hasRestElement: hasRestElement)))
     }
 }
 
-final class EndForInLoop: JsOperation {
-    override var opcode: Opcode { .endForInLoop(self) }
+final class ForLoop: JsOperation {
+    let header: LoopHeader
+    let isAsync: Bool
+    let type: ForInOfLoopType
+    let usingType: UsingType
+    public var isForIn: Bool { return type == .forIn }
 
-    init() {
-        super.init(attributes: .isBlockEnd)
+    init(
+        type: ForInOfLoopType, isAsync: Bool = false,
+        usingType: UsingType = .none, header: LoopHeader = .simple,
+        patternInputs: Int = 0
+    ) {
+        self.header = header
+        self.isAsync = isAsync
+        self.type = type
+        self.usingType = usingType
+
+        assert(usingType == .none || header == .simple, "using declarations cannot be destructured")
+
+        if type == .forIn {
+            assert(!isAsync, "For-in loops cannot be async")
+            assert(header == .simple, "For-in loops cannot have destructuring headers")
+            assert(usingType == .none, "For-in loops cannot use using")
+        }
+
+        let numInnerOutputs: Int
+
+        switch header {
+        case .simple:
+            numInnerOutputs = 2
+
+        case .destruct(let pattern):
+            numInnerOutputs = pattern.numBindings + 1  // loop label is appended
+        }
+
+        super.init(
+            numInputs: 1 + patternInputs, numInnerOutputs: numInnerOutputs,
+            attributes: [.isBlockStart, .propagatesSurroundingContext],
+            requiredContext: isAsync ? [.javascript, .async] : [.javascript],
+            contextOpened: [.loop])
     }
-}
 
-final class BeginForOfLoop: JsOperation {
-    override var opcode: Opcode { .beginForOfLoop(self) }
-
-    init() {
-        super.init(numInputs: 1, numInnerOutputs: 1, attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: [.javascript, .loop])
+    var pattern: DestructuringPattern {
+        if case .destruct(let pattern) = self.header { return pattern }
+        preconditionFailure("Invalid header for ForLoop pattern")
     }
-}
 
-final class BeginForOfLoopWithDestruct: JsOperation {
-    override var opcode: Opcode { .beginForOfLoopWithDestruct(self) }
-
-    let indices: [Int64]
-    let hasRestElement: Bool
-
-    init(indices: [Int64], hasRestElement: Bool) {
-        assert(indices.count >= 1)
-        self.indices = indices
-        self.hasRestElement = hasRestElement
-        super.init(numInputs: 1, numInnerOutputs: indices.count, attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: [.javascript, .loop])
-    }
-}
-
-final class EndForOfLoop: JsOperation {
-    override var opcode: Opcode { .endForOfLoop(self) }
-
-    init() {
-        super.init(attributes: .isBlockEnd)
+    override var opcode: Opcode {
+        return .beginForLoop(self)
     }
 }
 
 // A loop that simply runs N times and is therefore always guaranteed to terminate.
 // Useful for example to force JIT compilation without creating more complex loops, which can often quickly end up turning into infinite loops due to mutations.
 // These could be lifted simply as `for (let i = 0; i < N; i++) { body() }`
+// Note: The last innerOutput is the label of the loop.
 final class BeginRepeatLoop: JsOperation {
     override var opcode: Opcode { .beginRepeatLoop(self) }
 
@@ -2259,13 +2408,15 @@ final class BeginRepeatLoop: JsOperation {
 
     // Whether the current iteration number is exposed as an inner output variable.
     var exposesLoopCounter: Bool {
-        assert(numInnerOutputs == 0 || numInnerOutputs == 1)
-        return numInnerOutputs == 1
+        return numInnerOutputs == 2
     }
 
     init(iterations: Int, exposesLoopCounter: Bool = true) {
         self.iterations = iterations
-        super.init(numInnerOutputs: exposesLoopCounter ? 1 : 0, attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: [.javascript, .loop])
+        super.init(
+            numInnerOutputs: exposesLoopCounter ? 2 : 1,
+            attributes: [.isBlockStart, .propagatesSurroundingContext],
+            contextOpened: [.javascript, .loop])
     }
 }
 
@@ -2280,16 +2431,20 @@ final class EndRepeatLoop: JsOperation {
 final class LoopBreak: JsOperation {
     override var opcode: Opcode { .loopBreak(self) }
 
-    init() {
-        super.init(attributes: [.isJump], requiredContext: [.javascript, .loop])
+    init(hasLabel: Bool = false) {
+        super.init(
+            numInputs: hasLabel ? 1 : 0, attributes: [.isJump, .isNotInputMutable],
+            requiredContext: [.javascript, .loop])
     }
 }
 
 final class LoopContinue: JsOperation {
     override var opcode: Opcode { .loopContinue(self) }
 
-    init() {
-        super.init(attributes: [.isJump], requiredContext: [.javascript, .loop])
+    init(hasLabel: Bool = false) {
+        super.init(
+            numInputs: hasLabel ? 1 : 0, attributes: [.isJump, .isNotInputMutable],
+            requiredContext: [.javascript, .loop])
     }
 }
 
@@ -2305,7 +2460,9 @@ final class BeginCatch: JsOperation {
     override var opcode: Opcode { .beginCatch(self) }
 
     init() {
-        super.init(numInnerOutputs: 1, attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext])
+        super.init(
+            numInnerOutputs: 1,
+            attributes: [.isBlockStart, .isBlockEnd, .propagatesSurroundingContext])
     }
 }
 
@@ -2355,7 +2512,10 @@ final class BeginBlockStatement: JsOperation {
     override var opcode: Opcode { .beginBlockStatement(self) }
 
     init() {
-        super.init(attributes: [.isBlockStart, .propagatesSurroundingContext], contextOpened: .javascript)
+        super.init(
+            numInnerOutputs: 1,
+            attributes: [.isBlockStart, .propagatesSurroundingContext],
+            contextOpened: [.javascript])
     }
 }
 
@@ -2364,6 +2524,17 @@ final class EndBlockStatement: JsOperation {
 
     init() {
         super.init(attributes: [.isBlockEnd])
+    }
+}
+
+final class BlockBreak: JsOperation {
+    override var opcode: Opcode { .blockBreak(self) }
+
+    // Block break statements always need to reference a label. "break;" is not allowed here.
+    init() {
+        super.init(
+            numInputs: 1, attributes: [.isJump, .isNotInputMutable],
+            requiredContext: [.javascript])
     }
 }
 
@@ -2421,7 +2592,11 @@ final class BeginSwitch: JsOperation {
     override var opcode: Opcode { .beginSwitch(self) }
 
     init() {
-        super.init(numInputs: 1, attributes: [.isBlockStart], contextOpened: [.switchBlock])
+        super.init(
+            numInputs: 1,
+            numInnerOutputs: 1,
+            attributes: [.isBlockStart],
+            contextOpened: [.switchBlock])
     }
 }
 
@@ -2429,7 +2604,9 @@ final class BeginSwitchCase: JsOperation {
     override var opcode: Opcode { .beginSwitchCase(self) }
 
     init() {
-        super.init(numInputs: 1, attributes: [.isBlockStart, .resumesSurroundingContext], requiredContext: .switchBlock, contextOpened: [.switchCase, .javascript])
+        super.init(
+            numInputs: 1, attributes: [.isBlockStart, .resumesSurroundingContext],
+            requiredContext: .switchBlock, contextOpened: [.switchCase, .javascript])
     }
 }
 
@@ -2440,7 +2617,9 @@ final class BeginSwitchDefaultCase: JsOperation {
     override var opcode: Opcode { .beginSwitchDefaultCase(self) }
 
     init() {
-        super.init(attributes: [.isBlockStart, .resumesSurroundingContext, .isSingular], requiredContext: .switchBlock, contextOpened: [.switchCase, .javascript])
+        super.init(
+            attributes: [.isBlockStart, .resumesSurroundingContext, .isSingular],
+            requiredContext: .switchBlock, contextOpened: [.switchCase, .javascript])
     }
 }
 
@@ -2481,10 +2660,29 @@ final class LoadNewTarget: JsOperation {
     }
 }
 
+final class BeginBundleScript: JsOperation {
+    override var opcode: Opcode { .beginBundleScript(self) }
+
+    init() {
+        super.init(
+            attributes: .isBlockStart, requiredContext: [.bundle], contextOpened: .javascript)
+    }
+}
+
+final class EndBundleScript: JsOperation {
+    override var opcode: Opcode { .endBundleScript(self) }
+
+    init() {
+        super.init(attributes: .isBlockEnd, requiredContext: .javascript)
+    }
+}
+
 final class BeginWasmModule: JsOperation {
     override var opcode: Opcode { .beginWasmModule(self) }
     init() {
-        super.init(numOutputs: 0, attributes: [.isBlockStart], requiredContext: [.javascript], contextOpened: [.wasm])
+        super.init(
+            numOutputs: 0, attributes: [.isBlockStart], requiredContext: [.javascript],
+            contextOpened: [.wasm])
     }
 }
 
@@ -2531,7 +2729,8 @@ class BindFunction: JsOperation {
     override var opcode: Opcode { .bindFunction(self) }
 
     init(numInputs: Int) {
-        super.init(numInputs: numInputs, numOutputs: 1, firstVariadicInput: 1,
+        super.init(
+            numInputs: numInputs, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isVariadic], requiredContext: .javascript)
     }
 }
@@ -2552,14 +2751,14 @@ class CreateWasmGlobal: JsOperation {
 
 // This instruction is used to create strongly typed WasmMemories in the JS world that can be imported by a WasmModule.
 class CreateWasmMemory: JsOperation {
-   override var opcode: Opcode { .createWasmMemory(self) }
+    override var opcode: Opcode { .createWasmMemory(self) }
 
-   let memType: WasmMemoryType
+    let memType: WasmMemoryType
 
-   init(limits: Limits, isShared: Bool = false, isMemory64: Bool = false) {
-       self.memType = WasmMemoryType(limits: limits, isShared: isShared, isMemory64: isMemory64)
-       super.init(numOutputs: 1, attributes: [.isMutable], requiredContext: [.javascript])
-   }
+    init(limits: Limits, isShared: Bool = false, isMemory64: Bool = false) {
+        self.memType = WasmMemoryType(limits: limits, isShared: isShared, isMemory64: isMemory64)
+        super.init(numOutputs: 1, attributes: [.isMutable], requiredContext: [.javascript])
+    }
 }
 
 // This instruction is used to create strongly typed WasmTables in the JS world that can be imported by a WasmModule.
@@ -2570,7 +2769,9 @@ class CreateWasmTable: JsOperation {
     let tableType: WasmTableType
 
     init(elementType: ILType, limits: Limits, isTable64: Bool) {
-        self.tableType = WasmTableType(elementType: elementType, limits: limits, isTable64: isTable64, knownEntries: [])
+        self.tableType = WasmTableType(
+            elementType: elementType, limits: limits, isTable64: isTable64, knownEntrySignatures: []
+        )
         super.init(numOutputs: 1, attributes: [.isMutable], requiredContext: [.javascript])
     }
 }
@@ -2593,13 +2794,14 @@ class CreateWasmTag: JsOperation {
     }
 }
 
-class WasmTypeOperation : Operation {}
+class WasmTypeOperation: Operation {}
 
 class WasmBeginTypeGroup: WasmTypeOperation {
     override var opcode: Opcode { .wasmBeginTypeGroup(self) }
     init() {
-        super.init(attributes: [.isBlockStart], requiredContext: [.javascript],
-                   contextOpened: [.wasmTypeGroup])
+        super.init(
+            attributes: [.isBlockStart], requiredContext: [.javascript],
+            contextOpened: [.wasmTypeGroup])
     }
 }
 
@@ -2610,21 +2812,29 @@ class WasmEndTypeGroup: WasmTypeOperation {
     }
 
     init(typesCount: Int) {
-        super.init(numInputs: typesCount, numOutputs: typesCount, firstVariadicInput: 0,
-                   attributes: [.isBlockEnd, .resumesSurroundingContext, .isVariadic, .isNotInputMutable],
-                   requiredContext: [.wasmTypeGroup])
+        super.init(
+            numInputs: typesCount, numOutputs: typesCount, firstVariadicInput: 0,
+            attributes: [.isBlockEnd, .isVariadic, .isNotInputMutable],
+            requiredContext: [.wasmTypeGroup])
     }
 }
 
 class WasmDefineArrayType: WasmTypeOperation {
     override var opcode: Opcode { .wasmDefineArrayType(self) }
-    let elementType : ILType
+    let elementType: ILType
     let mutability: Bool
+    let hasSuperType: Bool
+    let isFinal: Bool
 
-    init(elementType: ILType, mutability: Bool) {
+    init(elementType: ILType, mutability: Bool, hasSuperType: Bool = false, isFinal: Bool = false) {
         self.elementType = elementType
         self.mutability = mutability
-        super.init(numInputs: elementType.requiredInputCount(), numOutputs: 1, requiredContext: [.wasmTypeGroup])
+        self.hasSuperType = hasSuperType
+        self.isFinal = isFinal
+        let numInputs = (hasSuperType ? 1 : 0) + elementType.requiredInputCount()
+        super.init(
+            numInputs: numInputs, numOutputs: 1,
+            requiredContext: [.wasmTypeGroup])
     }
 }
 
@@ -2634,23 +2844,43 @@ class WasmDefineStructType: WasmTypeOperation {
     typealias Field = WasmStructTypeDescription.Field
 
     let fields: [Field]
+    let hasSuperType: Bool
+    let isFinal: Bool
 
-    init(fields: [Field]) {
+    init(fields: [Field], hasSuperType: Bool = false, isFinal: Bool = false) {
         self.fields = fields
-        let numInputs = fields.map { $0.type.requiredInputCount() }.reduce(0) { $0 + $1 }
-        super.init(numInputs: numInputs, numOutputs: 1, requiredContext: [.wasmTypeGroup])
+        self.hasSuperType = hasSuperType
+        self.isFinal = isFinal
+        let numInputs =
+            (hasSuperType ? 1 : 0)
+            + fields.map {
+                $0.type.requiredInputCount()
+            }.reduce(0) { $0 + $1 }
+        super.init(
+            numInputs: numInputs, numOutputs: 1,
+            requiredContext: [.wasmTypeGroup])
     }
 }
 
 class WasmDefineSignatureType: WasmTypeOperation {
     override var opcode: Opcode { .wasmDefineSignatureType(self) }
     let signature: WasmSignature
+    let hasSuperType: Bool
+    let isFinal: Bool
 
-    init(signature: WasmSignature) {
+    init(signature: WasmSignature, hasSuperType: Bool = false, isFinal: Bool = false) {
         self.signature = signature
-        let numInputs = (signature.outputTypes + signature.parameterTypes).map {
-            $0.requiredInputCount() }.reduce(0) { $0 + $1 }
-        super.init(numInputs: numInputs, numOutputs: 1, requiredContext: [.wasmTypeGroup])
+        self.hasSuperType = hasSuperType
+        self.isFinal = isFinal
+        let numInputs =
+            (hasSuperType ? 1 : 0)
+            + (signature.outputTypes + signature.parameterTypes)
+            .map {
+                $0.requiredInputCount()
+            }.reduce(0) { $0 + $1 }
+        super.init(
+            numInputs: numInputs, numOutputs: 1,
+            requiredContext: [.wasmTypeGroup])
     }
 }
 
@@ -2699,7 +2929,9 @@ final class Explore: JsInternalOperation {
 
     init(id: String, numArguments: Int, rngSeed: UInt32) {
         // IDs should be valid JavaScript property names since they will typically be used in that way.
-        assert(id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) && id.contains(where: { $0.isLetter }))
+        assert(
+            id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) })
+                && id.contains(where: { $0.isLetter }))
 
         self.id = id
         self.rngSeed = rngSeed
@@ -2716,7 +2948,9 @@ final class Probe: JsInternalOperation {
 
     init(id: String) {
         // IDs should be valid JavaScript property names since they will typically be used in that way.
-        assert(id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) && id.contains(where: { $0.isLetter }))
+        assert(
+            id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) })
+                && id.contains(where: { $0.isLetter }))
 
         self.id = id
         super.init(numInputs: 1)
@@ -2740,10 +2974,449 @@ final class Fixup: JsInternalOperation {
         return numOutputs == 1
     }
 
-    init(id: String, action: String, originalOperation: String, numArguments: Int, hasOutput: Bool) {
+    init(id: String, action: String, originalOperation: String, numArguments: Int, hasOutput: Bool)
+    {
         self.id = id
         self.action = action
         self.originalOperation = originalOperation
         super.init(numInputs: numArguments, numOutputs: hasOutput ? 1 : 0)
+    }
+}
+
+public struct WasmModuleMetadata: Hashable {
+    public struct FunctionExport: Hashable {
+        public let name: String
+        public let signature: Signature
+        public init(name: String, signature: Signature) {
+            self.name = name
+            self.signature = signature
+        }
+    }
+
+    public let functions: [FunctionExport]
+    public let globals: [String]
+    public let tables: [String]
+    public let tags: [String]
+    public let memories: [String]
+
+    public init(
+        functions: [FunctionExport] = [], globals: [String] = [], tables: [String] = [],
+        tags: [String] = [], memories: [String] = []
+    ) {
+        self.functions = functions
+        self.globals = globals
+        self.tables = tables
+        self.tags = tags
+        self.memories = memories
+    }
+}
+
+final class RawWasmModule: JsOperation {
+    override var opcode: Opcode { .rawWasmModule(self) }
+
+    let bytes: [UInt8]
+    let metadata: WasmModuleMetadata
+
+    init(bytes: [UInt8], metadata: WasmModuleMetadata = WasmModuleMetadata()) {
+        // TODO: Consider validating that bytes represent a valid Wasm module (starts with \0asm)
+        assert(!bytes.isEmpty, "Wasm module bytes should not be empty")
+        self.bytes = bytes
+        self.metadata = metadata
+        super.init(numOutputs: 1, requiredContext: [.javascript])
+    }
+}
+
+final class BeginBundleModule: JsOperation {
+    override var opcode: Opcode { .beginBundleModule(self) }
+    let moduleName: String
+
+    init(moduleName: String) {
+        self.moduleName = moduleName
+        super.init(
+            attributes: .isBlockStart, requiredContext: [.bundle],
+            contextOpened: [.moduleTopLevel, .javascript, .async])
+    }
+}
+
+// The output will be the module.
+final class EndBundleModule: JsOperation {
+    override var opcode: Opcode { .endBundleModule(self) }
+    let moduleName: String
+
+    init(moduleName: String) {
+        self.moduleName = moduleName
+        super.init(numOutputs: 1, attributes: .isBlockEnd, requiredContext: .moduleTopLevel)
+    }
+}
+
+// Pending module forward declaration
+final class DeclarePendingBundleModule: JsOperation {
+    override var opcode: Opcode { .declarePendingBundleModule(self) }
+    let moduleName: String
+    let exportNames: [String]
+
+    init(moduleName: String, exportNames: [String]) {
+        self.moduleName = moduleName
+        self.exportNames = exportNames
+        super.init(numOutputs: 1, requiredContext: [.bundle])
+    }
+}
+
+// Pending module definition. The input is the DeclarePendingBundleModule operation.
+final class BeginPendingBundleModule: JsOperation {
+    override var opcode: Opcode { .beginPendingBundleModule(self) }
+
+    init() {
+        super.init(
+            numInputs: 1,
+            attributes: [.isBlockStart, .isNotInputMutable], requiredContext: [.bundle],
+            contextOpened: [.moduleTopLevel, .javascript, .async])
+    }
+}
+
+final class EndPendingBundleModule: JsOperation {
+    override var opcode: Opcode { .endPendingBundleModule(self) }
+
+    init() {
+        super.init(attributes: .isBlockEnd, requiredContext: .moduleTopLevel)
+    }
+}
+
+final class ExportVariables: JsOperation {
+    override var opcode: Opcode { .exportVariables(self) }
+    let exportNames: [String]
+
+    init(exportNames: [String]) {
+        self.exportNames = exportNames
+        super.init(
+            numInputs: exportNames.count, firstVariadicInput: 0, attributes: .isVariadic,
+            requiredContext: .moduleTopLevel)
+    }
+}
+
+final class ImportVariables: JsOperation {
+    override var opcode: Opcode { .importVariables(self) }
+    let importNames: [String]
+
+    init(importNames: [String]) {
+        self.importNames = importNames
+        super.init(
+            numInputs: 1, numOutputs: importNames.count, attributes: [.isNotInputMutable],
+            requiredContext: .moduleTopLevel)
+    }
+}
+
+final class ImportNamespace: JsOperation {
+    override var opcode: Opcode { .importNamespace(self) }
+    let isDeferred: Bool
+
+    init(isDeferred: Bool) {
+        self.isDeferred = isDeferred
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isNotInputMutable],
+            requiredContext: .moduleTopLevel)
+    }
+}
+
+final class DynamicImport: JsOperation {
+    override var opcode: Opcode { .dynamicImport(self) }
+    let isDeferred: Bool
+
+    init(isDeferred: Bool) {
+        self.isDeferred = isDeferred
+        super.init(numInputs: 1, numOutputs: 1, attributes: [.isNotInputMutable])
+    }
+}
+
+final class BeginBundleModuleEntryPoint: JsOperation {
+    override var opcode: Opcode { .beginBundleModuleEntryPoint(self) }
+
+    init() {
+        super.init(
+            attributes: .isBlockStart, requiredContext: [.bundle],
+            contextOpened: [.moduleTopLevel, .javascript, .async])
+    }
+}
+
+final class EndBundleModuleEntryPoint: JsOperation {
+    override var opcode: Opcode { .endBundleModuleEntryPoint(self) }
+
+    init() {
+        super.init(attributes: .isBlockEnd, requiredContext: .moduleTopLevel)
+    }
+}
+
+/// Creates a new JavaScript Map object.
+///
+/// While creating a Map is already possible in FuzzIL by calling the `Map`
+/// constructor this dedicated operation allows for parameterizing the types of
+/// the keys and values (via group names), providing more precise type
+/// information to the fuzzer for fuzzing programs with strict type requirements.
+final class CreateMap: JsOperation {
+    override var opcode: Opcode { .createMap(self) }
+
+    var numInitialValues: Int {
+        return numInputs
+    }
+
+    let keyGroupName: String?
+    let valueGroupName: String?
+
+    init(numInitialValues: Int, keyGroupName: String? = nil, valueGroupName: String? = nil) {
+        self.keyGroupName = keyGroupName
+        self.valueGroupName = valueGroupName
+        super.init(
+            numInputs: numInitialValues, numOutputs: 1, firstVariadicInput: 0,
+            attributes: [.isVariadic])
+    }
+}
+
+/// The native FuzzIL representation of a destructuring pattern
+public indirect enum DestructuringPattern: Hashable, Equatable {
+    case object(ObjectPattern)
+    case array(ArrayPattern)
+
+    public enum Target: Hashable, Equatable {
+        case flatBinding
+        case pattern(DestructuringPattern)
+        case property(String)
+        case element(Int64)
+        case computedProperty
+        case superProperty(String)
+        case superElement(Int64)
+        case superComputedProperty
+    }
+
+    public struct ObjectPattern: Hashable, Equatable {
+        public let properties: [ObjectProperty]
+        public let hasRestElement: Bool
+        public init(properties: [ObjectProperty], hasRestElement: Bool) {
+            self.properties = properties
+            self.hasRestElement = hasRestElement
+        }
+    }
+
+    public struct ObjectProperty: Hashable, Equatable {
+        public enum Key: Hashable, Equatable {
+            case string(String)
+            case computed
+        }
+        public let key: Key
+
+        public let target: Target
+        public let hasDefaultValue: Bool
+
+        public init(key: Key, target: Target, hasDefaultValue: Bool = false) {
+            self.key = key
+            self.target = target
+            self.hasDefaultValue = hasDefaultValue
+        }
+    }
+
+    public struct ArrayPattern: Hashable, Equatable {
+        public let elements: [ArrayElement]
+        public let restTarget: Target?
+
+        public init(elements: [ArrayElement], restTarget: Target?) {
+            self.elements = elements
+            self.restTarget = restTarget
+        }
+    }
+
+    public struct ArrayElement: Hashable, Equatable {
+        public let target: Target?
+        public let hasDefaultValue: Bool
+
+        public init(target: Target?, hasDefaultValue: Bool = false) {
+            self.target = target
+            self.hasDefaultValue = hasDefaultValue
+        }
+    }
+}
+
+extension DestructuringPattern {
+    public var hasNestedDestructuring: Bool {
+        switch self {
+        case .object(let obj):
+            for prop in obj.properties {
+                if case .pattern = prop.target { return true }
+            }
+            return false
+        case .array(let arr):
+            for elem in arr.elements {
+                if case .pattern = elem.target { return true }
+            }
+            if case .pattern = arr.restTarget { return true }
+            return false
+        }
+    }
+
+    public var hasRestElement: Bool {
+        switch self {
+        case .object(let obj):
+            return obj.hasRestElement
+        case .array(let arr):
+            return arr.restTarget != .none
+        }
+    }
+
+    var numExtraInputs: Int {
+        func countTargetInputs(_ target: DestructuringPattern.Target) -> Int {
+            switch target {
+            case .pattern(let p): return p.numExtraInputs
+            case .property(_), .element(_), .superComputedProperty: return 1
+            case .computedProperty: return 2
+            default: return 0
+            }
+        }
+
+        switch self {
+        case .object(let obj):
+            var count = 0
+            for prop in obj.properties {
+                if case .computed = prop.key { count += 1 }
+                if prop.hasDefaultValue { count += 1 }
+                count += countTargetInputs(prop.target)
+            }
+            return count
+        case .array(let arr):
+            var count = 0
+            for elem in arr.elements {
+                if elem.hasDefaultValue { count += 1 }
+                if let target = elem.target {
+                    count += countTargetInputs(target)
+                }
+            }
+            if let restTarget = arr.restTarget {
+                count += countTargetInputs(restTarget)
+            }
+            return count
+        }
+    }
+
+    var numBindings: Int {
+        switch self {
+        case .object(let obj):
+            var count = 0
+            for prop in obj.properties {
+                switch prop.target {
+                case .flatBinding: count += 1
+                case .pattern(let p): count += p.numBindings
+                default: break
+                }
+            }
+            if obj.hasRestElement { count += 1 }
+            return count
+        case .array(let arr):
+            var count = 0
+            for elem in arr.elements {
+                switch elem.target {
+                case .flatBinding: count += 1
+                case .pattern(let p): count += p.numBindings
+                default: break
+                }
+            }
+            switch arr.restTarget {
+            case .flatBinding: count += 1
+            case .pattern(let p): count += p.numBindings
+            default: break
+            }
+            return count
+        }
+    }
+}
+
+/// Destructs a variable using a nested pattern into n output variables.
+///
+/// The inputs to this operation are laid out as follows:
+///   1. `input(0)`: The source object/iterable being destructured.
+///   2. `input(1...n)`: The variables used for computed property keys and default values.
+///      These variables appear in the exact lexicographical order of a depth-first,
+///      left-to-right traversal of the `DestructuringPattern` AST.
+///
+/// The outputs of this operation are the newly declared variables, which also strictly
+/// match the depth-first, left-to-right order of the bindings in the pattern.
+final class Destruct: JsOperation {
+    override var opcode: Opcode { .destruct(self) }
+
+    let pattern: DestructuringPattern
+
+    init(pattern: DestructuringPattern, numInputs: Int, numOutputs: Int) {
+        self.pattern = pattern
+        assert(numInputs == 1 + pattern.numExtraInputs)
+        super.init(numInputs: numInputs, numOutputs: numOutputs, attributes: [.isMutable])
+    }
+}
+
+/// Destructs a variable using a nested pattern and reassigns to n existing variables.
+///
+/// The inputs to this operation are laid out as follows:
+///   1. `input(0)`: The source object/iterable being destructured.
+///   2. `input(1...n)`: A flat, interleaved sequence of variables representing computed property
+///      keys, target variables being reassigned, and default values. These variables appear
+///      in the exact lexicographical order of a depth-first, left-to-right traversal of the
+///      `DestructuringPattern` AST. For any given property/element, the ordering is:
+///      `[computedKeyVariable]`, `[targetVariable]`, `[defaultValueVariable]`.
+final class DestructAndReassign: JsOperation {
+    override var opcode: Opcode { .destructAndReassign(self) }
+
+    let pattern: DestructuringPattern
+    let isTarget: [Bool]
+
+    init(pattern: DestructuringPattern, numInputs: Int) {
+        self.pattern = pattern
+        var isReassignmentTarget = [Bool](repeating: false, count: numInputs)
+        var currentInputIdx = 1
+
+        func traverse(_ pattern: DestructuringPattern) {
+            func traverseTarget(_ target: DestructuringPattern.Target) {
+                switch target {
+                case .flatBinding:
+                    isReassignmentTarget[currentInputIdx] = true
+                    currentInputIdx += 1
+                case .pattern(let p):
+                    traverse(p)
+                case .property(_), .element(_), .superComputedProperty:
+                    currentInputIdx += 1
+                case .computedProperty:
+                    currentInputIdx += 2
+                case .superProperty(_), .superElement(_):
+                    break
+                }
+            }
+
+            switch pattern {
+            case .object(let obj):
+                for prop in obj.properties {
+                    if case .computed = prop.key {
+                        currentInputIdx += 1
+                    }
+                    traverseTarget(prop.target)
+                    if prop.hasDefaultValue {
+                        currentInputIdx += 1
+                    }
+                }
+                if obj.hasRestElement {
+                    isReassignmentTarget[currentInputIdx] = true
+                    currentInputIdx += 1
+                }
+            case .array(let arr):
+                for elem in arr.elements {
+                    if let target = elem.target {
+                        traverseTarget(target)
+                    }
+                    if elem.hasDefaultValue {
+                        currentInputIdx += 1
+                    }
+                }
+                if let restTarget = arr.restTarget {
+                    traverseTarget(restTarget)
+                }
+            }
+        }
+        traverse(pattern)
+        assert(currentInputIdx == numInputs)
+        self.isTarget = isReassignmentTarget
+        super.init(numInputs: numInputs, numOutputs: 0, attributes: [.isMutable])
     }
 }

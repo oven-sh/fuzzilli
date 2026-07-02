@@ -13,10 +13,12 @@
 // limitations under the License.
 
 // QV4 is the Execution Engine behind QTJS
-fileprivate let ForceQV4JITGenerator = CodeGenerator("ForceQV4JITGenerator", inputs: .required(.function())) { b, f in
+private let ForceQV4JITGenerator = CodeGenerator(
+    "ForceQV4JITGenerator", inputs: .required(.function())
+) { b, f in
     assert(b.type(of: f).Is(.function()))
     let arguments = b.randomArguments(forCalling: f)
-    b.buildRepeatLoop(n: 100){ _ in
+    b.buildRepeatLoop(n: 100) { _ in
         b.callFunction(f, withArgs: arguments)
     }
 }
@@ -28,17 +30,17 @@ let qtjsProfile = Profile(
 
     processArgsReference: nil,
 
-    processEnv: ["UBSAN_OPTIONS":"handle_segv=0"],
+    processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
 
     maxExecsBeforeRespawn: 1000,
 
     timeout: Timeout.value(250),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                """,
+        """,
 
     ecmaVersion: ECMAScriptVersion.es6,
 
@@ -51,7 +53,7 @@ let qtjsProfile = Profile(
     ],
 
     additionalCodeGenerators: [
-        (ForceQV4JITGenerator,    20),
+        (ForceQV4JITGenerator, 20)
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),
@@ -61,12 +63,14 @@ let qtjsProfile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc"                : .function([] => .undefined),
+        "gc": .function([] => .undefined)
     ],
 
     additionalObjectGroups: [],
 
     additionalEnumerations: [],
+
+    additionalOptionsBags: [],
 
     optionalPostProcessor: nil
 )

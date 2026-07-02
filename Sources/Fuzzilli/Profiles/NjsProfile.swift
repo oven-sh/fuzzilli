@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 let njsProfile = Profile(
     processArgs: { randomize in
         ["fuzz"]
@@ -27,10 +26,10 @@ let njsProfile = Profile(
     timeout: Timeout.value(250),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                """,
+        """,
 
     ecmaVersion: ECMAScriptVersion.es6,
 
@@ -57,6 +56,8 @@ let njsProfile = Profile(
     additionalObjectGroups: [],
 
     additionalEnumerations: [],
+
+    additionalOptionsBags: [],
 
     optionalPostProcessor: nil
 )

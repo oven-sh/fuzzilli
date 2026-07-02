@@ -13,6 +13,7 @@
 // limitations under the License.
 
 /// Default weights for the builtin code generators.
+// swift-format-ignore
 public let codeGeneratorWeights = [
     // Value generators. These are used to bootstrap code
     // generation and therefore control the types of variables
@@ -68,6 +69,8 @@ public let codeGeneratorWeights = [
     "ObjectLiteralComputedMethodGenerator":     3,
     "ObjectLiteralGetterGenerator":             3,
     "ObjectLiteralSetterGenerator":             3,
+    "ObjectLiteralComputedGetterGenerator":     3,
+    "ObjectLiteralComputedSetterGenerator":     3,
 //
 //    // The following generators determine how frequently different
 //    // types of fields are generated in class definitions.
@@ -91,6 +94,8 @@ public let codeGeneratorWeights = [
     "ClassPrivateInstanceMethodGenerator":      5,
     "ClassPrivateStaticPropertyGenerator":      5,
     "ClassPrivateStaticMethodGenerator":        5,
+    "ClassComputedGetterGenerator":             3,
+    "ClassComputedSetterGenerator":             3,
 
 
     "ObjectWithSpreadGenerator":                2,
@@ -154,6 +159,7 @@ public let codeGeneratorWeights = [
     "UnboundFunctionApplyGenerator":            10,
     "UnboundFunctionBindGenerator":             10,
     "FunctionBindGenerator":                    10,
+    "HomomorphicObjectsGenerator":              5,
 
     // These will only be used inside class methods, and only if private properties were previously declared in that class.
     "PrivatePropertyRetrievalGenerator":        30,
@@ -179,7 +185,15 @@ public let codeGeneratorWeights = [
     "ComplexForLoopGenerator":                  10,
     "ForInLoopGenerator":                       10,
     "ForOfLoopGenerator":                       10,
-    "ForOfWithDestructLoopGenerator":           3,
+    "ForOfWithUsingLoopGenerator":              10,
+    "ForOfWithAwaitUsingLoopGenerator":         10,
+    "ForAwaitOfLoopGenerator":                  10,
+    "ForAwaitOfWithUsingLoopGenerator":         10,
+    "ForAwaitOfWithAwaitUsingLoopGenerator":    10,
+    "ForOfWithArrayDestructLoopGenerator":      3,
+    "ForAwaitOfWithArrayDestructLoopGenerator": 3,
+    "ForOfWithObjectDestructLoopGenerator":      3,
+    "ForAwaitOfWithObjectDestructLoopGenerator": 3,
     "RepeatLoopGenerator":                      10,
     "SwitchCaseBreakGenerator":                 5,
     "LoopBreakGenerator":                       5,
@@ -190,6 +204,7 @@ public let codeGeneratorWeights = [
     "ThrowGenerator":                           1,
     "ConditionalThrowGenerator":                1,
     "BlockStatementGenerator":                  1,
+    "BlockBreakGenerator":                      5,
 
     // Special generators
     "WellKnownPropertyLoadGenerator":           5,
@@ -205,30 +220,49 @@ public let codeGeneratorWeights = [
     "EvalGenerator":                            3,
     "NumberComputationGenerator":               40,
     "ImitationGenerator":                       30,
-    "ResizableArrayBufferGenerator":            5*6, // TODO(tacet): Revert increased fuzzing probability factors by 02/2026 or later.
-    "ResizableBufferResizeGenerator":           5*3,
-    "GrowableSharedArrayBufferGenerator":       5*6,
-    "GrowableSharedBufferGrowGenerator":        5*3,
-    "TypedArrayFromBufferGenerator":            10*3,
-    "DataViewFromBufferGenerator":              5*3,
-    "TypedArrayLastIndexGenerator":             5*3,
+    "ResizableArrayBufferGenerator":            5,
+    "ResizableBufferResizeGenerator":           5,
+    "GrowableSharedArrayBufferGenerator":       5,
+    "GrowableSharedBufferGrowGenerator":        5,
+    "TypedArrayFromBufferGenerator":            10,
+    "DataViewFromBufferGenerator":              5,
+    "TypedArrayLastIndexGenerator":             5,
     "FastToSlowPropertiesGenerator":            10,
     "IteratorGenerator":                        5,
+    "DisposableGenerator":                      5,
+    "AsyncDisposableGenerator":                 5,
+    "DisposableArrayGenerator":                 5,
+    "AsyncDisposableArrayGenerator":            5,
+    "AsyncIterableDisposableGenerator":         5,
+    "AsyncIterableAsyncDisposableGenerator":    5,
     "ConstructWithDifferentNewTargetGenerator": 5,
     "ObjectHierarchyGenerator":                 10,
     "ApiConstructorCallGenerator":              15,
     "ApiMethodCallGenerator":                   15,
     "ApiFunctionCallGenerator":                 15,
     "VoidGenerator":                            1,
+    "IteratorZipGenerator":                     1,
+    "IteratorZipKeyedGenerator":                1,
 
     // JS generators for wasm features (e.g. APIs on the WebAssembly global object).
     "WasmGlobalGenerator":                      4,
     "WasmMemoryGenerator":                      4,
-    "WasmMemoryToResizableBufferGenerator":     5*3, // TODO(tacet): Revert increased fuzzing probability factors by 02/2026 or later.
-    "WasmMemoryToFixedLengthBufferGenerator":   5*3,
-    "WasmMemoryJSGrowGenerator":                5*3,
+    "WasmTableGenerator":                       4,
+    "WasmMemoryToResizableBufferGenerator":     5,
+    "WasmMemoryToFixedLengthBufferGenerator":   5,
+    "WasmMemoryJSGrowGenerator":                5,
     "WasmTagGenerator":                         4,
     "WasmLegacyTryCatchComplexGenerator":       5,
+
+    // For generating bundles
+    "BundleScriptGenerator":                    1,
+    "BundleModuleGenerator":                    5,
+    "PendingBundleModuleGenerator":             5,
+    "BundleModuleEntryPointGenerator":          5,
+    "ModuleImportGenerator":                    20,
+    "ModuleNamespaceImportGenerator":           10,
+    "DynamicImportGenerator":                   15,
+    "ModuleExportGenerator":                    20,
 
     //
     // Wasm generators
@@ -237,6 +271,7 @@ public let codeGeneratorWeights = [
     // This weight is important as we need to have a module for the other generators to work.
     // As they all require .wasm context.
     "WasmModuleGenerator":                      35,
+    "BinaryenWasmGenerator":                    10,
     "WasmDefineMemoryGenerator":                8,
     "WasmDefineDataSegmentGenerator":           8,
     "WasmDropDataSegmentGenerator":             5,
@@ -259,6 +294,8 @@ public let codeGeneratorWeights = [
     "WasmDropElementSegmentGenerator":          1,
     "WasmTableSizeGenerator":                   5,
     "WasmTableGrowGenerator":                   1,
+    "WasmTableGetGenerator":                    5,
+    "WasmTableSetGenerator":                    5,
     "WasmGlobalStoreGenerator":                 2,
     "WasmGlobalLoadGenerator":                  2,
     "WasmReassignmentGenerator":                2,
@@ -289,6 +326,8 @@ public let codeGeneratorWeights = [
     "Wasmf64CompareOpGenerator":                5,
     "Wasmi32EqzGenerator":                      5,
     "Wasmi64EqzGenerator":                      5,
+    "Wasmi64WideBinOpGenerator":                5,
+    "Wasmi64WideMulOpGenerator":                5,
 
     // Numerical Conversion Generators
     "WasmWrapi64Toi32Generator":                5,
@@ -324,15 +363,22 @@ public let codeGeneratorWeights = [
     "WasmLegacyTryDelegateGenerator":           8,
     "WasmThrowGenerator":                       2,
     "WasmLegacyRethrowGenerator":               10,
+    // This generator is mostly just there, so that the WasmThrowRefGenerator
+    // can create an exnref on demand (if a wasm tag is present).
+    "WasmCreateExnRefGenerator":                1,
     "WasmThrowRefGenerator":                    6,
     "WasmBranchGenerator":                      6,
     "WasmBranchIfGenerator":                    6,
+    "WasmBranchOnNullGenerator":                6,
+    "WasmBranchOnNonNullGenerator":             6,
     "WasmBranchTableGenerator":                 6,
     "WasmTryTableGenerator":                    6,
     "WasmJsCallGenerator":                      30,
     "WasmCallIndirectGenerator":                5,
     "WasmCallDirectGenerator":                  10,
+    "WasmCallRefGenerator":                     10,
     "WasmReturnCallDirectGenerator":            10,
+    "WasmReturnCallRefGenerator":               10,
     "WasmReturnCallIndirectGenerator":          10,
 
     // Simd Generators
@@ -374,6 +420,8 @@ public let codeGeneratorWeights = [
     "WasmStructSetGenerator":                   5,
     "WasmRefNullGenerator":                     5,
     "WasmRefIsNullGenerator":                   5,
+    "WasmRefAsNonNullGenerator":                5,
+    "WasmRefFuncGenerator":                     5,
     "WasmRefEqGenerator":                       5,
     "WasmRefI31Generator":                      5,
     "WasmI31GetGenerator":                      5,
@@ -383,4 +431,6 @@ public let codeGeneratorWeights = [
     "WasmRefTestAbstractGenerator":             5,
     "WasmRefCastGenerator":                     5,
     "WasmRefCastAbstractGenerator":             5,
+    "WasmBranchOnCastGenerator":                5,
+    "WasmBranchOnCastFailGenerator":            5,
 ]

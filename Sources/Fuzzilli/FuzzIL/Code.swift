@@ -22,11 +22,17 @@ public struct Code: Collection {
     /// Code is just a linear sequence of instructions.
     private var instructions = [Instruction]()
 
+    public let isBundle: Bool
+
     /// Creates an empty code instance.
-    public init() {}
+    public init(isBundle: Bool) {
+        self.isBundle = isBundle
+    }
 
     /// Creates a code instance containing the given instructions.
-    public init<S: Sequence>(_ instructions: S) where S.Element == Instruction {
+    public init<S: Sequence>(_ instructions: S, isBundle: Bool)
+    where S.Element == Instruction {
+        self.isBundle = isBundle
         for instr in instructions {
             append(instr)
         }
@@ -59,7 +65,9 @@ public struct Code: Collection {
             return instructions[i]
         }
         set {
-            return instructions[i] = Instruction(newValue.op, inouts: newValue.inouts, index: i, flags: newValue.flags)
+            instructions[i] = Instruction(
+                newValue.op, inouts: newValue.inouts, index: i, flags: newValue.flags)
+            return
         }
     }
 
@@ -93,12 +101,12 @@ public struct Code: Collection {
     }
 
     /// Returns the instructions in this code in reversed order.
-    public func reversed() -> ReversedCollection<Array<Instruction>> {
+    public func reversed() -> ReversedCollection<[Instruction]> {
         return instructions.reversed()
     }
 
     /// Enumerates the instructions in this code.
-    public func enumerated() -> EnumeratedSequence<Array<Instruction>> {
+    public func enumerated() -> EnumeratedSequence<[Instruction]> {
         return instructions.enumerated()
     }
 
@@ -140,7 +148,7 @@ public struct Code: Collection {
 
     /// Computes the last variable (which will have the highest number) in this code or nil if there are no variables.
     public func lastVariable() -> Variable? {
-        assert(isStaticallyValid())
+        assertIsStaticallyValid()
         for instr in instructions.reversed() {
             if let v = instr.allOutputs.max() {
                 return v
@@ -151,7 +159,7 @@ public struct Code: Collection {
 
     /// Computes the next free variable in this code.
     public func nextFreeVariable() -> Variable {
-        assert(isStaticallyValid())
+        assertIsStaticallyValid()
         if let lastVar = lastVariable() {
             return Variable(number: lastVar.number + 1)
         }
@@ -182,7 +190,9 @@ public struct Code: Collection {
             for v in instr.allOutputs {
                 guard !definedVariables.contains(v) else { return false }
                 if v.number > 0 {
-                    guard definedVariables.contains(Variable(number: v.number - 1)) else { return false }
+                    guard definedVariables.contains(Variable(number: v.number - 1)) else {
+                        return false
+                    }
                 }
                 definedVariables.insert(v)
             }
@@ -201,7 +211,7 @@ public struct Code: Collection {
     /// Checks if this code is statically valid, i.e. can be used as a Program.
     public func check() throws {
         var definedVariables = VariableMap<Int>()
-        var contextAnalyzer = ContextAnalyzer()
+        var contextAnalyzer = ContextAnalyzer(isBundle: isBundle)
         var scopeCounter = 0
         // Per-block information is stored in this struct and kept in a stack of active blocks.
         struct Block {
@@ -219,7 +229,8 @@ public struct Code: Collection {
             if v.number != 0 {
                 let prev = Variable(number: v.number - 1)
                 guard definedVariables.contains(prev) else {
-                    throw FuzzilliError.codeVerificationError("variable definitions are not contiguous: \(v) is defined before \(prev)")
+                    throw FuzzilliError.codeVerificationError(
+                        "variable definitions are not contiguous: \(v) is defined before \(prev)")
                 }
             }
             definedVariables[v] = scope
@@ -227,7 +238,8 @@ public struct Code: Collection {
 
         for (idx, instr) in instructions.enumerated() {
             guard idx == instr.index else {
-                throw FuzzilliError.codeVerificationError("instruction \(idx) has wrong index \(String(describing: instr.index))")
+                throw FuzzilliError.codeVerificationError(
+                    "instruction \(idx) has wrong index \(String(describing: instr.index))")
             }
 
             // Ensure all input variables are valid and have been defined
@@ -236,15 +248,17 @@ public struct Code: Collection {
                     throw FuzzilliError.codeVerificationError("variable \(input) was never defined")
                 }
                 guard activeBlocks.contains(where: { $0.scopeId == definingScope }) else {
-                    throw FuzzilliError.codeVerificationError("variable \(input) is not visible anymore")
+                    throw FuzzilliError.codeVerificationError(
+                        "variable \(input) is not visible anymore at instruction \(idx): \(instr)")
                 }
             }
 
             // Allow top-level await (Bun and other runtimes support await outside async functions)
-            let isAllowedAwait = instr.op is Await && contextAnalyzer.context.contains(.asyncFunction) == false
+            let isAllowedAwait = instr.op is Await && contextAnalyzer.context.contains(.async) == false
             if !isAllowedAwait {
                 guard instr.op.requiredContext.isSubset(of: contextAnalyzer.context) else {
-                    throw FuzzilliError.codeVerificationError("operation \(instr.op.name) inside an invalid context")
+                    throw FuzzilliError.codeVerificationError(
+                        "operation \(instr.op.name) inside an invalid context")
                 }
             }
 
@@ -258,7 +272,8 @@ public struct Code: Collection {
                 }
                 let block = activeBlocks.pop()
                 guard block.head?.isMatchingStart(for: instr.op) ?? false else {
-                    throw FuzzilliError.codeVerificationError("block end does not match block start")
+                    throw FuzzilliError.codeVerificationError(
+                        "block end does not match block start")
                 }
             }
 
@@ -285,7 +300,7 @@ public struct Code: Collection {
                         throw FuzzilliError.codeVerificationError("for-loop header is inconsistent")
                     }
                 } else if instr.op is BeginForLoopBody {
-                    guard instr.numInnerOutputs == forLoopHeaderStack.pop() else {
+                    guard instr.numInnerOutputs == forLoopHeaderStack.pop() + 1 else {
                         throw FuzzilliError.codeVerificationError("for-loop header is inconsistent")
                     }
                 }
@@ -308,6 +323,21 @@ public struct Code: Collection {
         } catch {
             return false
         }
+    }
+
+    // Helper function for asserting that the Code object is valid. Use this over
+    // assert(code.isValid()) to get more useful error messages if the assert triggers.
+    public func assertIsStaticallyValid() {
+        #if DEBUG
+            do {
+                try check()
+            } catch {
+                // This assumes that even if the code is invalid, the FuzzILLifter will be able to
+                // handle it without crashing. If that is not the case, it might be better to not print
+                // the code at all.
+                fatalError("Code is invalid: \(error)\n\(FuzzILLifter().lift(self))")
+            }
+        #endif
     }
 
     public func countIntructionsWith(flags: Instruction.Flags) -> Int {
@@ -489,6 +519,8 @@ public struct Code: Collection {
 
     /// Check that the given block object describes a block in this code.
     private func isValidBlock(_ block: Block) -> Bool {
-        return block.tail <= endIndex && self[block.head].isBlockStart && self[block.tail].isBlockEnd && self[block.tail].op.isMatchingEnd(for: self[block.head].op)
+        return block.tail <= endIndex && self[block.head].isBlockStart
+            && self[block.tail].isBlockEnd
+            && self[block.tail].op.isMatchingEnd(for: self[block.head].op)
     }
 }

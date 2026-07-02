@@ -29,11 +29,14 @@ public class MultiEngine: FuzzEngine {
     /// The number of fuzzing iterations.
     private var currentIteration = 0
 
-    public init(engines: WeightedList<FuzzEngine>, initialActive: FuzzEngine? = nil, iterationsPerEngine: Int) {
+    public init(
+        engines: WeightedList<FuzzEngine>, initialActive: FuzzEngine? = nil,
+        iterationsPerEngine: Int
+    ) {
         assert(iterationsPerEngine > 0)
         self.iterationsPerEngine = iterationsPerEngine
         self.engines = engines
-        self.activeEngine = initialActive ?? engines.randomElement()
+        self.activeEngine = initialActive ?? engines.randomElement()!
         super.init(name: "MultiEngine")
     }
 
@@ -43,13 +46,14 @@ public class MultiEngine: FuzzEngine {
         }
     }
 
-    public override func fuzzOne(_ group: DispatchGroup) {
-        activeEngine.fuzzOne(group)
+    public override func fuzzOne() {
+        activeEngine.fuzzOne()
         currentIteration += 1
         if currentIteration % iterationsPerEngine == 0 {
-            let nextEngine = engines.randomElement()
+            let nextEngine = engines.randomElement()!
             if nextEngine !== activeEngine {
-                logger.info("Switching active engine from \(activeEngine.name) to \(nextEngine.name)")
+                logger.info(
+                    "Switching active engine from \(activeEngine.name) to \(nextEngine.name)")
                 activeEngine = nextEngine
             }
         }

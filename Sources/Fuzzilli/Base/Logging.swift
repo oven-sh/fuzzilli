@@ -16,10 +16,10 @@ import Foundation
 
 public enum LogLevel: Int {
     case verbose = 0
-    case info    = 1
+    case info = 1
     case warning = 2
-    case error   = 3
-    case fatal   = 4
+    case error = 3
+    case fatal = 4
 
     public func isAtLeast(_ level: LogLevel) -> Bool {
         return self.rawValue <= level.rawValue

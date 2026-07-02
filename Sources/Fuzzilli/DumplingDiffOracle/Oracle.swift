@@ -68,7 +68,6 @@
 // b:35
 // a1:1
 
-
 import Foundation
 
 // This class is implementing one public function relate(optimizedOutput, unoptimizedOutput).
@@ -129,13 +128,15 @@ public final class DiffOracle {
             guard self.bytecodeOffset == reference.bytecodeOffset,
                 self.functionId == reference.functionId,
                 self.arguments.count == reference.arguments.count,
-                self.registers.count == reference.registers.count else {
+                self.registers.count == reference.registers.count
+            else {
                 return false
             }
 
             // Logic: 'self' is the Optimized frame. It is allowed to have "<optimized_out>" or "<non-materialized>".
             func isMatch(_ optValue: String, unoptValue: String) -> Bool {
-                return optValue == "<optimized_out>" || optValue == "<non-materialized>" || optValue == unoptValue
+                return optValue == "<optimized_out>" || optValue == "<non-materialized>"
+                    || optValue == unoptValue
             }
 
             if !isMatch(self.accumulator, unoptValue: reference.accumulator) {
@@ -161,7 +162,9 @@ public final class DiffOracle {
         _ runningRegs: inout [String]
     ) -> Frame {
 
-        func parseValue<T>(prefix: String, defaultValue: T, index: inout Int, conversion: (Substring) -> T) -> T {
+        func parseValue<T>(
+            prefix: String, defaultValue: T, index: inout Int, conversion: (Substring) -> T
+        ) -> T {
             if index < frameArr.endIndex && frameArr[index].starts(with: prefix) {
                 let value = conversion(frameArr[index].dropFirst(prefix.count))
                 index += 1
@@ -172,13 +175,13 @@ public final class DiffOracle {
         var i = frameArr.startIndex
         func parseFrameType(_ type: Substring) -> FrameType {
             switch type {
-                case "---I": .interpreter
-                case "---S": .sparkplug
-                case "---M": .maglev
-                case "---T": .turbofan
-                case "---D": .deoptTurbofan
-                default:
-                    fatalError("Unknown frame type")
+            case "---I": .interpreter
+            case "---S": .sparkplug
+            case "---M": .maglev
+            case "---T": .turbofan
+            case "---D": .deoptTurbofan
+            default:
+                fatalError("Unknown frame type")
             }
         }
 
@@ -186,11 +189,21 @@ public final class DiffOracle {
 
         i += 1
 
-        let bytecodeOffset = parseValue(prefix: "b:", defaultValue: prevFrame?.bytecodeOffset ?? -1, index: &i){ Int($0)! }
-        let functionId = parseValue(prefix: "f:", defaultValue: prevFrame?.functionId ?? -1, index: &i){ Int($0)! }
-        let accumulator = parseValue(prefix: "x:", defaultValue: prevFrame?.accumulator ?? "", index: &i){ String($0) }
-        let argCount = parseValue(prefix: "n:", defaultValue: prevFrame?.arguments.count ?? -1, index: &i){ Int($0)! }
-        let regCount = parseValue(prefix: "m:", defaultValue: prevFrame?.registers.count ?? -1, index: &i){ Int($0)! }
+        let bytecodeOffset = parseValue(
+            prefix: "b:", defaultValue: prevFrame?.bytecodeOffset ?? -1, index: &i
+        ) { Int($0)! }
+        let functionId = parseValue(
+            prefix: "f:", defaultValue: prevFrame?.functionId ?? -1, index: &i
+        ) { Int($0)! }
+        let accumulator = parseValue(
+            prefix: "x:", defaultValue: prevFrame?.accumulator ?? "", index: &i
+        ) { String($0) }
+        let argCount = parseValue(
+            prefix: "n:", defaultValue: prevFrame?.arguments.count ?? -1, index: &i
+        ) { Int($0)! }
+        let regCount = parseValue(
+            prefix: "m:", defaultValue: prevFrame?.registers.count ?? -1, index: &i
+        ) { Int($0)! }
 
         func updateValues(prefix: String, requiredCount: Int, buffer: inout [String]) -> [String] {
 
@@ -201,7 +214,8 @@ public final class DiffOracle {
             }
 
             while i < frameArr.endIndex && frameArr[i].starts(with: prefix) {
-                let data = frameArr[i].dropFirst(1).split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+                let data = frameArr[i].dropFirst(1).split(
+                    separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
                 let number = Int(data[0])!
                 let value = String(data[1])
 
@@ -215,12 +229,13 @@ public final class DiffOracle {
         let arguments = updateValues(prefix: "a", requiredCount: argCount, buffer: &runningArgs)
         let registers = updateValues(prefix: "r", requiredCount: regCount, buffer: &runningRegs)
 
-        let frame = Frame(bytecodeOffset: bytecodeOffset,
-                          accumulator: accumulator,
-                          arguments: arguments,
-                          registers: registers,
-                          functionId: functionId,
-                          frameType: frameType)
+        let frame = Frame(
+            bytecodeOffset: bytecodeOffset,
+            accumulator: accumulator,
+            arguments: arguments,
+            registers: registers,
+            functionId: functionId,
+            frameType: frameType)
         return frame
     }
 
@@ -235,7 +250,9 @@ public final class DiffOracle {
         let frames = split.split(separator: "")
 
         for frame in frames {
-            assert(frame.first?.starts(with: "---") == true, "Invalid frame header found: \(frame.first ?? "nil")")
+            assert(
+                frame.first?.starts(with: "---") == true,
+                "Invalid frame header found: \(frame.first ?? "nil")")
 
             prevFrame = parseDiffFrame(frame, prevFrame, &runningArgs, &runningRegs)
             frameArray.append(prevFrame!)
@@ -254,7 +271,9 @@ public final class DiffOracle {
                 print("--------------------------")
                 print("[")
                 for unoptFrame in unoptFrames {
-                    if unoptFrame.bytecodeOffset == optFrame.bytecodeOffset && unoptFrame.functionId == optFrame.functionId {
+                    if unoptFrame.bytecodeOffset == optFrame.bytecodeOffset
+                        && unoptFrame.functionId == optFrame.functionId
+                    {
                         print(unoptFrame)
                     }
                 }

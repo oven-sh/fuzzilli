@@ -44,58 +44,56 @@ struct InliningReducer: Reducer {
         for instr in code {
             // Identify candidates.
             switch instr.op.opcode {
-                // Currently we only inline plain functions as that guarantees that the resulting code is always valid.
-                // Otherwise, we might for example attempt to inline an async function containing an 'await', which would not be valid.
-                // This works fine because the ReplaceReducer will attempt to turn "special" functions into plain functions.
+            // Currently we only inline plain functions as that guarantees that the resulting code is always valid.
+            // Otherwise, we might for example attempt to inline an async function containing an 'await', which would not be valid.
+            // This works fine because the ReplaceReducer will attempt to turn "special" functions into plain functions.
             case .beginPlainFunction:
                 candidates[instr.output] = (callCount: 0, index: instr.index)
                 fallthrough
-            case .beginArrowFunction,
-                 .beginGeneratorFunction,
-                 .beginAsyncFunction,
-                 .beginAsyncArrowFunction,
-                 .beginAsyncGeneratorFunction,
-                 .beginConstructor,
-                 .beginObjectLiteralMethod,
-                 .beginObjectLiteralComputedMethod,
-                 .beginObjectLiteralGetter,
-                 .beginObjectLiteralSetter,
-                 .beginClassConstructor,
-                 .beginClassInstanceMethod,
-                 .beginClassInstanceComputedMethod,
-                 .beginClassInstanceGetter,
-                 .beginClassInstanceSetter,
-                 .beginClassStaticInitializer,
-                 .beginClassStaticMethod,
-                 .beginClassStaticComputedMethod,
-                 .beginClassStaticGetter,
-                 .beginClassStaticSetter,
-                 .beginClassPrivateInstanceMethod,
-                 .beginClassPrivateStaticMethod:
+            case .beginWorkerFunction,
+                .beginArrowFunction,
+                .beginGeneratorFunction,
+                .beginAsyncFunction,
+                .beginAsyncArrowFunction,
+                .beginAsyncGeneratorFunction,
+                .beginConstructor,
+                .beginObjectLiteralMethod,
+                .beginObjectLiteralComputedMethod,
+                .beginObjectLiteralGetter,
+                .beginObjectLiteralComputedGetter,
+                .beginObjectLiteralSetter,
+                .beginObjectLiteralComputedSetter,
+                .beginClassConstructor,
+                .beginClassMethod,
+                .beginClassComputedMethod,
+                .beginClassGetter,
+                .beginClassComputedGetter,
+                .beginClassSetter,
+                .beginClassComputedSetter,
+                .beginClassStaticInitializer, .beginClassPrivateMethod:
                 activeSubroutineDefinitions.append(instr.hasOneOutput ? instr.output : nil)
             case .endPlainFunction,
-                 .endArrowFunction,
-                 .endGeneratorFunction,
-                 .endAsyncFunction,
-                 .endAsyncArrowFunction,
-                 .endAsyncGeneratorFunction,
-                 .endConstructor,
-                 .endObjectLiteralMethod,
-                 .endObjectLiteralComputedMethod,
-                 .endObjectLiteralGetter,
-                 .endObjectLiteralSetter,
-                 .endClassConstructor,
-                 .endClassInstanceMethod,
-                 .endClassInstanceComputedMethod,
-                 .endClassInstanceGetter,
-                 .endClassInstanceSetter,
-                 .endClassStaticInitializer,
-                 .endClassStaticMethod,
-                 .endClassStaticComputedMethod,
-                 .endClassStaticGetter,
-                 .endClassStaticSetter,
-                 .endClassPrivateInstanceMethod,
-                 .endClassPrivateStaticMethod:
+                .endWorkerFunction,
+                .endArrowFunction,
+                .endGeneratorFunction,
+                .endAsyncFunction,
+                .endAsyncArrowFunction,
+                .endAsyncGeneratorFunction,
+                .endConstructor,
+                .endObjectLiteralMethod,
+                .endObjectLiteralComputedMethod,
+                .endObjectLiteralGetter,
+                .endObjectLiteralComputedGetter,
+                .endObjectLiteralSetter,
+                .endObjectLiteralComputedSetter,
+                .endClassConstructor,
+                .endClassMethod,
+                .endClassComputedMethod,
+                .endClassGetter,
+                .endClassComputedGetter,
+                .endClassSetter,
+                .endClassComputedSetter,
+                .endClassStaticInitializer, .endClassPrivateMethod:
                 activeSubroutineDefinitions.removeLast()
             default:
                 assert(!instr.op.contextOpened.contains(.subroutine))
@@ -119,17 +117,17 @@ struct InliningReducer: Reducer {
                 // Can't inline functions that are passed as arguments to other functions.
                 deleteCandidates(instr.inputs.dropFirst())
             case .loadDisposableVariable,
-                 .createNamedDisposableVariable,
-                 .loadAsyncDisposableVariable,
-                 .createNamedAsyncDisposableVariable:
+                .createNamedDisposableVariable,
+                .loadAsyncDisposableVariable,
+                .createNamedAsyncDisposableVariable:
                 // Can't inline functions that are also used as a disposable variable.
                 deleteCandidates(instr.inputs)
                 fallthrough
             case .loadNewTarget,
-                 .loadArguments:
+                .loadArguments:
                 // Can't inline functions if they access their arguments or new.target.
                 // Or if they create a disposable variable.
-                if let function = activeSubroutineDefinitions.last! {
+                if let function = activeSubroutineDefinitions.last ?? nil {
                     candidates.removeValue(forKey: function)
                 }
             default:
@@ -140,7 +138,7 @@ struct InliningReducer: Reducer {
             }
         }
 
-        return candidates.values.filter({ $0.callCount == 1}).map({ $0.index })
+        return candidates.values.filter({ $0.callCount == 1 }).map({ $0.index })
     }
 
     /// Returns a new Code object with the specified function inlined into its callsite.
@@ -149,7 +147,7 @@ struct InliningReducer: Reducer {
         assert(index < code.count)
         assert(code[index].op is BeginAnyFunction)
 
-        var c = Code()
+        var c = Code(isBundle: code.isBundle)
         var i = 0
 
         // Append all code prior to the function that we're inlining.
@@ -262,7 +260,7 @@ struct InliningReducer: Reducer {
         c.renumberVariables()
 
         // The code must now be valid.
-        assert(c.isStaticallyValid())
+        c.assertIsStaticallyValid()
         return c
     }
 }

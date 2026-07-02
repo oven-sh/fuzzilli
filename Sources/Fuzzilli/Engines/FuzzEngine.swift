@@ -28,12 +28,14 @@ public class FuzzEngine: ComponentBase {
     }
 
     // Performs a single round of fuzzing using the engine.
-    public func fuzzOne(_ group: DispatchGroup) {
+    public func fuzzOne() {
         fatalError("Must be implemented by child classes")
     }
 
-    final func execute(_ rawProgram: Program, withTimeout timeout: UInt32? = nil) -> ExecutionOutcome {
-        let program : Program
+    final func execute(_ rawProgram: Program, withTimeout timeout: UInt32? = nil)
+        -> ExecutionOutcome
+    {
+        let program: Program
         do {
             // An optional post processor can reject a sample right away with
             // the postProcessRejectionError.
@@ -49,41 +51,48 @@ public class FuzzEngine: ComponentBase {
         let execution = fuzzer.execute(program, withTimeout: timeout, purpose: .fuzzing)
 
         switch execution.outcome {
-            case .crashed(let termsig):
-                fuzzer.processCrash(program, withSignal: termsig, withStderr: execution.stderr, withStdout: execution.stdout, origin: .local, withExectime: execution.execTime)
-                program.contributors.generatedCrashingSample()
+        case .crashed(let termsig):
+            fuzzer.processCrash(
+                program, withSignal: termsig, withStderr: execution.stderr,
+                withStdout: execution.stdout, origin: .local, withExectime: execution.execTime)
+            program.contributors.generatedCrashingSample()
 
-            case .differential:
-                fuzzer.processDifferential(program, withStderr: execution.stderr, withStdout: execution.stdout, origin: .local)
-                program.contributors.generatedDifferentialSample()
+        case .differential:
+            fuzzer.processDifferential(
+                program, withStderr: execution.stderr, origin: .local)
+            program.contributors.generatedDifferentialSample()
 
-            case .succeeded:
-                fuzzer.dispatchEvent(fuzzer.events.ValidProgramFound, data: program)
-                var isInteresting = false
-                if let aspects = fuzzer.evaluator.evaluate(execution) {
-                    if fuzzer.config.enableInspection {
-                        program.comments.add("Program may be interesting due to \(aspects)", at: .footer)
-                        program.comments.add("RUNNER ARGS: \(fuzzer.runner.processArguments.joined(separator: " "))", at: .header)
-                    }
-                    isInteresting = fuzzer.processMaybeInteresting(program, havingAspects: aspects, origin: .local)
+        case .succeeded:
+            fuzzer.dispatchEvent(fuzzer.events.ValidProgramFound, data: program)
+            var isInteresting = false
+            if let aspects = fuzzer.evaluator.evaluate(execution) {
+                if fuzzer.config.enableInspection {
+                    program.comments.add(
+                        "Program may be interesting due to \(aspects)", at: .footer)
+                    program.comments.add(
+                        "RUNNER ARGS: \(fuzzer.runner.processArguments.joined(separator: " "))",
+                        at: .header)
                 }
+                isInteresting = fuzzer.processMaybeInteresting(
+                    program, havingAspects: aspects, origin: .local)
+            }
 
-                if isInteresting {
-                    program.contributors.generatedInterestingSample()
-                } else {
-                    program.contributors.generatedValidSample()
-                }
+            if isInteresting {
+                program.contributors.generatedInterestingSample()
+            } else {
+                program.contributors.generatedValidSample()
+            }
 
-            case .failed(_):
-                if fuzzer.config.enableDiagnostics {
-                    program.comments.add("Stdout:\n" + execution.stdout, at: .footer)
-                }
-                fuzzer.dispatchEvent(fuzzer.events.InvalidProgramFound, data: program)
-                program.contributors.generatedInvalidSample()
+        case .failed(_):
+            if fuzzer.config.enableDiagnostics {
+                program.comments.add("Stdout:\n" + execution.stdout, at: .footer)
+            }
+            fuzzer.dispatchEvent(fuzzer.events.InvalidProgramFound, data: program)
+            program.contributors.generatedInvalidSample()
 
-            case .timedOut:
-                fuzzer.dispatchEvent(fuzzer.events.TimeOutFound, data: program)
-                program.contributors.generatedTimeOutSample()
+        case .timedOut:
+            fuzzer.dispatchEvent(fuzzer.events.TimeOutFound, data: program)
+            program.contributors.generatedTimeOutSample()
         }
 
         if fuzzer.config.enableDiagnostics {
@@ -96,13 +105,16 @@ public class FuzzEngine: ComponentBase {
 
     private final func ensureDeterministicExecutionOutcomeForDiagnostic(of program: Program) {
         let execution1 = fuzzer.execute(program, purpose: .other)
-        let stdout1 = execution1.stdout, stderr1 = execution1.stderr
+        let stdout1 = execution1.stdout
+        let stderr1 = execution1.stderr
         let execution2 = fuzzer.execute(program, purpose: .other)
         switch (execution1.outcome, execution2.outcome) {
         case (.succeeded, .failed(_)),
-             (.failed(_), .succeeded):
-            let stdout2 = execution2.stdout, stderr2 = execution2.stderr
-            logger.warning("""
+            (.failed(_), .succeeded):
+            let stdout2 = execution2.stdout
+            let stderr2 = execution2.stderr
+            logger.warning(
+                """
                 Non-deterministic execution detected for program
                 \(fuzzer.lifter.lift(program))
                 // Stdout of first execution

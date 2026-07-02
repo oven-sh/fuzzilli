@@ -129,11 +129,11 @@ public extension ILType {
         withMethods: ["parse"]
     )
 
-    // BunJSONL - JSONL parser/stringifier
+    // BunJSONL - JSONL parser
     static let bunJSONL = ILType.object(
         ofGroup: "BunJSONL",
         withProperties: [],
-        withMethods: ["parse", "stringify"]
+        withMethods: ["parse", "parseChunk"]
     )
 
     // BunFile - File handle returned by Bun.file()
@@ -225,6 +225,36 @@ public extension ILType {
         ofGroup: "Bun.RedisClient",
         withProperties: [],
         withMethods: ["get", "set", "del", "exists", "keys", "ping", "quit", "subscribe", "publish"]
+    )
+
+    // BunListener - result of Bun.listen()
+    static let bunListener = ILType.object(
+        ofGroup: "BunListener",
+        withProperties: ["fd", "port", "unix", "hostname"],
+        withMethods: ["stop", "ref", "unref", "reload"]
+    )
+
+    // BunUDPSocket - result of Bun.udpSocket()
+    static let bunUDPSocket = ILType.object(
+        ofGroup: "BunUDPSocket",
+        withProperties: ["hostname", "port", "address", "closed"],
+        withMethods: ["send", "sendMany", "close", "reload", "ref", "unref",
+                      "setBroadcast", "setTTL", "setMulticastTTL", "setMulticastLoopback",
+                      "setMulticastInterface", "addMembership", "dropMembership"]
+    )
+
+    // BunBuildArtifact - result of Bun.build()
+    static let bunBuildArtifact = ILType.object(
+        ofGroup: "BunBuildArtifact",
+        withProperties: ["path", "size", "hash", "sourcemap", "loader", "type", "kind"],
+        withMethods: ["text", "json", "arrayBuffer", "slice", "stream"]
+    )
+
+    // BunCronJob - in-process cron handle returned by Bun.cron(schedule, handler)
+    static let bunCronJob = ILType.object(
+        ofGroup: "BunCronJob",
+        withProperties: ["cron"],
+        withMethods: ["stop", "ref", "unref"]
     )
 
     // Hash constructor instance types (each needs its own group to match builtin name)
@@ -744,8 +774,10 @@ public let bunJSONLGroup = ObjectGroup(
     instanceType: .bunJSONL,
     properties: [:],
     methods: [
-        "parse": [.string] => .jsAnything,
-        "stringify": [.jsAnything] => .string,
+        // parse/parseChunk accept string | TypedArray | DataView | ArrayBuffer,
+        // with optional start/end offsets (bytes for typed arrays, chars for strings).
+        "parse":      [.jsAnything, .opt(.integer), .opt(.integer)] => .jsArray,
+        "parseChunk": [.jsAnything, .opt(.integer), .opt(.integer)] => .object(),
     ]
 )
 
@@ -1030,6 +1062,83 @@ public let bunSHA512_256Group = ObjectGroup(
         "update": [.jsAnything, .opt(.string)] => .bunSHA512_256,
         "digest": [.opt(.string)] => (.object() | .string),
         "copy":   [] => .bunSHA512_256,
+    ]
+)
+
+public let bunListenerGroup = ObjectGroup(
+    name: "BunListener",
+    instanceType: .bunListener,
+    properties: [
+        "fd":       .integer,
+        "port":     .integer,
+        "unix":     .string | .undefined,
+        "hostname": .string,
+    ],
+    methods: [
+        "stop":   [.opt(.boolean)] => .undefined,
+        "ref":    [] => .undefined,
+        "unref":  [] => .undefined,
+        "reload": [.object()] => .undefined,
+    ]
+)
+
+public let bunUDPSocketGroup = ObjectGroup(
+    name: "BunUDPSocket",
+    instanceType: .bunUDPSocket,
+    properties: [
+        "hostname": .string,
+        "port":     .integer,
+        "address":  .object(),
+        "closed":   .boolean,
+    ],
+    methods: [
+        "send":                  [.jsAnything, .opt(.integer), .opt(.string)] => .boolean,
+        "sendMany":              [.object()] => .integer,
+        "close":                 [] => .undefined,
+        "reload":                [.object()] => .undefined,
+        "ref":                   [] => .undefined,
+        "unref":                 [] => .undefined,
+        "setBroadcast":          [.boolean] => .undefined,
+        "setTTL":                [.integer] => .undefined,
+        "setMulticastTTL":       [.integer] => .undefined,
+        "setMulticastLoopback":  [.boolean] => .undefined,
+        "setMulticastInterface": [.string] => .undefined,
+        "addMembership":         [.string, .opt(.string)] => .undefined,
+        "dropMembership":        [.string, .opt(.string)] => .undefined,
+    ]
+)
+
+public let bunBuildArtifactGroup = ObjectGroup(
+    name: "BunBuildArtifact",
+    instanceType: .bunBuildArtifact,
+    properties: [
+        "path":      .string,
+        "size":      .integer,
+        "hash":      .string | .undefined,
+        "sourcemap": .jsAnything,
+        "loader":    .string,
+        "type":      .string,
+        "kind":      .string,
+    ],
+    methods: [
+        "text":        [] => .jsPromise,
+        "json":        [] => .jsPromise,
+        "arrayBuffer": [] => .jsPromise,
+        "slice":       [.opt(.integer), .opt(.integer)] => .bunBlob,
+        "stream":      [] => .object(),
+    ]
+)
+
+public let bunCronJobGroup = ObjectGroup(
+    name: "BunCronJob",
+    instanceType: .bunCronJob,
+    properties: [
+        "cron": .string,
+    ],
+    methods: [
+        "stop":  [] => .bunCronJob,
+        "ref":   [] => .bunCronJob,
+        "unref": [] => .bunCronJob,
     ]
 )
 
@@ -1936,17 +2045,20 @@ let bunProfile = Profile(
         "Bun.resolve"       : .function([.string, .string] => .jsPromise),
 
         // DNS
-        "Bun.dns"           : .object(withMethods: ["lookup"]),
+        "Bun.dns"           : .object(withMethods: ["lookup", "resolve", "prefetch", "getCacheStats", "reverse"]),
 
         // Text formatting
         "Bun.wrapAnsi"      : .function([.string, .integer, .opt(.object())] => .string),
+        "Bun.sliceAnsi"     : .function([.string, .opt(.integer), .opt(.integer), .opt(.jsAnything), .opt(.boolean)] => .string),
 
         // Server / networking
         "Bun.serve"         : .function([.object()] => .bunServer),
+        "Bun.connect"       : .function([.object()] => .jsPromise),
+        "Bun.listen"        : .function([.object()] => .bunListener),
         "Bun.fetch"         : .function([.string, .opt(.object())] => .jsPromise),
         "Bun.build"         : .function([.object()] => .jsPromise),
         "Bun.mmap"          : .function([.string] => .object()),
-        "Bun.udpSocket"     : .function([.object()] => .jsAnything),
+        "Bun.udpSocket"     : .function([.object()] => .jsPromise),
 
         // SQL
         "Bun.sql"           : .function([.opt(.string)] => .jsAnything),
@@ -1960,12 +2072,40 @@ let bunProfile = Profile(
         "Bun.readableStreamToJSON"        : .function([.jsAnything] => .jsPromise),
         "Bun.readableStreamToBlob"        : .function([.jsAnything] => .jsPromise),
         "Bun.readableStreamToBytes"       : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToFormData"    : .function([.jsAnything] => .jsPromise),
 
         // Markdown
-        "Bun.markdown"      : .object(withMethods: ["html", "render", "ansi"]),
+        "Bun.markdown"      : .object(withMethods: ["html", "render", "ansi", "react"]),
 
         // CSRF
         "Bun.CSRF"          : .object(withMethods: ["generate", "verify"]),
+
+        // Cron
+        // Bun.cron has two overloads: (schedule, handler) => CronJob (in-process,
+        // synchronous) and (path, schedule, title) => Promise (OS-level). A Fuzzilli
+        // builtin maps to a single signature, so we model the in-process callback form:
+        // it has no host side effects (the OS-level form writes to crontab/launchd/Task
+        // Scheduler) and returns a CronJob the fuzzer can keep operating on.
+        "Bun.cron"          : .function([.string, .function()] => .bunCronJob),
+        "Bun.cron.remove"   : .function([.string] => .jsPromise),
+        "Bun.cron.parse"    : .function([.string, .opt(.jsAnything)] => .jsAnything),
+
+        // Plugin
+        "Bun.plugin"        : .function([.object()] => .jsAnything),
+
+        // Metadata properties
+        "Bun.argv"          : .jsArray,
+        "Bun.env"           : .object(),
+        "Bun.main"          : .string,
+        "Bun.cwd"           : .function([] => .string),
+
+        // Standard IO
+        "Bun.stdin"         : .object(),
+        "Bun.stdout"        : .object(),
+        "Bun.stderr"        : .object(),
+
+        // GC
+        "Bun.gc"            : .function([.opt(.boolean)] => .undefined),
 
         // Classes
         "Bun.Archive"       : .constructor([.jsAnything, .opt(.object())] => .bunArchive),
@@ -2016,6 +2156,10 @@ let bunProfile = Profile(
         bunFileSystemRouterGroup,
         bunArchiveGroup,
         bunServerGroup,
+        bunListenerGroup,
+        bunUDPSocketGroup,
+        bunBuildArtifactGroup,
+        bunCronJobGroup,
         bunArrayBufferSinkGroup,
         bunCookieGroup,
         bunCookieMapGroup,

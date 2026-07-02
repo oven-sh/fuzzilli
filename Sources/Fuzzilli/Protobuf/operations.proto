@@ -15,14 +15,18 @@
 syntax = "proto3";
 package fuzzilli.protobuf;
 
+message Empty {}
+
 // Parameters used by function definitions, not an operation by itself.
 message Parameters {
     uint32 count = 1;
     bool hasRest = 2;
+    repeated uint32 defaultParameterIndices = 3;
 }
 
 message LoadInteger {
     int64 value = 1;
+    optional string customName = 2;
 }
 
 message LoadBigInt {
@@ -107,11 +111,23 @@ message BeginObjectLiteralGetter {
 message EndObjectLiteralGetter {
 }
 
+message BeginObjectLiteralComputedGetter {
+}
+
+message EndObjectLiteralComputedGetter {
+}
+
 message BeginObjectLiteralSetter {
     string propertyName = 1;
 }
 
 message EndObjectLiteralSetter {
+}
+
+message BeginObjectLiteralComputedSetter {
+}
+
+message EndObjectLiteralComputedSetter {
 }
 
 message EndObjectLiteral {
@@ -129,61 +145,68 @@ message BeginClassConstructor {
 message EndClassConstructor {
 }
 
-message ClassAddInstanceProperty {
+message ClassAddProperty {
     string propertyName = 1;
     bool hasValue = 2;
+    bool is_static = 3;
 }
 
-message ClassAddInstanceElement {
+message ClassAddElement {
     int64 index = 1;
     bool hasValue = 2;
+    bool is_static = 3;
 }
 
-message ClassAddInstanceComputedProperty {
+message ClassAddComputedProperty {
     bool hasValue = 1;
+    bool is_static = 2;
 }
 
-message BeginClassInstanceMethod {
+message BeginClassMethod {
     string methodName = 1;
     Parameters parameters = 2;
+    bool is_static = 3;
 }
 
-message EndClassInstanceMethod {
+message EndClassMethod {
 }
 
-message BeginClassInstanceComputedMethod {
+message BeginClassComputedMethod {
     Parameters parameters = 1;
+    bool is_static = 2;
 }
 
-message EndClassInstanceComputedMethod {
+message EndClassComputedMethod {
 }
 
-message BeginClassInstanceGetter {
+message BeginClassGetter {
     string propertyName = 1;
+    bool is_static = 2;
 }
 
-message EndClassInstanceGetter {
+message EndClassGetter {
 }
 
-message BeginClassInstanceSetter {
+message BeginClassComputedGetter {
+    bool is_static = 1;
+}
+
+message EndClassComputedGetter {
+}
+
+message BeginClassSetter {
     string propertyName = 1;
+    bool is_static = 2;
 }
 
-message EndClassInstanceSetter {
+message EndClassSetter {
 }
 
-message ClassAddStaticProperty {
-    string propertyName = 1;
-    bool hasValue = 2;
+message BeginClassComputedSetter {
+    bool is_static = 1;
 }
 
-message ClassAddStaticElement {
-    int64 index = 1;
-    bool hasValue = 2;
-}
-
-message ClassAddStaticComputedProperty {
-    bool hasValue = 1;
+message EndClassComputedSetter {
 }
 
 message BeginClassStaticInitializer {
@@ -192,65 +215,26 @@ message BeginClassStaticInitializer {
 message EndClassStaticInitializer {
 }
 
-message BeginClassStaticMethod {
-    string methodName = 1;
-    Parameters parameters = 2;
-}
-
-message EndClassStaticMethod {
-}
-
-message BeginClassStaticComputedMethod {
-    Parameters parameters = 1;
-}
-
-message EndClassStaticComputedMethod {
-}
-
-message BeginClassStaticGetter {
-    string propertyName = 1;
-}
-
-message EndClassStaticGetter {
-}
-
-message BeginClassStaticSetter {
-    string propertyName = 1;
-}
-
-message EndClassStaticSetter {
-}
-
-message ClassAddPrivateInstanceProperty {
+message ClassAddPrivateProperty {
     string propertyName = 1;
     bool hasValue = 2;
+    bool is_static = 3;
 }
 
-message BeginClassPrivateInstanceMethod {
+message BeginClassPrivateMethod {
     string methodName = 1;
     Parameters parameters = 2;
+    bool is_static = 3;
 }
 
-message EndClassPrivateInstanceMethod {
-}
-
-message ClassAddPrivateStaticProperty {
-    string propertyName = 1;
-    bool hasValue = 2;
-}
-
-message BeginClassPrivateStaticMethod {
-    string methodName = 1;
-    Parameters parameters = 2;
-}
-
-message EndClassPrivateStaticMethod {
+message EndClassPrivateMethod {
 }
 
 message EndClassDefinition {
 }
 
 message CreateArray {
+    optional string elementGroupName = 1;
 }
 
 message CreateIntArray {
@@ -372,6 +356,15 @@ message BeginPlainFunction {
 }
 
 message EndPlainFunction {
+}
+
+message BeginWorkerFunction {
+    Parameters parameters = 1;
+    // Can be missing, in which case the name is auto-assigned.
+    string name = 2;
+}
+
+message EndWorkerFunction {
 }
 
 message BeginArrowFunction {
@@ -569,25 +562,9 @@ message Dup {
 message Reassign {
 }
 
-message DestructArray {
-    repeated int32 indices = 1;
-    bool lastIsRest = 2;
-}
 
-message DestructArrayAndReassign {
-    repeated int32 indices = 1;
-    bool lastIsRest = 2;
-}
 
-message DestructObject {
-    repeated string properties = 1;
-    bool hasRestElement = 2;
-}
 
-message DestructObjectAndReassign {
-    repeated string properties = 1;
-    bool hasRestElement = 2;
-}
 
 enum Comparator {
     EQUAL = 0;
@@ -760,21 +737,27 @@ message BeginForLoopBody {
 message EndForLoop {
 }
 
-message BeginForInLoop {
-}
+message BeginForLoop {
+    enum ForInOfLoopType {
+        FOR_OF = 0;
+        FOR_IN = 1;
+    }
+    enum HeaderType {
+        SIMPLE = 0;
+        DESTRUCT = 1;
+    }
+    enum UsingType {
+        NONE = 0;
+        USING = 1;
+        AWAIT_USING = 2;
+    }
 
-message EndForInLoop {
-}
+    ForInOfLoopType loopType = 1;
+    bool isAsync = 2;
+    HeaderType headerType = 3;
 
-message BeginForOfLoop {
-}
-
-message BeginForOfLoopWithDestruct {
-    repeated int32 indices = 1;
-    bool hasRestElement = 2;
-}
-
-message EndForOfLoop {
+    UsingType usingType = 7;
+    FuzzILDestructuringPattern pattern = 8;
 }
 
 message BeginRepeatLoop {
@@ -816,6 +799,9 @@ message BeginBlockStatement {
 }
 
 message EndBlockStatement {
+}
+
+message BlockBreak {
 }
 
 message Nop {
@@ -929,13 +915,11 @@ message WasmILType {
 }
 
 message BeginWasmFunction {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
 }
 
 message EndWasmFunction {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 outputCount = 1;
 }
 
 message WasmJsCall {
@@ -1121,16 +1105,10 @@ message WasmSignature {
   repeated WasmILType outputTypes = 2;
 }
 
-message IndexedWasmSignature {
-  int64 index = 1;
-  WasmSignature signature = 2;
-}
-
 message WasmDefineTable {
   WasmILType elementType = 1;
   int64 minSize = 2;
   optional int64 maxSize = 3;
-  repeated IndexedWasmSignature definedEntries = 4;
   bool isTable64 = 5;
 }
 
@@ -1146,19 +1124,11 @@ message WasmStoreGlobal {
   WasmILType globalType = 2;
 }
 
-// WasmTableGet and WasmTableSet need a WasmTableType as input.
 message WasmTableGet {
   WasmILType elementType = 1;
-  int64 minSize = 2;
-  optional int64 maxSize = 3;
-  bool isTable64 = 4;
 }
 
 message WasmTableSet {
-  WasmILType elementType = 1;
-  int64 minSize = 2;
-  optional int64 maxSize = 3;
-  bool isTable64 = 4;
 }
 
 message WasmTableSize {
@@ -1168,8 +1138,8 @@ message WasmTableGrow {
 }
 
 message WasmCallIndirect {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
+  int32 outputCount = 2;
 }
 
 message WasmCallDirect {
@@ -1177,13 +1147,21 @@ message WasmCallDirect {
   int32 outputCount = 2;
 }
 
+message WasmCallRef {
+  int32 parameterCount = 1;
+  int32 outputCount = 2;
+}
+
+message WasmReturnCallRef {
+  int32 parameterCount = 1;
+}
+
 message WasmReturnCallDirect {
   int32 parameterCount = 1;
 }
 
 message WasmReturnCallIndirect {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
 }
 
 enum WasmMemoryLoadType {
@@ -1256,6 +1234,24 @@ enum WasmCatchKind {
   REF = 1;
   ALL_NO_REF = 2;
   ALL_REF = 3;
+}
+
+message Wasmi64WideBinOp {
+    WasmWideBinaryOperator op = 1;
+}
+
+enum WasmWideBinaryOperator {
+    WASM_ADD128 = 0;
+    WASM_SUB128 = 1;
+}
+
+message Wasmi64WideMulOp {
+    WasmWideMulOperator op = 1;
+}
+
+enum WasmWideMulOperator {
+    WASM_MUL_WIDE_S = 0;
+    WASM_MUL_WIDE_U = 1;
 }
 
 message WasmBeginTryTable {
@@ -1487,6 +1483,8 @@ message WasmEndTypeGroup {
 message WasmDefineSignatureType {
     repeated WasmILType parameterTypes = 1;
     repeated WasmILType outputTypes = 2;
+    bool hasSuperType = 3;
+    bool isFinal = 4;
 }
 
 message WasmDefineAdHocSignatureType {
@@ -1502,6 +1500,8 @@ message WasmDefineAdHocModuleSignatureType {
 message WasmDefineArrayType {
     WasmILType elementType = 1;
     bool mutability = 2;
+    bool hasSuperType = 3;
+    bool isFinal = 4;
 }
 
 message WasmStructField {
@@ -1511,6 +1511,8 @@ message WasmStructField {
 
 message WasmDefineStructType {
     repeated WasmStructField fields = 1;
+    bool hasSuperType = 2;
+    bool isFinal = 3;
 }
 
 message WasmDefineForwardOrSelfReference {
@@ -1557,6 +1559,9 @@ message WasmRefNull {
 message WasmRefIsNull {
 }
 
+message WasmRefFunc {
+}
+
 message WasmRefEq {
 }
 
@@ -1566,6 +1571,20 @@ message WasmRefTest {
 
 message WasmRefCast {
     WasmILType type = 1;
+}
+
+message WasmBranchOnNull {
+}
+
+message WasmBranchOnCast {
+    WasmILType type = 1;
+}
+
+message WasmBranchOnCastFail {
+    WasmILType type = 1;
+}
+
+message WasmBranchOnNonNull {
 }
 
 message WasmRefI31 {
@@ -1596,14 +1615,21 @@ enum WasmAtomicStoreType {
   I64_STORE_32 = 6;
 }
 
+enum WasmMemoryOrdering {
+  SEQUENTIALLY_CONSISTENT = 0;
+  ACQUIRE_RELEASE = 1;
+}
+
 message WasmAtomicLoad {
   WasmAtomicLoadType loadType = 1;
   int64 offset = 2;
+  WasmMemoryOrdering ordering = 3;
 }
 
 message WasmAtomicStore {
   WasmAtomicStoreType storeType = 1;
   int64 offset = 2;
+  WasmMemoryOrdering ordering = 3;
 }
 
 enum WasmAtomicRMWType {
@@ -1654,6 +1680,7 @@ enum WasmAtomicRMWType {
 message WasmAtomicRMW {
     WasmAtomicRMWType op = 1;
     int64 offset = 2;
+    WasmMemoryOrdering ordering = 3;
 }
 
 enum WasmAtomicCmpxchgType {
@@ -1669,6 +1696,7 @@ enum WasmAtomicCmpxchgType {
 message WasmAtomicCmpxchg {
     WasmAtomicCmpxchgType op = 1;
     int64 offset = 2;
+    WasmMemoryOrdering ordering = 3;
 }
 
 message WasmAnyConvertExtern {
@@ -1702,3 +1730,144 @@ message WasmTableInit {
 
 message WasmTableCopy {
 }
+
+message BeginBundleScript {
+}
+
+message EndBundleScript {
+}
+
+enum JSType {
+  NUMBER = 0;
+  BIGINT = 1;
+  OBJECT = 2;
+  UNDEFINED = 3;
+  ANYTHING = 4;
+}
+
+message JSSignature {
+  repeated JSType parameterTypes = 1;
+  JSType returnType = 2;
+}
+
+message WasmFunctionExport {
+  string name = 1;
+  JSSignature signature = 2;
+}
+
+message WasmModuleMetadata {
+  repeated WasmFunctionExport functions = 1;
+  repeated string globals = 2;
+  repeated string tables = 3;
+  repeated string tags = 4;
+  repeated string memories = 5;
+}
+
+message RawWasmModule {
+  bytes bytes = 1;
+  WasmModuleMetadata metadata = 2;
+}
+
+message BeginBundleModule {
+    string moduleName = 1;
+}
+
+message EndBundleModule {
+    string moduleName = 1;
+}
+
+message ExportVariables {
+    repeated string exportNames = 1;
+}
+
+message ImportVariables {
+    repeated string importNames = 1;
+}
+
+message ImportNamespace {
+    bool isDeferred = 1;
+}
+
+message DynamicImport {
+    bool isDeferred = 1;
+}
+
+message BeginBundleModuleEntryPoint {
+}
+
+message EndBundleModuleEntryPoint {
+}
+
+message CreateMap {
+    optional string keyGroupName = 1;
+    optional string valueGroupName = 2;
+}
+
+message WasmRefAsNonNull {
+}
+
+message FuzzILDestructuringPattern {
+    oneof pattern {
+        ObjectPattern objectPattern = 1;
+        ArrayPattern arrayPattern = 2;
+    }
+
+    message ObjectPattern {
+        repeated ObjectProperty properties = 1;
+        bool hasRestElement = 2;
+    }
+
+    message Target {
+        oneof value {
+            Empty flatBinding = 1;                  // e.g. `[a] = arr` or `{a} = obj`
+            FuzzILDestructuringPattern pattern = 2; // e.g. `[{a}] = arr`
+            string property = 3;                    // e.g. `[obj.prop] = arr`
+            int64 element = 4;                      // e.g. `[arr[0]] = arr`
+            Empty computedProperty = 5;             // e.g. `[obj[key]] = arr`
+            string superProperty = 6;               // e.g. `[super.prop] = arr`
+            int64 superElement = 7;                 // e.g. `[super[0]] = arr`
+            Empty superComputedProperty = 8;        // e.g. `[super[key]] = arr`
+        }
+    }
+
+    message ObjectProperty {
+        // The key is either a known string, or a computed key provided as an input variable
+        oneof key {
+            string stringKey = 1;
+            Empty computedKey = 2;
+        }
+
+        Target target = 3;
+        bool hasDefaultValue = 5;
+    }
+
+    message ArrayPattern {
+        repeated ArrayElement elements = 1;
+        Target restTarget = 2; // Unset means no rest element
+    }
+
+    message ArrayElement {
+        Target target = 1; // Unset means it is an elision (e.g. `[,]`)
+        bool hasDefaultValue = 2;
+    }
+}
+
+message Destruct {
+    FuzzILDestructuringPattern pattern = 1;
+}
+
+message DestructAndReassign {
+    FuzzILDestructuringPattern pattern = 1;
+}
+
+message DeclarePendingBundleModule {
+    string moduleName = 1;
+    repeated string exportNames = 2;
+}
+
+message BeginPendingBundleModule {
+}
+
+message EndPendingBundleModule {
+}
+

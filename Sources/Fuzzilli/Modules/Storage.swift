@@ -56,22 +56,34 @@ public class Storage: Module {
 
     public func initialize(with fuzzer: Fuzzer) {
         do {
-            try FileManager.default.createDirectory(atPath: crashesDir, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(atPath: duplicateCrashesDir, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(atPath: differentialsDir, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(atPath: corpusDir, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(atPath: statisticsDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                atPath: crashesDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                atPath: duplicateCrashesDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                atPath: differentialsDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                atPath: corpusDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                atPath: statisticsDir, withIntermediateDirectories: true)
             if fuzzer.config.enableDiagnostics {
-                try FileManager.default.createDirectory(atPath: failedDir, withIntermediateDirectories: true)
-                try FileManager.default.createDirectory(atPath: timeOutDir, withIntermediateDirectories: true)
-                try FileManager.default.createDirectory(atPath: diagnosticsDir, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    atPath: failedDir, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    atPath: timeOutDir, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    atPath: diagnosticsDir, withIntermediateDirectories: true)
             }
             if fuzzer.isDifferentialFuzzing {
-                try FileManager.default.createDirectory(atPath: optimizedDumpDir, withIntermediateDirectories: true)
-                try FileManager.default.createDirectory(atPath: unoptimizedDumpDir, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    atPath: optimizedDumpDir, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    atPath: unoptimizedDumpDir, withIntermediateDirectories: true)
             }
         } catch {
-            logger.fatal("Failed to create storage directories. Is \(storageDir) writable by the current user?")
+            logger.fatal(
+                "Failed to create storage directories. Is \(storageDir) writable by the current user?"
+            )
         }
 
         struct Settings: Codable {
@@ -80,7 +92,8 @@ public class Storage: Module {
         }
 
         // Write the current settings to disk.
-        let settings = Settings(processArguments: Array(fuzzer.runner.processArguments[1...]), tag: fuzzer.config.tag)
+        let settings = Settings(
+            processArguments: Array(fuzzer.runner.processArguments[1...]), tag: fuzzer.config.tag)
         var settingsData: Data?
         do {
             let encoder = JSONEncoder()
@@ -94,7 +107,8 @@ public class Storage: Module {
             let settingsUrl = URL(fileURLWithPath: "\(self.storageDir)/settings.json")
             try settingsData!.write(to: settingsUrl)
         } catch {
-            logger.fatal("Failed to write settings to disk. Is \(storageDir) writable by the current user?")
+            logger.fatal(
+                "Failed to write settings to disk. Is \(storageDir) writable by the current user?")
         }
 
         fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { ev in
@@ -140,7 +154,9 @@ public class Storage: Module {
                 logger.fatal("Requested stats export but no Statistics module is active")
             }
             fuzzer.timers.scheduleTask(every: interval) { self.saveStatistics(stats) }
-            fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in self.saveStatistics(stats) }
+            fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in
+                self.saveStatistics(stats)
+            }
         }
     }
 
@@ -209,7 +225,8 @@ public class Storage: Module {
             let date = formatDate()
             let statsUrl = URL(fileURLWithPath: "\(self.statisticsDir)/\(date).json")
             try statsData.write(to: statsUrl)
-            let evaluatorStateUrl = URL(fileURLWithPath: "\(self.statisticsDir)/\(date)_evaluator_state.bin")
+            let evaluatorStateUrl = URL(
+                fileURLWithPath: "\(self.statisticsDir)/\(date)_evaluator_state.bin")
             try evaluatorStateData.write(to: evaluatorStateUrl)
 
         } catch {

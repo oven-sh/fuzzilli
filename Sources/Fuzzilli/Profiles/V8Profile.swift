@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 public let v8Profile = Profile(
-    processArgs: {randomize in
-      v8ProcessArgs(randomize: randomize, forSandbox: false)
+    processArgs: { randomize in
+        v8ProcessArgs(randomize: randomize, forSandbox: false)
     },
 
     processArgsReference: nil,
@@ -28,10 +27,10 @@ public let v8Profile = Profile(
     timeout: Timeout.interval(300, 900),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                """,
+        """,
 
     ecmaVersion: ECMAScriptVersion.es6,
 
@@ -57,37 +56,39 @@ public let v8Profile = Profile(
     ],
 
     additionalCodeGenerators: [
-        (ForceJITCompilationThroughLoopGenerator,  5),
-        (ForceTurboFanCompilationGenerator,        5),
-        (ForceMaglevCompilationGenerator,          5),
-        (ForceOsrGenerator,                        5),
-        (TurbofanVerifyTypeGenerator,             10),
+        (ForceJITCompilationThroughLoopGenerator, 5),
+        (ForceTurboFanCompilationGenerator, 5),
+        (ForceMaglevCompilationGenerator, 5),
+        (ForceOsrGenerator, 5),
+        (TurbofanVerifyTypeGenerator, 10),
 
-        (WorkerGenerator,                         10),
-        (V8GcGenerator,                            5),
-        (V8AllocationTimeoutGenerator,             5),
-        (V8MajorGcGenerator,                       5),
+        (WorkerGenerator, 10),
+        (V8GcGenerator, 5),
+        (V8AllocationTimeoutGenerator, 5),
+        (V8MajorGcGenerator, 5),
 
-        (WasmStructGenerator,                     15),
-        (WasmArrayGenerator,                      15),
-        (SharedObjectGenerator,                    5),
-        (PretenureAllocationSiteGenerator,         5),
-        (HoleNanGenerator,                         5),
-        (UndefinedNanGenerator,                    5),
-        (StringShapeGenerator,                     5),
-        (HeapNumberGenerator,                      5),
+        (WasmStructGenerator, 15),
+        (WasmArrayGenerator, 15),
+        (SharedObjectGenerator, 5),
+        (PretenureAllocationSiteGenerator, 5),
+        (HoleNanGenerator, 5),
+        (UndefinedNanGenerator, 5),
+        (StringShapeGenerator, 5),
+        (HeapNumberGenerator, 5),
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([
-        (MapTransitionFuzzer,                1),
-        (ValueSerializerFuzzer,              1),
-        (V8RegExpFuzzer,                     1),
-        (WasmFastCallFuzzer,                 1),
-        (FastApiCallFuzzer,                  1),
-        (LazyDeoptFuzzer,                    1),
-        (WasmDeoptFuzzer,                    1),
-        (WasmTurbofanFuzzer,                 1),
-        (ProtoAssignSeqOptFuzzer,            1),
+        (MapTransitionFuzzer, 1),
+        (ValueSerializerFuzzer, 1),
+        (V8RegExpFuzzer, 1),
+        (WasmFastCallFuzzer, 1),
+        (FastApiCallFuzzer, 1),
+        (LazyDeoptFuzzer, 1),
+        (HomomorphicFeedbackFuzzer, 1),
+        (WasmDeoptFuzzer, 1),
+        (WasmInJsInliningFuzzer, 1),
+        (WasmTurbofanFuzzer, 1),
+        (ProtoAssignSeqOptFuzzer, 1),
         (TurbofanTierUpNonInlinedCallFuzzer, 1),
     ]),
 
@@ -96,8 +97,8 @@ public let v8Profile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc"    : .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise)),
-        "d8"    : .jsD8,
+        "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise)),
+        "d8": .jsD8,
         "Worker": .jsWorkerConstructor,
         // via --expose-externalize-string:
         "externalizeString": .function([.plain(.jsString)] => .jsString),
@@ -106,9 +107,14 @@ public let v8Profile = Profile(
         "createExternalizableTwoByteString": .function([.plain(.jsString)] => .jsString),
     ],
 
-    additionalObjectGroups: [jsD8, jsD8Test, jsD8FastCAPI, gcOptions, .jsWorkers, .jsWorkerPrototype, .jsWorkerConstructors],
+    additionalObjectGroups: [
+        jsD8, jsD8Test, jsD8FastCAPI, gcOptions, .jsWorkers, .jsWorkerPrototype,
+        .jsWorkerConstructors,
+    ],
 
     additionalEnumerations: [.gcTypeEnum, .gcExecutionEnum],
+
+    additionalOptionsBags: [],
 
     optionalPostProcessor: nil
 )

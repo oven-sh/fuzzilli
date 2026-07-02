@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 let qjsProfile = Profile(
     processArgs: { randomize in
         ["--reprl"]
@@ -27,10 +26,10 @@ let qjsProfile = Profile(
     timeout: Timeout.value(250),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                """,
+        """,
 
     ecmaVersion: ECMAScriptVersion.es6,
 
@@ -53,12 +52,14 @@ let qjsProfile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "placeholder"         : .function([] => .undefined)
+        "placeholder": .function([] => .undefined)
     ],
 
     additionalObjectGroups: [],
 
     additionalEnumerations: [],
+
+    additionalOptionsBags: [],
 
     optionalPostProcessor: nil
 )

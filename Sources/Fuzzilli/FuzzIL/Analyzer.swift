@@ -26,7 +26,7 @@ extension Analyzer {
     }
 
     mutating func analyze(_ code: Code) {
-        assert(code.isStaticallyValid())
+        code.assertIsStaticallyValid()
         for instr in code {
             analyze(instr)
         }
@@ -37,7 +37,7 @@ extension Analyzer {
 struct DefUseAnalyzer: Analyzer {
     private var assignments = VariableMap<[Int]>()
     private var uses = VariableMap<[Int]>()
-    private var code = Code()
+    private var code: Code
     private var isRunning = true
     private var analysisDone = false
 
@@ -46,7 +46,9 @@ struct DefUseAnalyzer: Analyzer {
         self.isRunning = false
     }
 
-    init() {}
+    init(isBundle: Bool) {
+        self.code = Code(isBundle: isBundle)
+    }
 
     mutating func finishAnalysis() {
         analysisDone = true
@@ -62,7 +64,7 @@ struct DefUseAnalyzer: Analyzer {
         if isRunning {
             code.append(instr)
         }
-        assert(code[instr.index].op === instr.op)    // Must be operating on the program passed in during construction
+        assert(code[instr.index].op === instr.op)  // Must be operating on the program passed in during construction
         assert(!analysisDone)
         for v in instr.allOutputs {
             assignments[v] = [instr.index]
@@ -161,10 +163,16 @@ struct VariableAnalyzer: Analyzer {
 
 /// Keeps track of the current context during program construction.
 struct ContextAnalyzer: Analyzer {
-    private var contextStack = Stack([Context.javascript])
+    public var startingContext: Context
+    private var contextStack: Stack<Context>
 
     var context: Context {
         return contextStack.top
+    }
+
+    public init(isBundle: Bool = false) {
+        startingContext = isBundle ? Context.bundle : Context.javascript
+        contextStack = Stack([startingContext])
     }
 
     mutating func analyze(_ instr: Instruction) {
@@ -174,7 +182,8 @@ struct ContextAnalyzer: Analyzer {
         if instr.isBlockStart {
             var newContext = instr.op.contextOpened
             if instr.propagatesSurroundingContext {
-                newContext.formUnion(context)
+                // The .moduleTopLevel context is never propagated to scopes.
+                newContext = newContext.union(context).subtracting(.moduleTopLevel)
             }
 
             // If we resume the context analysis, we currently take the second to last context.
@@ -184,16 +193,20 @@ struct ContextAnalyzer: Analyzer {
                 assert(contextStack.count >= 2)
 
                 // Currently we only support context "skipping" for switch blocks. This logic may need to be refined if it is ever used for other constructs as well.
-                assert((contextStack.top.contains(.switchBlock) && contextStack.top.subtracting(.switchBlock) == .empty))
+                assert(
+                    (contextStack.top.contains(.switchBlock)
+                        && contextStack.top.subtracting(.switchBlock) == .empty))
 
                 newContext.formUnion(contextStack.secondToTop)
             }
 
             // If we are in a loop, we don't want to propagate the switch context and vice versa. Otherwise we couldn't determine which break operation to emit.
             // TODO Make this generic for similar logic cases as well. E.g. by using a instr.op.contextClosed list.
-            if (instr.op.contextOpened.contains(.switchBlock) || instr.op.contextOpened.contains(.switchCase)) {
+            if instr.op.contextOpened.contains(.switchBlock)
+                || instr.op.contextOpened.contains(.switchCase)
+            {
                 newContext.remove(.loop)
-            } else if (instr.op.contextOpened.contains(.loop)) {
+            } else if instr.op.contextOpened.contains(.loop) {
                 newContext.remove(.switchBlock)
                 newContext.remove(.switchCase)
             }

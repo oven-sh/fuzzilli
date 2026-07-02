@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 let duktapeProfile = Profile(
     processArgs: { randomize in
         ["--reprl"]
@@ -27,10 +26,10 @@ let duktapeProfile = Profile(
     timeout: Timeout.value(250),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                """,
+        """,
 
     ecmaVersion: ECMAScriptVersion.es5,
 
@@ -52,19 +51,21 @@ let duktapeProfile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "CBOR.encode"               :  .function([.jsAnything] => .object()),
-        "CBOR.decode"               :  .function([.object()] => .object()),
-        "Duktape.fin"               :  .function([.object(), .opt(.function())] => .undefined),
-        "Duktape.act"               :  .function([.number] => .object()),
-        "Duktape.gc"                :  .function([] => .undefined),
-        "Duktape.compact"           :  .function([.object()] => .undefined),
-        "placeholder"               :  .function([] => .undefined),
+        "CBOR.encode": .function([.jsAnything] => .object()),
+        "CBOR.decode": .function([.object()] => .object()),
+        "Duktape.fin": .function([.object(), .opt(.function())] => .undefined),
+        "Duktape.act": .function([.number] => .object()),
+        "Duktape.gc": .function([] => .undefined),
+        "Duktape.compact": .function([.object()] => .undefined),
+        "placeholder": .function([] => .undefined),
 
     ],
 
     additionalObjectGroups: [],
 
     additionalEnumerations: [],
+
+    additionalOptionsBags: [],
 
     optionalPostProcessor: nil
 )

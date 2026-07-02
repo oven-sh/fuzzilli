@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-fileprivate let ForceDFGCompilationGenerator = CodeGenerator("ForceDFGCompilationGenerator", inputs: .required(.function())) { b, f in
+private let ForceDFGCompilationGenerator = CodeGenerator(
+    "ForceDFGCompilationGenerator", inputs: .required(.function())
+) { b, f in
     assert(b.type(of: f).Is(.function()))
     let arguments = b.randomArguments(forCalling: f)
 
@@ -22,7 +23,9 @@ fileprivate let ForceDFGCompilationGenerator = CodeGenerator("ForceDFGCompilatio
     }
 }
 
-fileprivate let ForceFTLCompilationGenerator = CodeGenerator("ForceFTLCompilationGenerator", inputs: .required(.function())) { b, f in
+private let ForceFTLCompilationGenerator = CodeGenerator(
+    "ForceFTLCompilationGenerator", inputs: .required(.function())
+) { b, f in
     assert(b.type(of: f).Is(.function()))
     let arguments = b.randomArguments(forCalling: f)
 
@@ -31,7 +34,7 @@ fileprivate let ForceFTLCompilationGenerator = CodeGenerator("ForceFTLCompilatio
     }
 }
 
-fileprivate let GcGenerator = CodeGenerator("GcGenerator") { b in
+private let GcGenerator = CodeGenerator("GcGenerator") { b in
     b.callFunction(b.createNamedVariable(forBuiltin: "gc"))
 }
 
@@ -49,7 +52,8 @@ let jscProfile = Profile(
             "--thresholdForFTLOptimizeSoon=1000",
             // Enable bounds check elimination validation
             "--validateBCE=true",
-            "--reprl"]
+            "--reprl",
+        ]
 
         guard randomize else { return args }
 
@@ -70,18 +74,18 @@ let jscProfile = Profile(
 
     processArgsReference: nil,
 
-    processEnv: ["UBSAN_OPTIONS":"handle_segv=0"],
+    processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
 
     maxExecsBeforeRespawn: 1000,
 
     timeout: Timeout.value(250),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                gc();
-                """,
+        gc();
+        """,
 
     ecmaVersion: ECMAScriptVersion.es6,
 
@@ -100,7 +104,7 @@ let jscProfile = Profile(
     additionalCodeGenerators: [
         (ForceDFGCompilationGenerator, 5),
         (ForceFTLCompilationGenerator, 5),
-        (GcGenerator,                  5),
+        (GcGenerator, 5),
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),
@@ -110,25 +114,27 @@ let jscProfile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc"                  : .function([] => .undefined),
-        "transferArrayBuffer" : .function([.object(ofGroup: "ArrayBuffer")] => .undefined),
-        "noInline"            : .function([.function()] => .undefined),
-        "noFTL"               : .function([.function()] => .undefined),
-        "createGlobalObject"  : .function([] => .object()),
-        "OSRExit"             : .function([] => .jsAnything),
-        "drainMicrotasks"     : .function([] => .jsAnything),
-        "runString"           : .function([.string] => .jsAnything),
-        "makeMasquerader"     : .function([] => .jsAnything),
-        "fullGC"              : .function([] => .undefined),
-        "edenGC"              : .function([] => .undefined),
-        "fiatInt52"           : .function([.number] => .number),
-        "forceGCSlowPaths"    : .function([] => .jsAnything),
-        "ensureArrayStorage"  : .function([] => .jsAnything),
+        "gc": .function([] => .undefined),
+        "transferArrayBuffer": .function([.object(ofGroup: "ArrayBuffer")] => .undefined),
+        "noInline": .function([.function()] => .undefined),
+        "noFTL": .function([.function()] => .undefined),
+        "createGlobalObject": .function([] => .object()),
+        "OSRExit": .function([] => .jsAnything),
+        "drainMicrotasks": .function([] => .jsAnything),
+        "runString": .function([.string] => .jsAnything),
+        "makeMasquerader": .function([] => .jsAnything),
+        "fullGC": .function([] => .undefined),
+        "edenGC": .function([] => .undefined),
+        "fiatInt52": .function([.number] => .number),
+        "forceGCSlowPaths": .function([] => .jsAnything),
+        "ensureArrayStorage": .function([] => .jsAnything),
     ],
 
     additionalObjectGroups: [],
 
     additionalEnumerations: [],
+
+    additionalOptionsBags: [],
 
     optionalPostProcessor: nil
 )

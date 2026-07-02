@@ -100,19 +100,21 @@ struct DiffExecution: Execution {
 
     // TODO(mdanylo): we shouldn't pass dump outputs as a separate parameter,
     // instead we should rather make them a part of a REPRL protocol between Fuzzilli and V8.
-    static func diff(optExec: Execution, unoptExec: Execution,
-            optDumpOut: String, unoptDumpOut: String) -> Execution {
+    static func diff(
+        optExec: Execution, unoptExec: Execution,
+        optDumpOut: String, unoptDumpOut: String
+    ) -> Execution {
 
         assert(optExec.outcome == .succeeded && unoptExec.outcome == .succeeded)
 
         func formatDiff(label: String, optData: String, unoptData: String) -> String {
             return """
-            === OPT \(label) ===
-            \(optData)
+                === OPT \(label) ===
+                \(optData)
 
-            === UNOPT \(label) ===
-            \(unoptData)
-            """
+                === UNOPT \(label) ===
+                \(unoptData)
+                """
         }
 
         let relateOutcome = DiffOracle.relate(optDumpOut, with: unoptDumpOut)
@@ -120,9 +122,12 @@ struct DiffExecution: Execution {
         return DiffExecution(
             outcome: relateOutcome ? .succeeded : .differential,
             execTime: optExec.execTime,
-            stdout: formatDiff(label: "STDOUT", optData: optExec.stdout, unoptData: unoptExec.stdout),
-            stderr: formatDiff(label: "STDERR", optData: optExec.stderr, unoptData: unoptExec.stderr),
-            fuzzout: formatDiff(label: "FUZZOUT", optData: optExec.fuzzout, unoptData: unoptExec.fuzzout)
+            stdout: formatDiff(
+                label: "STDOUT", optData: optExec.stdout, unoptData: unoptExec.stdout),
+            stderr: formatDiff(
+                label: "STDERR", optData: optExec.stderr, unoptData: unoptExec.stderr),
+            fuzzout: formatDiff(
+                label: "FUZZOUT", optData: optExec.fuzzout, unoptData: unoptExec.fuzzout)
         )
     }
 }

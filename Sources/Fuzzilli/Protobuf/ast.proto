@@ -23,6 +23,7 @@ message AST {
 // A parameter in a function declaration. Not an expression on its own.
 message Parameter {
     string name = 1;
+    Expression defaultValue = 2;
 }
 
 message EmptyStatement {
@@ -39,6 +40,16 @@ enum VariableDeclarationKind {
 }
 
 message VariableDeclarator {
+    oneof id {
+        string name = 1;
+        ObjectPattern objectPattern = 3;
+        ArrayPattern arrayPattern = 4;
+    }
+    // The value is optional
+    Expression value = 2;
+}
+
+message SimpleVariableDeclarator {
     string name = 1;
     // The value is optional
     Expression value = 2;
@@ -56,7 +67,7 @@ enum DisposableVariableDeclarationKind {
 
 message DisposableVariableDeclaration {
     DisposableVariableDeclarationKind kind = 1;
-    repeated VariableDeclarator declarations = 2;
+    repeated SimpleVariableDeclarator declarations = 2;
 }
 
 enum FunctionType {
@@ -109,13 +120,13 @@ message ClassMethod {
 }
 
 message ClassGetter {
-    string name = 1;
+    PropertyKey key = 1;
     bool isStatic = 2;
     repeated Statement body = 3;
 }
 
 message ClassSetter {
-    string name = 1;
+    PropertyKey key = 1;
     bool isStatic = 2;
     Parameter parameter = 3;
     repeated Statement body = 4;
@@ -195,21 +206,43 @@ message ForLoop {
 }
 
 message ForInLoop {
-    VariableDeclarator left = 1;
+    oneof left {
+        SimpleVariableDeclarator declaration = 1;
+        LValue lvalue = 4;
+    }
     Expression right = 2;
     Statement body = 3;
 }
 
 message ForOfLoop {
-    VariableDeclarator left = 1;
+    enum UsingType {
+        NONE = 0;
+        USING = 1;
+        AWAIT_USING = 2;
+    }
+    oneof left {
+        VariableDeclarator declaration = 1;
+        LValue lvalue = 8;
+    }
     Expression right = 2;
     Statement body = 3;
+    bool isAsync = 6;
+    UsingType usingType = 7;
 }
 
 message BreakStatement {
+    // The label is optional
+    string label = 1;
 }
 
 message ContinueStatement {
+    // The label is optional
+    string label = 1;
+}
+
+message LabeledStatement {
+    string label = 1;
+    Statement body = 2;
 }
 
 message CatchClause {
@@ -272,6 +305,7 @@ message Statement {
         WithStatement withStatement = 19;
         SwitchStatement switchStatement = 20;
         DisposableVariableDeclaration disposableVariableDeclaration = 21;
+        LabeledStatement labeledStatement = 22;
     }
 }
 
@@ -311,49 +345,42 @@ message NullLiteral {
 message ThisExpression {
 }
 
+message LValue {
+    oneof value {
+        Identifier identifier = 1;
+        MemberExpression memberExpression = 2;
+        SuperMemberExpression superMemberExpression = 3;
+        DestructuringPattern destructuringPattern = 4;
+    }
+}
+
 message AssignmentExpression {
     string operator = 1;
-    Expression lhs = 2;
+    LValue lvalue = 4;
     Expression rhs = 3;
 }
 
 message ObjectProperty {
-    oneof key {
-        // A "regular" property.
-        string name = 1;
-        // An element.
-        int64 index = 2;
-        // A computed property.
-        Expression expression = 3;
-    }
-    Expression value = 4;
+    PropertyKey key = 1;
+    Expression value = 2;
 }
 
 message ObjectMethod {
-    oneof key {
-        string name = 1;
-        Expression expression = 2;
-    }
-    FunctionType type = 3;
-    Parameters parameters = 4;
-    repeated Statement body = 5;
+    PropertyKey key = 1;
+    FunctionType type = 2;
+    Parameters parameters = 3;
+    repeated Statement body = 4;
 }
 
 message ObjectGetter {
-    oneof key {
-        string name = 1;
-        Expression expression = 2;
-    }
-    repeated Statement body = 3;
+    PropertyKey key = 1;
+    repeated Statement body = 2;
 }
 
 message ObjectSetter {
-    oneof key {
-        string name = 1;
-        Expression expression = 2;
-    }
-    Parameter parameter = 3;
-    repeated Statement body = 4;
+    PropertyKey key = 1;
+    Parameter parameter = 2;
+    repeated Statement body = 3;
 }
 
 message ObjectField {
@@ -507,4 +534,32 @@ message Expression {
         CallSuperConstructor callSuperConstructor = 28;
         ClassExpression classExpression = 29;
     }
+}
+
+message DestructuringPattern {
+    oneof pattern {
+        ObjectPattern objectPattern = 1;
+        ArrayPattern arrayPattern = 2;
+    }
+}
+
+message ObjectPattern {
+    repeated ObjectPatternProperty properties = 1;
+    LValue restTarget = 2;
+}
+
+message ObjectPatternProperty {
+    PropertyKey key = 1;
+    LValue target = 2;
+    Expression defaultValue = 5;
+}
+
+message ArrayPattern {
+    repeated ArrayPatternElement elements = 1;
+    LValue restTarget = 2;
+}
+
+message ArrayPatternElement {
+    LValue target = 1;
+    Expression defaultValue = 3;
 }

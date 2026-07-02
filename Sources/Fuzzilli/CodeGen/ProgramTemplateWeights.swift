@@ -13,6 +13,7 @@
 // limitations under the License.
 
 /// Default weights for the builtin program templates.
+// swift-format-ignore
 public let programTemplateWeights = [
     "Codegen100":            2,
     "Codegen50":             2,

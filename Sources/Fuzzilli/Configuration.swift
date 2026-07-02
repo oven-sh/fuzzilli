@@ -94,8 +94,15 @@ public struct Configuration {
     // this disables all wasm-related code generators.
     public let isWasmEnabled: Bool
 
+    // Path to the wasm-opt binary to enable Binaryen Wasm generation.
+    public let wasmOptPath: String?
+
     // The directory in which the corpus and additional diagnostics files are stored.
     public let storagePath: String?
+
+    // The number of iterations without finding a new interesting program after which
+    // the fuzzer switches from corpus generation to the main fuzzing phase.
+    public let corpusGenerationIterations: Int
 
     // Advises the fuzzer to generate cases that are more suitable for differential fuzzing.
     // Right now this only leads to the JavaScriptLifter emitting more local variables which
@@ -106,23 +113,30 @@ public struct Configuration {
     // be imported due to disabled wasm capabilities in the fuzzer.
     public static let excludedWasmDirectory = "excluded_wasm_programs"
 
-    public init(arguments: [String] = [],
-                timeout: UInt32 = 250,
-                skipStartupTests: Bool = false,
-                logLevel: LogLevel = .info,
-                startupTests: [(String, ExpectedStartupTestResult)] = [],
-                minimizationLimit: Double = 0.0,
-                dropoutRate: Double = 0,
-                collectRuntimeTypes: Bool = false,
-                enableDiagnostics: Bool = false,
-                enableInspection: Bool = false,
-                staticCorpus: Bool = false,
-                tag: String? = nil,
-                isWasmEnabled: Bool = false,
-                storagePath: String? = nil,
-                forDifferentialFuzzing: Bool = false,
-                instanceId: Int = -1,
-                dumplingEnabled: Bool = false) {
+    // Whether the fuzzer generates bundles containing multiple JavaScript scripts or modules.
+    public let generateBundle: Bool
+
+    public init(
+        arguments: [String] = [],
+        timeout: UInt32 = 250,
+        skipStartupTests: Bool = false,
+        logLevel: LogLevel = .info,
+        startupTests: [(String, ExpectedStartupTestResult)] = [],
+        minimizationLimit: Double = 0.0,
+        dropoutRate: Double = 0,
+        enableDiagnostics: Bool = false,
+        enableInspection: Bool = false,
+        staticCorpus: Bool = false,
+        tag: String? = nil,
+        isWasmEnabled: Bool = false,
+        wasmOptPath: String? = nil,
+        generateBundle: Bool = false,
+        storagePath: String? = nil,
+        corpusGenerationIterations: Int = 100,
+        forDifferentialFuzzing: Bool = false,
+        instanceId: Int = -1,
+        dumplingEnabled: Bool = false
+    ) {
         self.arguments = arguments
         self.timeout = timeout
         self.logLevel = logLevel
@@ -135,13 +149,19 @@ public struct Configuration {
         self.staticCorpus = staticCorpus
         self.tag = tag
         self.isWasmEnabled = isWasmEnabled
+        self.wasmOptPath = wasmOptPath
+        self.generateBundle = generateBundle
         self.storagePath = storagePath
+        self.corpusGenerationIterations = corpusGenerationIterations
         self.forDifferentialFuzzing = forDifferentialFuzzing
-        self.diffConfig = dumplingEnabled ? DifferentialConfig.create(for: instanceId, storagePath: storagePath!) : nil
+        self.diffConfig =
+            dumplingEnabled
+            ? DifferentialConfig.create(for: instanceId, storagePath: storagePath!) : nil
     }
 
     public func getInstanceSpecificArguments(forReferenceRunner: Bool) -> [String] {
-        return diffConfig.map { [$0.getDumpFilenameParameter(isOptimized: !forReferenceRunner)] } ?? []
+        return diffConfig.map { [$0.getDumpFilenameParameter(isOptimized: !forReferenceRunner)] }
+            ?? []
     }
 }
 

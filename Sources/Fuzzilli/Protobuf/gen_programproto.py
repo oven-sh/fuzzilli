@@ -48,6 +48,8 @@ message Program {
     repeated Instruction code = 2;
     map<sint32, string> comments = 3;
     Program parent = 4;
+    bool isBundle = 5;
+    uint32 version = 6;
 }
 """
 
@@ -76,6 +78,3 @@ def main():
         f.write(END)
 
 main()
-
-
-

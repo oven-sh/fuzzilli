@@ -35,14 +35,14 @@ public struct V8DifferentialConfig {
         "--jit-fuzzing",
         "--maglev-dumping",
         "--turbofan-dumping",
-        "--turbofan-dumping-print-deopt-frames"
+        "--turbofan-dumping-print-deopt-frames",
     ]
 
     public static let referenceArgs: [String] = [
         "--no-turbofan",
         "--no-maglev",
         "--sparkplug-dumping",
-        "--interpreter-dumping"
+        "--interpreter-dumping",
     ]
 }
 
@@ -102,7 +102,8 @@ struct Relater {
 let args = Arguments.parse(from: CommandLine.arguments)
 
 guard let jsShellPath = args["--d8"],
-      let pocPath = args["--poc"] else {
+    let pocPath = args["--poc"]
+else {
     print("Usage: --d8 <path_to_d8> --poc <path_to_poc> [--dump <path_to_dump_file>]")
     exit(1)
 }

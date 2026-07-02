@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // Miscellaneous semantics of FuzzIL. Also see JSTyper for execution semantics of operations.
 
 extension Operation {
@@ -24,20 +23,20 @@ extension Operation {
 
         switch opcode {
         case .callFunction,
-             .callMethod,
-             .callComputedMethod:
-             // We assume that a constructor doesn't modify its arguments when called.
+            .callMethod,
+            .callComputedMethod:
+            // We assume that a constructor doesn't modify its arguments when called.
             return true
         case .setProperty,
-             .updateProperty,
-             .setElement,
-             .updateElement,
-             .setComputedProperty,
-             .updateComputedProperty,
-             .yield,
-             .deleteProperty,
-             .deleteComputedProperty,
-             .deleteElement:
+            .updateProperty,
+            .setElement,
+            .updateElement,
+            .setComputedProperty,
+            .updateComputedProperty,
+            .yield,
+            .deleteProperty,
+            .deleteComputedProperty,
+            .deleteElement:
             return inputIdx == 0
         default:
             return false
@@ -47,13 +46,12 @@ extension Operation {
     func reassigns(input inputIdx: Int) -> Bool {
         switch opcode {
         case .reassign,
-             .update:
+            .update:
             return inputIdx == 0
         case .unaryOperation(let op):
             return op.op.reassignsInput
-        case .destructArrayAndReassign,
-             .destructObjectAndReassign:
-            return inputIdx != 0
+        case .destructAndReassign:
+            return self.isDestructTarget(inputIdx: inputIdx)
         default:
             return false
         }
@@ -117,7 +115,7 @@ extension Instruction {
         case (.loadNull, .loadNull):
             canFold = true
         case (.loadRegExp(let op1), .loadRegExp(let op2)):
-            canFold = op1.pattern  == op2.pattern && op1.flags == op2.flags
+            canFold = op1.pattern == op2.pattern && op1.flags == op2.flags
         default:
             assert(self.op.name != other.op.name)
         }
@@ -138,36 +136,36 @@ extension Operation {
             return endOp is EndObjectLiteralComputedMethod
         case .beginObjectLiteralGetter:
             return endOp is EndObjectLiteralGetter
+        case .beginObjectLiteralComputedGetter:
+            return endOp is EndObjectLiteralComputedGetter
         case .beginObjectLiteralSetter:
             return endOp is EndObjectLiteralSetter
+        case .beginObjectLiteralComputedSetter:
+            return endOp is EndObjectLiteralComputedSetter
         case .beginClassDefinition:
-             return endOp is EndClassDefinition
+            return endOp is EndClassDefinition
         case .beginClassConstructor:
             return endOp is EndClassConstructor
-        case .beginClassInstanceMethod:
-            return endOp is EndClassInstanceMethod
-        case .beginClassInstanceComputedMethod:
-            return endOp is EndClassInstanceComputedMethod
-        case .beginClassInstanceGetter:
-            return endOp is EndClassInstanceGetter
-        case .beginClassInstanceSetter:
-            return endOp is EndClassInstanceSetter
+        case .beginClassMethod:
+            return endOp is EndClassMethod
+        case .beginClassComputedMethod:
+            return endOp is EndClassComputedMethod
+        case .beginClassGetter:
+            return endOp is EndClassGetter
+        case .beginClassComputedGetter:
+            return endOp is EndClassComputedGetter
+        case .beginClassSetter:
+            return endOp is EndClassSetter
+        case .beginClassComputedSetter:
+            return endOp is EndClassComputedSetter
         case .beginClassStaticInitializer:
             return endOp is EndClassStaticInitializer
-        case .beginClassStaticMethod:
-            return endOp is EndClassStaticMethod
-        case .beginClassStaticComputedMethod:
-            return endOp is EndClassStaticComputedMethod
-        case .beginClassStaticGetter:
-            return endOp is EndClassStaticGetter
-        case .beginClassStaticSetter:
-            return endOp is EndClassStaticSetter
-        case .beginClassPrivateInstanceMethod:
-            return endOp is EndClassPrivateInstanceMethod
-        case .beginClassPrivateStaticMethod:
-            return endOp is EndClassPrivateStaticMethod
+        case .beginClassPrivateMethod:
+            return endOp is EndClassPrivateMethod
         case .beginPlainFunction:
             return endOp is EndPlainFunction
+        case .beginWorkerFunction:
+            return endOp is EndWorkerFunction
         case .beginArrowFunction:
             return endOp is EndArrowFunction
         case .beginGeneratorFunction:
@@ -189,7 +187,7 @@ extension Operation {
         case .beginSwitch:
             return endOp is EndSwitch
         case .beginSwitchCase,
-             .beginSwitchDefaultCase:
+            .beginSwitchDefaultCase:
             return endOp is EndSwitchCase
         case .beginWhileLoopHeader:
             return endOp is BeginWhileLoopBody
@@ -205,13 +203,9 @@ extension Operation {
             return endOp is BeginForLoopAfterthought
         case .beginForLoopAfterthought:
             return endOp is BeginForLoopBody
-        case .beginForLoopBody:
+        case .beginForLoopBody,
+            .beginForLoop:
             return endOp is EndForLoop
-        case .beginForInLoop:
-            return endOp is EndForInLoop
-        case .beginForOfLoop,
-             .beginForOfLoopWithDestruct:
-            return endOp is EndForOfLoop
         case .beginRepeatLoop:
             return endOp is EndRepeatLoop
         case .beginTry:
@@ -224,6 +218,14 @@ extension Operation {
             return endOp is EndCodeString
         case .beginBlockStatement:
             return endOp is EndBlockStatement
+        case .beginBundleScript:
+            return endOp is EndBundleScript
+        case .beginBundleModule:
+            return endOp is EndBundleModule
+        case .beginBundleModuleEntryPoint:
+            return endOp is EndBundleModuleEntryPoint
+        case .beginPendingBundleModule:
+            return endOp is EndPendingBundleModule
         case .beginWasmModule:
             return endOp is EndWasmModule
         case .beginWasmFunction:
@@ -235,7 +237,7 @@ extension Operation {
         case .wasmBeginTryTable:
             return endOp is WasmEndTryTable
         case .wasmBeginTry,
-             .wasmBeginCatch:
+            .wasmBeginCatch:
             return endOp is WasmEndTry || endOp is WasmBeginCatch || endOp is WasmBeginCatchAll
         case .wasmBeginCatchAll:
             return endOp is WasmEndTry

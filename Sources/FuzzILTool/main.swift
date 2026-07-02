@@ -33,7 +33,7 @@ func loadProgram(from path: String) throws -> Program {
 
 func loadAllPrograms(in dirPath: String) -> [(filename: String, program: Program)] {
     var isDir: ObjCBool = false
-    if !FileManager.default.fileExists(atPath: dirPath, isDirectory:&isDir) || !isDir.boolValue {
+    if !FileManager.default.fileExists(atPath: dirPath, isDirectory: &isDir) || !isDir.boolValue {
         print("\(dirPath) is not a directory!")
         exit(-1)
     }
@@ -56,7 +56,7 @@ func loadAllPrograms(in dirPath: String) -> [(filename: String, program: Program
 }
 
 // Takes a program and lifts it to JavaScript.
-func liftToJS(_ jsLifter: JavaScriptLifter,_ prog: Program) -> String {
+func liftToJS(_ jsLifter: JavaScriptLifter, _ prog: Program) -> String {
     let res = jsLifter.lift(prog)
     return res.trimmingCharacters(in: .whitespacesAndNewlines)
 }
@@ -72,10 +72,13 @@ func liftToFuzzIL(_ prog: Program) -> String {
 func liftAllPrograms(in dirPath: String, with lifter: Lifter, fileExtension: String) -> Int {
     var numLiftedPrograms = 0
     for (filename, program) in loadAllPrograms(in: dirPath) {
-        let newFilePath = "\(dirPath)/\(filename.dropLast(protoBufFileExtension.count))\(fileExtension)"
+        let newFilePath =
+            "\(dirPath)/\(filename.dropLast(protoBufFileExtension.count))\(fileExtension)"
         let content = lifter.lift(program)
         do {
-            try content.write(to: URL(fileURLWithPath: newFilePath), atomically: false, encoding: String.Encoding.utf8)
+            try content.write(
+                to: URL(fileURLWithPath: newFilePath), atomically: false,
+                encoding: String.Encoding.utf8)
             numLiftedPrograms += 1
         } catch {
             print("Failed to write file \(newFilePath): \(error)")
@@ -96,29 +99,32 @@ func loadProgramOrExit(from path: String) -> Program {
 let args = Arguments.parse(from: CommandLine.arguments)
 
 if args["-h"] != nil || args["--help"] != nil || args.numPositionalArguments != 1 {
-    print("""
-          Usage:
-          \(args.programName) options path
+    print(
+        """
+        Usage:
+        \(args.programName) options path
 
-          Options:
-              --liftToFuzzIL           : Lifts the given protobuf program to FuzzIL's text format and prints it
-              --liftToJS               : Lifts the given protobuf program to JS and prints it
-              --liftCorpusToJS         : Loads all .fzil files in a directory and lifts them to .js files in that same directory
-              --dumpProtobuf           : Dumps the raw content of the given protobuf file
-              --dumpProgram            : Dumps the internal representation of the program stored in the given protobuf file
-              --checkCorpus            : Attempts to load all .fzil files in a directory and checks if they are statically valid
-              --compile                : Compile the given JavaScript program to a FuzzIL program. Requires node.js
-              --outputPathJS           : If given, --compile will write the lifted JS file to the given path after compilation.
-              --generate               : Generate a random program using Fuzzilli's code generators and save it to the specified path.
-              --forDifferentialFuzzing : Enable additional features for better support of external differential fuzzing.
-          """)
+        Options:
+            --liftToFuzzIL           : Lifts the given protobuf program to FuzzIL's text format and prints it
+            --liftToJS               : Lifts the given protobuf program to JS and prints it
+            --liftCorpusToJS         : Loads all .fzil files in a directory and lifts them to .js files in that same directory
+            --dumpProtobuf           : Dumps the raw content of the given protobuf file
+            --dumpProgram            : Dumps the internal representation of the program stored in the given protobuf file
+            --checkCorpus            : Attempts to load all .fzil files in a directory and checks if they are statically valid
+            --compile                : Compile the given JavaScript program to a FuzzIL program. Requires node.js
+            --outputPathJS           : If given, --compile will write the lifted JS file to the given path after compilation.
+            --generate               : Generate a random program using Fuzzilli's code generators and save it to the specified path.
+            --forDifferentialFuzzing : Enable additional features for better support of external differential fuzzing.
+        """)
     exit(0)
 }
 
 let path = args[0]
 
 let forDifferentialFuzzing = args.has("--forDifferentialFuzzing")
-let jsLifter = JavaScriptLifter(prefix: jsPrefix, suffix: jsSuffix, ecmaVersion: ECMAScriptVersion.es6, environment: JavaScriptEnvironment(), alwaysEmitVariables: forDifferentialFuzzing)
+let jsLifter = JavaScriptLifter(
+    prefix: jsPrefix, suffix: jsSuffix, ecmaVersion: ECMAScriptVersion.es6,
+    environment: JavaScriptEnvironment(), alwaysEmitVariables: forDifferentialFuzzing)
 
 // Covert a single IL protobuf file to FuzzIL's text format and print to stdout
 if args.has("--liftToFuzzIL") {
@@ -134,7 +140,8 @@ else if args.has("--liftToJS") {
 
 // Lift all protobuf programs to JavaScript
 else if args.has("--liftCorpusToJS") {
-    let numLiftedPrograms = liftAllPrograms(in: path, with: jsLifter, fileExtension: jsFileExtension)
+    let numLiftedPrograms = liftAllPrograms(
+        in: path, with: jsLifter, fileExtension: jsFileExtension)
     print("Lifted \(numLiftedPrograms) programs to JS")
 }
 
@@ -166,7 +173,9 @@ else if args.has("--compile") {
         exit(-1)
     }
     guard let parser = JavaScriptParser(executor: nodejs) else {
-        print("The JavaScript parser does not appear to be working. See Sources/Fuzzilli/Compiler/Parser/README.md for instructions on how to set it up.")
+        print(
+            "The JavaScript parser does not appear to be working. See Sources/Fuzzilli/Compiler/Parser/README.md for instructions on how to set it up."
+        )
         exit(-1)
     }
 
@@ -194,7 +203,9 @@ else if args.has("--compile") {
     if let js_path = args["--outputPathJS"] {
         let content = ast.leadingComments + jsLifter.lift(program)
         do {
-            try content.write(to: URL(fileURLWithPath: js_path), atomically: false, encoding: String.Encoding.utf8)
+            try content.write(
+                to: URL(fileURLWithPath: js_path), atomically: false, encoding: String.Encoding.utf8
+            )
         } catch {
             print("Failed to write file \(js_path): \(error)")
             exit(-1)
@@ -205,7 +216,8 @@ else if args.has("--compile") {
         print(jsLifter.lift(program))
 
         do {
-            let outputPath = URL(fileURLWithPath: path).deletingPathExtension().appendingPathExtension("fzil")
+            let outputPath = URL(fileURLWithPath: path).deletingPathExtension()
+                .appendingPathExtension("fzil")
             try program.asProtobuf().serializedData().write(to: outputPath)
             print("FuzzIL program written to \(outputPath.relativePath)")
         } catch {
@@ -216,7 +228,9 @@ else if args.has("--compile") {
 }
 
 else if args.has("--generate") {
-    let fuzzer = makeMockFuzzer(config: Configuration(logLevel: .warning, enableInspection: true), environment: JavaScriptEnvironment())
+    let fuzzer = makeMockFuzzer(
+        config: Configuration(logLevel: .warning, enableInspection: true),
+        environment: JavaScriptEnvironment())
     let b = fuzzer.makeBuilder()
     b.buildPrefix()
     b.build(n: 50, by: .generating)
@@ -225,7 +239,8 @@ else if args.has("--generate") {
     print(jsLifter.lift(program, withOptions: .includeComments))
 
     do {
-        let outputPath = URL(fileURLWithPath: path).deletingPathExtension().appendingPathExtension("fzil")
+        let outputPath = URL(fileURLWithPath: path).deletingPathExtension().appendingPathExtension(
+            "fzil")
         try program.asProtobuf().serializedData().write(to: outputPath)
     } catch {
         print("Failed to store output program to disk: \(error)")

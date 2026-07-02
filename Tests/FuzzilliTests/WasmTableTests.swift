@@ -12,17 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
+import Testing
+
 @testable import Fuzzilli
 
-class WasmTableTests: XCTestCase {
-    func testTableSizeAndGrow() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest()
+@Suite(.enabled { JavaScriptExecutor() != nil })
+struct WasmTableTests {
+    @Test func testTableSizeAndGrow() throws {
+        let runner = JavaScriptExecutor()!
         var expectedOutput = ""
 
         let js = buildAndLiftProgram { b in
             let module = b.buildWasmModule { wasmModule in
-                let table = wasmModule.addTable(elementType: .wasmFuncRef(), minSize: 10, maxSize: 20, isTable64: false)
+                let table = wasmModule.addTable(
+                    elementType: .wasmFuncRef(), minSize: 10, maxSize: 20, isTable64: false)
 
                 wasmModule.addWasmFunction(with: [] => [.wasmi32]) { f, _, _ in
                     let size = f.wasmTableSize(table: table)

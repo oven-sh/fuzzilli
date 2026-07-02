@@ -44,12 +44,12 @@ public class MutationEngine: FuzzEngine {
     ///
     /// This ensures that samples will be mutated multiple times as long
     /// as the intermediate results do not cause a runtime exception.
-    public override func fuzzOne(_ group: DispatchGroup) {
+    public override func fuzzOne() {
         var parent = fuzzer.corpus.randomElementForMutating()
         parent = prepareForMutating(parent)
         for _ in 0..<numConsecutiveMutations {
             // TODO: factor out code shared with the HybridEngine?
-            var mutator = fuzzer.mutators.randomElement()
+            var mutator = fuzzer.mutators.randomElement()!
             let maxAttempts = 10
             var mutatedProgram: Program? = nil
             for _ in 0..<maxAttempts {
@@ -62,12 +62,13 @@ public class MutationEngine: FuzzEngine {
                 } else {
                     // Try a different mutator.
                     mutator.failedToGenerate()
-                    mutator = fuzzer.mutators.randomElement()
+                    mutator = fuzzer.mutators.randomElement()!
                 }
             }
 
             guard let program = mutatedProgram else {
-                logger.warning("Could not mutate sample, giving up. Sample:\n\(FuzzILLifter().lift(parent))")
+                logger.warning(
+                    "Could not mutate sample, giving up. Sample:\n\(FuzzILLifter().lift(parent))")
                 continue
             }
 

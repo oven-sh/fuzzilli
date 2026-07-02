@@ -12,55 +12,82 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Foundation
+
+// The TypeGroupReducer removes unused type definition. A type definition is considered unused if it
+// is not used by any other operation but the WasmEndTypeGroup and if the corresponding output
+// of the WasmEndTypeGroup is not used anywhere inside the program.
+//
+// This reducer preserves the invariant that each type defined inside a type group is also exposed
+// by the WasmEndTypeGroup operation.
+// Note that a WasmResolveForwardReference(v0, v1) makes v1 used and prevents its removal by this
+// reducer. However, the GenericInstructionReducer will try to remove the
+// WasmResolveForwardReference, so this is not an issue.
 struct WasmTypeGroupReducer: Reducer {
     func reduce(with helper: MinimizationHelper) {
-        // Compute all candidates: intermediate operations in a data flow chain.
-        var candidates = [Int]()
-        var uses = VariableMap<Int>()
+        var useCount = VariableMap<Int>()
+        var definitions = VariableMap<Int>()
+
+        // Count all usages of Wasm type definitions.
         for instr in helper.code {
-            for input in instr.inputs {
-                uses[input]? += 1
+            if instr.op is WasmTypeOperation {
+                for output in instr.outputs {
+                    useCount[output] = 0
+                    definitions[output] = instr.index
+                }
             }
 
-
-            guard instr.op is WasmTypeOperation else { continue }
-            // Define the usages for all WasmTypeOperation so that we also count usages of a type
-            // inside a type group (i.e. by other type operations).
-            for output in instr.outputs {
-                uses[output] = 0
-            }
-
-            // For now, we only consider EndTypeGroup instructions.
-            guard case .wasmEndTypeGroup = instr.op.opcode else  { continue }
-
-            candidates.append(instr.index)
-            for (input, output) in zip(instr.inputs, instr.outputs) {
-                // Subtract 1 as the input in the WasmEndTypeGroup itself is not a reason to keep
-                // the type. However, if the type is used inside the type group, it also needs to be
-                // exposed by the type group. Right now the JSTyper requires that all types defined
-                // in a type group are exposed by their WasmEndTypeGroup instruction.
-                uses[output]! += uses[input]! - 1
+            if instr.op is WasmEndTypeGroup {
+                // Propagate usage counts from the input to the output variables. Note that the
+                // WasmEndTypeGroup ends the scope in which the inputs are defined (meaning there)
+                // can't be any usages after the WasmEndTypeGroup instruction.
+                for (input, output) in zip(instr.inputs, instr.outputs) {
+                    useCount[output] = useCount[input]!
+                }
+            } else {
+                // Any usage but the WasmEndTypeGroup should be tracked.
+                // (This includes WasmResolveForwardReference.)
+                for input in instr.inputs {
+                    useCount[input]? += 1
+                }
             }
         }
 
-        // Remove those candidates whose outputs are all used.
-        candidates = candidates.filter {helper.code[$0].allOutputs.map({ uses[$0]! }).contains {$0 == 0}}
-
-        if candidates.isEmpty {
+        if definitions.isEmpty {
             return
         }
 
-        // Simplify each remaining candidate.
-        var replacements = [(Int, Instruction)]()
-        for candidate in candidates {
-            let instr = helper.code[candidate]
-            assert(instr.op is WasmEndTypeGroup)
-            assert(instr.inputs.count == instr.outputs.count)
-            let newInoutsMap = zip(instr.inputs, instr.outputs).filter {uses[$0.1]! > 0}
-            let newInouts = newInoutsMap.map {$0.0} + newInoutsMap.map {$0.1}
-            let newInstr = Instruction(WasmEndTypeGroup(typesCount: newInoutsMap.count), inouts: newInouts, flags: .empty)
-            replacements.append((candidate, newInstr))
+        // Create replacements for WasmEndTypeGroup and collect type definitions to remove.
+        var toRemove = IndexSet()
+        var endTypeGroupReplacements = [Int: Instruction]()
+
+        for instr in helper.code {
+            guard case .wasmEndTypeGroup = instr.op.opcode else { continue }
+
+            let keptInoutsMap = zip(instr.inputs, instr.outputs).filter { useCount[$0.1]! > 0 }
+            if keptInoutsMap.count == instr.inputs.count { continue }
+
+            let unusedInputs =
+                zip(instr.inputs, instr.outputs).filter { useCount[$0.1]! == 0 }.map { $0.0 }
+            for input in unusedInputs {
+                toRemove.insert(definitions[input]!)
+            }
+
+            let newInouts = keptInoutsMap.map { $0.0 } + keptInoutsMap.map { $0.1 }
+            endTypeGroupReplacements[instr.index] = Instruction(
+                WasmEndTypeGroup(typesCount: keptInoutsMap.count), inouts: newInouts)
         }
-        helper.tryReplacements(replacements, renumberVariables: true)
+
+        if toRemove.isEmpty {
+            return
+        }
+
+        var newCode = Code(
+            helper.code
+                .filter { !toRemove.contains($0.index) }
+                .map { endTypeGroupReplacements[$0.index] ?? $0 }, isBundle: helper.code.isBundle)
+
+        newCode.renumberVariables()
+        helper.testAndCommit(newCode)
     }
 }

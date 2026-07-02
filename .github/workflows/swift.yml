@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/setup-node@v4
         with:
-          node-version: 25-nightly
+          node-version: 27-nightly
       - name: Swift Version
         run: swift --version
       - uses: actions/checkout@v2
@@ -48,4 +48,4 @@ jobs:
       - name: Install d8
         run: jsvu --os=default --engines=v8
       - name: Run tests with d8
-        run: FUZZILLI_TEST_SHELL=~/.jsvu/engines/v8/v8 swift test -c ${{ matrix.kind }} -v
+        run: FUZZILLI_TEST_SHELL=~/.jsvu/engines/v8/v8 swift test -c ${{ matrix.kind }}

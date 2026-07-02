@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 let jerryscriptProfile = Profile(
     processArgs: { randomize in
         ["--reprl-fuzzilli"]
@@ -20,17 +19,17 @@ let jerryscriptProfile = Profile(
 
     processArgsReference: nil,
 
-    processEnv: ["UBSAN_OPTIONS":"handle_segv=0"],
+    processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
 
     maxExecsBeforeRespawn: 1000,
 
     timeout: Timeout.value(250),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                """,
+        """,
 
     ecmaVersion: ECMAScriptVersion.es5,
 
@@ -52,15 +51,17 @@ let jerryscriptProfile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc"                : .function([] => .undefined),
-        "print"             : .function([] => .undefined),
-        "resourceName"      : .function([] => .undefined),
-        "placeholder"       : .function([] => .undefined),
+        "gc": .function([] => .undefined),
+        "print": .function([] => .undefined),
+        "resourceName": .function([] => .undefined),
+        "placeholder": .function([] => .undefined),
     ],
 
     additionalObjectGroups: [],
 
     additionalEnumerations: [],
+
+    additionalOptionsBags: [],
 
     optionalPostProcessor: nil
 )

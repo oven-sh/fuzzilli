@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 let serenityProfile = Profile(
     processArgs: { randomize in return [""] },
     processArgsReference: nil,
@@ -23,12 +22,12 @@ let serenityProfile = Profile(
     maxExecsBeforeRespawn: 1000,
     timeout: Timeout.value(250),
     codePrefix: """
-                 function main() {
-                 """,
-     codeSuffix: """
-                 }
-                 main();
-                 """,
+        function main() {
+        """,
+    codeSuffix: """
+        }
+        main();
+        """,
     ecmaVersion: ECMAScriptVersion.es6,
 
     startupTests: [
@@ -53,6 +52,8 @@ let serenityProfile = Profile(
     additionalObjectGroups: [],
 
     additionalEnumerations: [],
+
+    additionalOptionsBags: [],
 
     optionalPostProcessor: nil
 )

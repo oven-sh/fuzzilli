@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
+import Testing
+
 @testable import Fuzzilli
 
-class Leb128Tests: XCTestCase {
-    func testUnsignedEncode() {
-        let encoded = Leb128.unsignedEncode(624485);
-        XCTAssertEqual(encoded.map({ String(format: "%02hhx", $0)}).joined(), "e58e26")
+@Suite struct Leb128Tests {
+    @Test func testUnsignedEncode() {
+        let encoded = Leb128.unsignedEncode(624485)
+        #expect(encoded.map({ String(format: "%02hhx", $0) }).joined() == "e58e26")
     }
 }

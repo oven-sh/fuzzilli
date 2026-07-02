@@ -13,7 +13,9 @@
 // limitations under the License.
 
 import Foundation
+import Testing
 import XCTest
+
 @testable import Fuzzilli
 
 extension Program: @retroactive Equatable {
@@ -49,53 +51,65 @@ func v(_ n: Int) -> Variable {
 
 func GetJavaScriptExecutorOrSkipTest() throws -> JavaScriptExecutor {
     guard let runner = JavaScriptExecutor() else {
-        throw XCTSkip("Could not find js shell executable. Install Node.js (or if you want to use a different shell, modify the FUZZILLI_TEST_SHELL variable).")
+        throw XCTSkip(
+            "Could not find js shell executable. Install Node.js (or if you want to use a different shell, modify the FUZZILLI_TEST_SHELL variable)."
+        )
     }
     return runner
 }
 
-func GetJavaScriptExecutorOrSkipTest(type: JavaScriptExecutor.ExecutorType, withArguments args: [String]) throws -> JavaScriptExecutor {
+func GetJavaScriptExecutorOrSkipTest(
+    type: JavaScriptExecutor.ExecutorType, withArguments args: [String]
+) throws -> JavaScriptExecutor {
     guard let runner = JavaScriptExecutor(type: type, withArguments: args) else {
-        throw XCTSkip("Could not find js shell executable. Install Node.js (or if you want to use a different shell, modify the FUZZILLI_TEST_SHELL variable).")
+        throw XCTSkip(
+            "Could not find js shell executable. Install Node.js (or if you want to use a different shell, modify the FUZZILLI_TEST_SHELL variable)."
+        )
     }
     return runner
 }
 
-
-func buildAndLiftProgram(withLiftingOptions: LiftingOptions, buildFunc: (ProgramBuilder) -> ()) -> String {
+func buildAndLiftProgram(withLiftingOptions: LiftingOptions, buildFunc: (ProgramBuilder) -> Void)
+    -> String
+{
     let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
 
     // We have to use the proper JavaScriptEnvironment here.
     // This ensures that we use the available builtins.
     let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
-    let b = fuzzer.makeBuilder()
 
-    buildFunc(b)
+    return fuzzer.sync {
+        let b = fuzzer.makeBuilder()
 
-    // AssertThat prog == Deserialize(Serilize(prog))
-    let prog = b.finalize()
-    let serializedBytes = try! prog.asProtobuf().serializedData()
-    let deserialized = try! Program(from: Fuzzilli_Protobuf_Program(serializedBytes: serializedBytes))
-    XCTAssertEqual(prog, deserialized)
+        buildFunc(b)
 
-    return fuzzer.lifter.lift(prog, withOptions: withLiftingOptions)
+        // AssertThat prog == Deserialize(Serilize(prog))
+        let prog = b.finalize()
+        let serializedBytes = try! prog.asProtobuf().serializedData()
+        let deserialized = try! Program(
+            from: Fuzzilli_Protobuf_Program(serializedBytes: serializedBytes))
+        #expect(prog == deserialized)
+
+        return fuzzer.lifter.lift(prog, withOptions: withLiftingOptions)
+    }
 }
 
-func buildAndLiftProgram(buildFunc: (ProgramBuilder) -> ()) -> String {
+func buildAndLiftProgram(buildFunc: (ProgramBuilder) -> Void) -> String {
     return buildAndLiftProgram(withLiftingOptions: [], buildFunc: buildFunc)
 }
 
-class TestUtilsTests: XCTestCase {
+@Suite struct TestUtilsTests {
 
     // Test that running a program via the JavaScriptExecutor that produces a large output succeeds.
     // (This test case exists because when using a raw Pipe() as stdout without any further
     // handling, the child process will be interrupted once the buffer size (64KB on Linux
     // apparently) is filled.)
+    @Test(.enabled(if: JavaScriptExecutor() != nil))
     func testJavaScriptExecutorLargeOutput() throws {
         let jsProg = "console.log(JSON.stringify(Array(50000).fill(1)))"
-        let runner = try GetJavaScriptExecutorOrSkipTest()
+        let runner = try #require(JavaScriptExecutor())
         let result = try runner.executeScript(jsProg, withTimeout: 10)
-        XCTAssert(result.isSuccess, "\(result.output)\n\(result.error)")
-        XCTAssertGreaterThan(result.output.count, 100_000)
+        #expect(result.isSuccess, "\(result.output)\n\(result.error)")
+        #expect(result.output.count > 100_000)
     }
 }

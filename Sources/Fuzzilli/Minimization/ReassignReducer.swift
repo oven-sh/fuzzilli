@@ -45,7 +45,7 @@ struct ReassignmentReducer: Reducer {
     func reduce(with helper: MinimizationHelper) {
         var reassignedVariables = VariableMap<Variable>()
         var reassignedVariableStack: [[Variable]] = [[]]
-        var newCode = Code()
+        var newCode = Code(isBundle: helper.code.isBundle)
         var didChangeCode = false
 
         for instr in helper.code {
@@ -82,11 +82,11 @@ struct ReassignmentReducer: Reducer {
             } else {
                 let inouts = instr.inouts.map({ reassignedVariables[$0] ?? $0 })
                 if inouts[...] != instr.inouts { didChangeCode = true }
-                newCode.append(Instruction(instr.op, inouts: inouts, flags: .empty))
+                newCode.append(Instruction(instr.op, inouts: inouts))
             }
         }
 
-        assert(newCode.isStaticallyValid())
+        newCode.assertIsStaticallyValid()
         if didChangeCode {
             helper.testAndCommit(newCode)
         }

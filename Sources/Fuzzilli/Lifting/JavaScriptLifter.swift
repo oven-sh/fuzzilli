@@ -98,6 +98,10 @@ public class JavaScriptLifter: Lifter {
     // Mapping from the Variable which holds the module (output of EndBundleModule) to the module name.
     private var moduleNames: [Variable: String] = [:]
 
+    // The TypeScript annotations for the program being lifted (nil when lifting JavaScript), and the index of the current instruction.
+    private var typeScript: TypeScriptPlan? = nil
+    private var indexOfCurrentInstruction = 0
+
     public init(
         prefix: String = "",
         suffix: String = "",
@@ -186,6 +190,8 @@ public class JavaScriptLifter: Lifter {
             includeLineNumbers: options.contains(.includeLineNumbers),
             alwaysEmitVariables: alwaysEmitVariables,
             reservedNames: reservedNames)
+        typeScript = TypeScriptPlan.make(for: program, in: environment)
+        w.typeScript = typeScript
 
         var wasmCodeStarts: Int? = nil
         var wasmTypeGroupStarts: Int? = nil
@@ -239,6 +245,7 @@ public class JavaScriptLifter: Lifter {
 
             // Collect type information that we might pass to the WasmLifter.
             typer?.analyze(instr)
+            indexOfCurrentInstruction = instr.index
 
             // Singular operation handling:
             // All but the first singular operation in the same block are removed.
@@ -302,7 +309,9 @@ public class JavaScriptLifter: Lifter {
                     "Inner outputs are not currently supported in guarded operations")
                 let neededOutputs = instr.allOutputs.filter({ analyzer.numUses(of: $0) > 0 })
                 if !neededOutputs.isEmpty {
-                    let VARS = w.declareAll(neededOutputs).joined(separator: ", ")
+                    let VARS = zip(w.declareAll(neededOutputs), neededOutputs).map({
+                        $0 + (typeScript?.annotation(for: $1, hasInitializer: false) ?? "")
+                    }).joined(separator: ", ")
                     let LET = w.varKeyword
                     w.emit("\(LET) \(VARS);")
                 }
@@ -320,11 +329,16 @@ public class JavaScriptLifter: Lifter {
             // This does not guarantee that they will also _evaluate_ in that order at runtime, but it's probably a decent approximation.
             let inputsToRetrieve: ArraySlice<Variable> =
                 instr.op is EndWasmModule ? [] : instr.inputs
-            guard let inputs = w.retrieve(expressionsFor: inputsToRetrieve) else {
+            guard var inputs = w.retrieve(expressionsFor: inputsToRetrieve) else {
                 fatalError(
                     "Missing one or more expressions for inputs \(instr.inputs) of \(instr).\n"
                         + "Program is \(FuzzILLifter().lift(program, withOptions: .includeComments))\n"
                         + "Dying now.")
+            }
+            if let typeScript {
+                for i in inputs.indices {
+                    inputs[i] = typeScript.convert(inputs[i], input: i, of: instr)
+                }
             }
             var nextExpressionToFetch = 0
             func input(_ i: Int) -> Expression {
@@ -514,12 +528,14 @@ public class JavaScriptLifter: Lifter {
             case .beginObjectLiteralGetter(let op):
                 assert(instr.numInnerOutputs == 1)
                 let PROPERTY = quoteIdentifierIfNeeded(op.propertyName)
-                currentObjectLiteral.beginMethod("get \(PROPERTY)() {", &w)
+                currentObjectLiteral.beginMethod(
+                    "get \(PROPERTY)(\(typeScript?.returnMarker(at: instr.index) ?? "")) {", &w)
                 bindVariableToThis(instr.innerOutput(0))
 
             case .beginObjectLiteralComputedGetter:
                 let PROPERTY = input(0)
-                currentObjectLiteral.beginMethod("get [\(PROPERTY)]() {", &w)
+                currentObjectLiteral.beginMethod(
+                    "get [\(PROPERTY)](\(typeScript?.returnMarker(at: instr.index) ?? "")) {", &w)
                 bindVariableToThis(instr.innerOutput(0))
 
             case .beginObjectLiteralSetter(let op):
@@ -561,14 +577,14 @@ public class JavaScriptLifter: Lifter {
                     w.assign(ObjectLiteral.new(code), to: instr.output)
                 } else {
                     let LET = w.declarationKeyword(for: instr.output)
-                    let V = w.declare(instr.output)
-                    w.emit("\(LET) \(V) = {")
+                    let V = w.declare(instr.output) + (typeScript?.annotation(for: instr.output) ?? "")
+                    w.emit("\(LET) \(V) = \(typeScript?.prefix(producing: instr.output) ?? ""){")
                     w.enterNewBlock()
                     for field in literal.fields {
                         w.emitBlock("\(field),")
                     }
                     w.leaveCurrentBlock()
-                    w.emit("};")
+                    w.emit("}\(typeScript?.suffix(producing: instr.output) ?? "");")
                 }
 
             case .beginClassDefinition(let op):
@@ -581,7 +597,9 @@ public class JavaScriptLifter: Lifter {
                 } else {
                     // The name of the class is set to the uppercased variable name. This ensures that the heuristics used by the JavaScriptExploreLifting code to detect constructors works correctly (see shouldTreatAsConstructor).
                     let NAME = w.declare(instr.output, as: "C\(instr.output.number)")
-                    w.emit("class \(NAME)\(EXTENDS) {")
+                    let TYPES = typeScript?.typeParameters(ofClass: instr.output) ?? ""
+                    let IMPLEMENTS = typeScript?.implementsClause(ofClass: instr.output) ?? ""
+                    w.emit("class \(NAME)\(TYPES)\(EXTENDS)\(IMPLEMENTS) {")
                 }
                 w.enterNewBlock()
 
@@ -601,8 +619,11 @@ public class JavaScriptLifter: Lifter {
                 w.emit("}")
 
             case .classAddProperty(let op):
-                let PROPERTY = quoteIdentifierIfNeeded(op.propertyName)
-                let staticStr = op.isStatic ? "static " : ""
+                let PROPERTY =
+                    quoteIdentifierIfNeeded(op.propertyName)
+                    + (typeScript?.fieldAnnotation(at: instr.index) ?? "")
+                let staticStr =
+                    (typeScript?.fieldModifiers(at: instr.index) ?? "") + (op.isStatic ? "static " : "")
                 if op.hasValue {
                     let VALUE = input(0)
                     w.emit("\(staticStr)\(PROPERTY) = \(VALUE);")
@@ -672,14 +693,16 @@ public class JavaScriptLifter: Lifter {
             case .beginClassGetter(let op):
                 let PROPERTY = quoteIdentifierIfNeeded(op.propertyName)
                 let staticStr = op.isStatic ? "static " : ""
-                w.emit("\(staticStr)get \(PROPERTY)() {")
+                w.emit(
+                    "\(staticStr)get \(PROPERTY)(\(typeScript?.returnMarker(at: instr.index) ?? "")) {")
                 w.enterNewBlock()
                 bindVariableToThis(instr.innerOutput(0))
 
             case .beginClassComputedGetter(let op):
                 let PROPERTY = input(0)
                 let staticStr = op.isStatic ? "static " : ""
-                w.emit("\(staticStr)get [\(PROPERTY)]() {")
+                w.emit(
+                    "\(staticStr)get [\(PROPERTY)](\(typeScript?.returnMarker(at: instr.index) ?? "")) {")
                 w.enterNewBlock()
                 bindVariableToThis(instr.innerOutput(0))
 
@@ -1289,7 +1312,9 @@ public class JavaScriptLifter: Lifter {
                 break
 
             case .callSuperConstructor:
-                let EXPR = CallExpression.new() + "super(" + liftCallArguments(inputs) + ")"
+                let MARKER = typeScript?.returnMarker(at: instr.index) ?? ""
+                let EXPR =
+                    CallExpression.new() + "super(" + liftCallArguments(inputs) + MARKER + ")"
                 w.emit("\(EXPR);")
 
             case .callSuperMethod(let op):
@@ -2182,7 +2207,7 @@ public class JavaScriptLifter: Lifter {
                 } else {
                     assert(lines.count > 1)
                     w.emit("try {")
-                    lines.forEach({ w.emit(String($0)) })
+                    lines.forEach({ w.emit("    " + String($0)) })
                     w.emit("} catch (e) {}")
                 }
             }
@@ -2200,7 +2225,7 @@ public class JavaScriptLifter: Lifter {
             w.emitComment(footer)
         }
 
-        return w.code
+        return typeScript?.finish(w.code) ?? w.code
     }
 
     // Signal that the following code needs to be lifted into a single expression.
@@ -2303,11 +2328,14 @@ public class JavaScriptLifter: Lifter {
         let iter = Ref(variables.makeIterator())
         var paramList = [String]()
         for (i, defaultValue) in actualDefaultValues.enumerated() {
-            let p: String
+            var p: String
             if let dp = parameters.destructuringParameters[i] {
                 p = liftParameterDestructuringPattern(dp, iterator: iter)
             } else {
                 p = iter.val.next()!
+                p =
+                    (typeScript?.parameterModifiers(for: p) ?? "") + p
+                    + (typeScript?.parameterAnnotation(for: p, hasDefaultValue: defaultValue != nil) ?? "")
             }
 
             if parameters.hasRestParameter && i == parameters.count - 1 {
@@ -2324,6 +2352,7 @@ public class JavaScriptLifter: Lifter {
             "Mismatch between mapped inner outputs and destructuring pattern bindings"
         )
         return paramList.joined(separator: ", ")
+            + (typeScript?.returnMarker(at: indexOfCurrentInstruction) ?? "")
     }
 
     private func liftFunctionDefinitionBegin(
@@ -2590,6 +2619,8 @@ public class JavaScriptLifter: Lifter {
         // Forces the writer to also emit variables for unused expressions.
         let alwaysEmitVariables: Bool
 
+        var typeScript: TypeScriptPlan? = nil
+
         /// Code can be emitted into a temporary buffer instead of into the final script. This is mainly useful for inlining entire blocks.
         /// The typical way to use this would be to call pushTemporaryOutputBuffer() when handling a BeginXYZBlock, then calling
         /// popTemporaryOutputBuffer() when handling the corresponding EndXYZBlock and then either inlining the block's body
@@ -2647,6 +2678,8 @@ public class JavaScriptLifter: Lifter {
         /// If the expression can be inlined, it will be associated with the variable and returned at its use. If the expression cannot be inlined,
         /// the expression will be emitted either as part of a variable definition or as an expression statement (if the value isn't subsequently used).
         mutating func assign(_ expr: Expression, to v: Variable, allowInlining: Bool = true) {
+            let expr = typeScript?.convert(expr, producing: v) ?? expr
+            let allowInlining = allowInlining && !(typeScript?.isPinned(v) ?? false)
             if let V = expressions[v] {
                 // In some situations, for example in the case of guarded operations that require a try-catch around them,
                 // the output variable is declared up-front and so we lift to a variable assignment.
@@ -2669,7 +2702,7 @@ public class JavaScriptLifter: Lifter {
                     emit("\(expr);")
                 } else {
                     let LET = declarationKeyword(for: v)
-                    let V = declare(v)
+                    let V = declare(v) + (typeScript?.annotation(for: v) ?? "")
                     emit("\(LET) \(V) = \(expr);")
                 }
             }

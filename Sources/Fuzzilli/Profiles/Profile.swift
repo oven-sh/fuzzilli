@@ -50,6 +50,7 @@ public let profiles = [
     "qtjs": qtjsProfile,
     "qjs": qjsProfile,
     "jsc": jscProfile,
+    "bunCompiler": bunCompilerProfile,
     "spidermonkey": spidermonkeyProfile,
     "v8": v8Profile,
     "v8Sandbox": v8SandboxProfile,

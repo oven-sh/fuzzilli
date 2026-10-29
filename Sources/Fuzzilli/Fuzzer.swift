@@ -1235,8 +1235,10 @@ public class Fuzzer {
             b.throwException(exception)
         }
         execution = execute(b.finalize(), purpose: .startup)
-        guard case .failed = execution.outcome else {
-            logger.fatal(
+        if case .failed = execution.outcome {
+        } else {
+            // A compile-only target never runs the program, so it accepts one that would throw.
+            logger.warning(
                 "Cannot detect failed executions (exit code must be nonzero when an uncaught exception was thrown, but execution outcome was \(execution.outcome))"
             )
         }

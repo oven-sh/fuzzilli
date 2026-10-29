@@ -928,6 +928,9 @@ public class ProgramBuilder {
                 // 5. Fallback: creating an object and adding properties directly
                 {
                     func useMethodToProduce(_ method: (group: String, method: String)) -> Variable {
+                        // The call below creates a variable, so charge it to the budget now. Otherwise object groups that are only produced by each other's members recurse forever.
+                        self.argumentGenerationVariableBudget.top -= 1
+                        defer { self.argumentGenerationVariableBudget.top += 1 }
                         let group = self.fuzzer.environment.type(ofGroup: method.group)
                         let obj = self.generateTypeInternal(group)
                         let sig = chooseUniform(
@@ -961,6 +964,9 @@ public class ProgramBuilder {
                                 return self.construct(prop, withArgs: args)
                             }
                         }
+                        // The call below creates a variable, so charge it to the budget now. Otherwise object groups that are only produced by each other's members recurse forever.
+                        self.argumentGenerationVariableBudget.top -= 1
+                        defer { self.argumentGenerationVariableBudget.top += 1 }
                         let group = self.fuzzer.environment.type(ofGroup: property.group)
                         let obj = self.generateTypeInternal(group)
                         let prop = self.getProperty(property.property, of: obj)

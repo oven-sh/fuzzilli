@@ -22,6 +22,7 @@ message Parameters {
     uint32 count = 1;
     bool hasRest = 2;
     repeated uint32 defaultParameterIndices = 3;
+    map<uint32, FuzzILDestructuringPattern> destructuringParameters = 4;
 }
 
 message LoadInteger {
@@ -92,6 +93,8 @@ message ObjectLiteralSetPrototype {
 message BeginObjectLiteralMethod {
     string methodName = 1;
     Parameters parameters = 2;
+    bool is_generator = 3;
+    bool is_async = 4;
 }
 
 message EndObjectLiteralMethod {
@@ -99,6 +102,8 @@ message EndObjectLiteralMethod {
 
 message BeginObjectLiteralComputedMethod {
     Parameters parameters = 1;
+    bool is_generator = 2;
+    bool is_async = 3;
 }
 
 message EndObjectLiteralComputedMethod {
@@ -166,6 +171,8 @@ message BeginClassMethod {
     string methodName = 1;
     Parameters parameters = 2;
     bool is_static = 3;
+    bool is_generator = 4;
+    bool is_async = 5;
 }
 
 message EndClassMethod {
@@ -174,6 +181,8 @@ message EndClassMethod {
 message BeginClassComputedMethod {
     Parameters parameters = 1;
     bool is_static = 2;
+    bool is_generator = 3;
+    bool is_async = 4;
 }
 
 message EndClassComputedMethod {
@@ -225,16 +234,33 @@ message BeginClassPrivateMethod {
     string methodName = 1;
     Parameters parameters = 2;
     bool is_static = 3;
+    bool is_generator = 4;
+    bool is_async = 5;
 }
 
 message EndClassPrivateMethod {
+}
+
+message BeginClassPrivateGetter {
+    string propertyName = 1;
+    bool is_static = 2;
+}
+
+message EndClassPrivateGetter {
+}
+
+message BeginClassPrivateSetter {
+    string propertyName = 1;
+    bool is_static = 2;
+}
+
+message EndClassPrivateSetter {
 }
 
 message EndClassDefinition {
 }
 
 message CreateArray {
-    optional string elementGroupName = 1;
 }
 
 message CreateIntArray {
@@ -255,7 +281,7 @@ message CreateArrayWithSpread {
 
 message GetProperty {
     string propertyName = 1;
-    bool isGuarded = 2;
+    bool isReceiverOptional = 2;
 }
 
 message SetProperty {
@@ -266,11 +292,12 @@ message SetProperty {
 message UpdateProperty {
     string propertyName = 1;
     BinaryOperator op = 2;
+    bool isGuarded = 3;
 }
 
 message DeleteProperty {
     string propertyName = 1;
-    bool isGuarded = 2;
+    bool isReceiverOptional = 2;
 }
 
 enum PropertyType {
@@ -290,21 +317,23 @@ message ConfigureProperty {
 
 message GetElement {
     int64 index = 1;
-    bool isGuarded = 2;
+    bool isReceiverOptional = 2;
 }
 
 message SetElement {
     int64 index = 1;
+    bool isGuarded = 2;
 }
 
 message UpdateElement {
     int64 index = 1;
     BinaryOperator op = 2;
+    bool isGuarded = 3;
 }
 
 message DeleteElement {
     int64 index = 1;
-    bool isGuarded = 2;
+    bool isReceiverOptional = 2;
 }
 
 message ConfigureElement {
@@ -316,18 +345,20 @@ message ConfigureElement {
 }
 
 message GetComputedProperty {
-    bool isGuarded = 1;
+    bool isReceiverOptional = 1;
 }
 
 message SetComputedProperty {
+    bool isGuarded = 1;
 }
 
 message UpdateComputedProperty {
     BinaryOperator op = 1;
+    bool isGuarded = 2;
 }
 
 message DeleteComputedProperty {
-    bool isGuarded = 1;
+    bool isReceiverOptional = 1;
 }
 
 message ConfigureComputedProperty {
@@ -433,11 +464,13 @@ message Await {
 
 message CallFunction {
     bool isGuarded = 1;
+    bool isCallOptional = 2;
 }
 
 message CallFunctionWithSpread {
     repeated bool spreads = 1;
     bool isGuarded = 2;
+    bool isCallOptional = 3;
 }
 
 message Construct {
@@ -452,21 +485,29 @@ message ConstructWithSpread {
 message CallMethod {
     string methodName = 1;
     bool isGuarded = 2;
+    bool isReceiverOptional = 3;
+    bool isCallOptional = 4;
 }
 
 message CallMethodWithSpread {
     string methodName = 1;
     repeated bool spreads = 2;
     bool isGuarded = 3;
+    bool isReceiverOptional = 4;
+    bool isCallOptional = 5;
 }
 
 message CallComputedMethod {
     bool isGuarded = 1;
+    bool isReceiverOptional = 2;
+    bool isCallOptional = 3;
 }
 
 message CallComputedMethodWithSpread {
     repeated bool spreads = 1;
     bool isGuarded = 2;
+    bool isReceiverOptional = 3;
+    bool isCallOptional = 4;
 }
 
 enum UnaryOperator {
@@ -499,6 +540,7 @@ enum BinaryOperator {
     RSHIFT = 11;
     EXP = 12;
     UNRSHIFT = 13;
+    NULL_COALESCE = 14;
 }
 
 enum WasmIntegerBinaryOperator {
@@ -586,6 +628,7 @@ enum NamedVariableDeclarationMode {
     GLOBAL = 1;
     VAR = 2;
     LET = 3;
+    CONST = 4;
 }
 
 message CreateNamedVariable {
@@ -612,23 +655,40 @@ message CallSuperConstructor {
 
 message CallSuperMethod {
     string methodName = 1;
+    bool isGuarded = 2;
+    bool isCallOptional = 3;
 }
 
 message GetPrivateProperty {
     string propertyName = 1;
+    bool isGuarded = 2;
+    bool isReceiverOptional = 3;
 }
 
 message SetPrivateProperty {
     string propertyName = 1;
+    bool isGuarded = 2;
 }
 
 message UpdatePrivateProperty {
     string propertyName = 1;
     BinaryOperator op = 2;
+    bool isGuarded = 3;
 }
 
 message CallPrivateMethod {
     string methodName = 1;
+    bool isGuarded = 2;
+    bool isReceiverOptional = 3;
+    bool isCallOptional = 4;
+}
+
+message CallPrivateMethodWithSpread {
+    string methodName = 1;
+    repeated bool spreads = 2;
+    bool isGuarded = 3;
+    bool isReceiverOptional = 4;
+    bool isCallOptional = 5;
 }
 
 message GetSuperProperty {
@@ -814,6 +874,7 @@ message BeginWasmModule {
 }
 
 message EndWasmModule {
+  bool hasStartFunction = 1;
 }
 
 message CreateWasmGlobal {
@@ -888,18 +949,20 @@ enum WasmValueType {
 
 enum WasmReferenceTypeKind {
   INDEX = 0;
-  EXTERNREF = 1;
-  FUNCREF = 2;
-  EXNREF = 3;
-  I31REF = 4;
-  ANYREF = 5;
-  EQREF = 6;
-  STRUCTREF = 7;
-  ARRAYREF = 8;
-  NONEREF = 9;
-  NOEXTERNREF = 10;
-  NOFUNCREF = 11;
-  NOEXNREF = 12;
+  INDEX_EXACT = 1;
+  EXTERNREF = 2;
+  FUNCREF = 3;
+  EXNREF = 4;
+  I31REF = 5;
+  ANYREF = 6;
+  EQREF = 7;
+  STRUCTREF = 8;
+  ARRAYREF = 9;
+  NONEREF = 10;
+  NOEXTERNREF = 11;
+  NOFUNCREF = 12;
+  NOEXNREF = 13;
+  JSSTRINGREF = 14;
 }
 
 message WasmReferenceType {
@@ -1117,11 +1180,9 @@ message WasmDefineMemory {
 }
 
 message WasmLoadGlobal {
-  WasmILType globalType = 2;
 }
 
 message WasmStoreGlobal {
-  WasmILType globalType = 2;
 }
 
 message WasmTableGet {
@@ -1513,6 +1574,7 @@ message WasmDefineStructType {
     repeated WasmStructField fields = 1;
     bool hasSuperType = 2;
     bool isFinal = 3;
+    bool hasDescribes = 4;
 }
 
 message WasmDefineForwardOrSelfReference {
@@ -1541,6 +1603,15 @@ message WasmStructNewDefault {
 }
 
 message WasmStructNew {
+}
+
+message WasmStructNewDefaultDesc {
+}
+
+message WasmStructNewDesc {
+}
+
+message WasmRefGetDesc {
 }
 
 message WasmStructGet {
@@ -1573,10 +1644,22 @@ message WasmRefCast {
     WasmILType type = 1;
 }
 
+message WasmRefCastDescEq {
+    WasmILType type = 1;
+}
+
 message WasmBranchOnNull {
 }
 
 message WasmBranchOnCast {
+    WasmILType type = 1;
+}
+
+message WasmBranchOnCastDescEq {
+    WasmILType type = 1;
+}
+
+message WasmBranchOnCastDescEqFail {
     WasmILType type = 1;
 }
 
@@ -1731,6 +1814,15 @@ message WasmTableInit {
 message WasmTableCopy {
 }
 
+message WasmTableFill {
+}
+
+message WasmArrayNewData {
+}
+
+message WasmArrayNewElem {
+}
+
 message BeginBundleScript {
 }
 
@@ -1799,8 +1891,6 @@ message EndBundleModuleEntryPoint {
 }
 
 message CreateMap {
-    optional string keyGroupName = 1;
-    optional string valueGroupName = 2;
 }
 
 message WasmRefAsNonNull {
@@ -1827,6 +1917,7 @@ message FuzzILDestructuringPattern {
             string superProperty = 6;               // e.g. `[super.prop] = arr`
             int64 superElement = 7;                 // e.g. `[super[0]] = arr`
             Empty superComputedProperty = 8;        // e.g. `[super[key]] = arr`
+            string privateProperty = 9;             // e.g. `[this.#prop] = arr`
         }
     }
 
@@ -1871,3 +1962,19 @@ message BeginPendingBundleModule {
 message EndPendingBundleModule {
 }
 
+message WasmJSStringLength {}
+message WasmJSStringFromCharCodeArray {}
+message WasmJSStringFromCharCode {}
+message WasmJSStringFromCodePoint {}
+message WasmJSStringCharCodeAt {}
+message WasmJSStringCodePointAt {}
+message WasmJSStringIntoCharCodeArray {}
+message WasmJSStringCast {}
+message WasmJSStringTest {}
+message WasmJSStringConcat {}
+message WasmJSStringSubstring {}
+message WasmJSStringEquals {}
+message WasmJSStringCompare {}
+message WasmStringConstant {
+    string value = 1;
+}

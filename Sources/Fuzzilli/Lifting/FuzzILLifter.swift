@@ -46,9 +46,52 @@ public class FuzzILLifter: Lifter {
             return " [\(defaults)]"
         }
 
+        func formatFlags(
+            guarded: Bool = false, receiverOptional: Bool = false, callOptional: Bool = false
+        ) -> String {
+            var flags: [String] = []
+            if guarded { flags.append("guarded") }
+            if receiverOptional { flags.append("receiverOptional") }
+            if callOptional { flags.append("callOptional") }
+            return flags.isEmpty ? "" : " (\(flags.joined(separator: ", ")))"
+        }
+
+        func liftParametersWithThis(_ parameters: Parameters, as variables: [String]) -> String {
+            guard !variables.isEmpty else { return "" }
+            let thisVar = variables[0]
+            let params = liftParameters(parameters, as: Array(variables.dropFirst()))
+            return params.isEmpty ? thisVar : "\(thisVar), \(params)"
+        }
+
+        func liftParameters(_ parameters: Parameters, as variables: [String]) -> String {
+            let iter = Ref(variables.makeIterator())
+            let paramList = (0..<parameters.count).map { i -> String in
+                let p: String
+                if let dp = parameters.destructuringParameters[i] {
+                    p = liftParameterDestructuringPattern(dp, iterator: iter)
+                } else {
+                    p = iter.val.next()!
+                }
+
+                if parameters.hasRestParameter && i == parameters.count - 1 {
+                    return "...\(p)"
+                } else {
+                    return p
+                }
+            }
+            assert(
+                iter.val.next() == nil,
+                "Mismatch between mapped inner outputs and destructuring pattern bindings")
+            return paramList.joined(separator: ", ")
+        }
+
         switch instr.op.opcode {
         case .loadInteger(let op):
-            w.emit("\(output()) <- LoadInteger '\(op.value)'")
+            if let customName = op.customName {
+                w.emit("\(output()) <- LoadInteger '\(op.value)' [\(customName)]")
+            } else {
+                w.emit("\(output()) <- LoadInteger '\(op.value)'")
+            }
 
         case .loadBigInt(let op):
             w.emit("\(output()) <- LoadBigInt '\(op.value)'")
@@ -58,7 +101,7 @@ public class FuzzILLifter: Lifter {
 
         case .loadString(let op):
             if let customName = op.customName {
-                w.emit("\(output()) <- LoadString '\(op.value)' \(customName)")
+                w.emit("\(output()) <- LoadString '\(op.value)' [\(customName)]")
             } else {
                 w.emit("\(output()) <- LoadString '\(op.value)'")
             }
@@ -123,9 +166,13 @@ public class FuzzILLifter: Lifter {
             w.emit("ObjectLiteralSetPrototype \(input(0))")
 
         case .beginObjectLiteralMethod(let op):
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
-            w.emit("BeginObjectLiteralMethod `\(op.methodName)`\(inputs) -> \(params)")
+            let generator = op.isGenerator ? "generator " : ""
+            let async = op.isAsync ? "async " : ""
+            w.emit(
+                "BeginObjectLiteralMethod \(async)\(generator)`\(op.methodName)`\(inputs) -> \(params)"
+            )
             w.increaseIndentionLevel()
 
         case .endObjectLiteralMethod:
@@ -133,9 +180,13 @@ public class FuzzILLifter: Lifter {
             w.emit("EndObjectLiteralMethod")
 
         case .beginObjectLiteralComputedMethod(let op):
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs.dropFirst())
-            w.emit("BeginObjectLiteralComputedMethod \(input(0))\(inputs) -> \(params)")
+            let generator = op.isGenerator ? "generator " : ""
+            let async = op.isAsync ? "async " : ""
+            w.emit(
+                "BeginObjectLiteralComputedMethod \(async)\(generator)\(input(0))\(inputs) -> \(params)"
+            )
             w.increaseIndentionLevel()
 
         case .endObjectLiteralComputedMethod:
@@ -195,7 +246,7 @@ public class FuzzILLifter: Lifter {
             w.increaseIndentionLevel()
 
         case .beginClassConstructor(let op):
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
             w.emit("BeginClassConstructor\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -230,9 +281,13 @@ public class FuzzILLifter: Lifter {
 
         case .beginClassMethod(let op):
             let maybeStatic = op.isStatic ? "static " : ""
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
-            w.emit("BeginClassMethod '\(maybeStatic)\(op.methodName)'\(inputs) -> \(params)")
+            let generator = op.isGenerator ? "generator " : ""
+            let async = op.isAsync ? "async " : ""
+            w.emit(
+                "BeginClassMethod \(async)\(generator)'\(maybeStatic)\(op.methodName)'\(inputs) -> \(params)"
+            )
             w.increaseIndentionLevel()
 
         case .endClassMethod:
@@ -241,9 +296,13 @@ public class FuzzILLifter: Lifter {
 
         case .beginClassComputedMethod(let op):
             let maybeStatic = op.isStatic ? "static " : ""
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs.dropFirst())
-            w.emit("BeginClassComputedMethod \(maybeStatic)\(input(0))\(inputs) -> \(params)")
+            let generator = op.isGenerator ? "generator " : ""
+            let async = op.isAsync ? "async " : ""
+            w.emit(
+                "BeginClassComputedMethod \(async)\(generator)\(maybeStatic)\(input(0))\(inputs) -> \(params)"
+            )
             w.increaseIndentionLevel()
 
         case .endClassComputedMethod:
@@ -308,14 +367,40 @@ public class FuzzILLifter: Lifter {
 
         case .beginClassPrivateMethod(let op):
             let maybeStatic = op.isStatic ? "static " : ""
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
-            w.emit("BeginClassPrivateMethod '\(maybeStatic)\(op.methodName)'\(inputs) -> \(params)")
+            let generator = op.isGenerator ? "generator " : ""
+            let async = op.isAsync ? "async " : ""
+            w.emit(
+                "BeginClassPrivateMethod \(async)\(generator)'\(maybeStatic)\(op.methodName)'\(inputs) -> \(params)"
+            )
             w.increaseIndentionLevel()
 
         case .endClassPrivateMethod:
             w.decreaseIndentionLevel()
             w.emit("EndClassPrivateMethod")
+
+        case .beginClassPrivateGetter(let op):
+            let maybeStatic = op.isStatic ? "static " : ""
+            let params = liftParametersWithThis(
+                Parameters(count: 0), as: instr.innerOutputs.map(lift))
+            w.emit("BeginClassPrivateGetter '\(maybeStatic)\(op.propertyName)' -> \(params)")
+            w.increaseIndentionLevel()
+
+        case .endClassPrivateGetter:
+            w.decreaseIndentionLevel()
+            w.emit("EndClassPrivateGetter")
+
+        case .beginClassPrivateSetter(let op):
+            let maybeStatic = op.isStatic ? "static " : ""
+            let params = liftParametersWithThis(
+                Parameters(count: 1), as: instr.innerOutputs.map(lift))
+            w.emit("BeginClassPrivateSetter '\(maybeStatic)\(op.propertyName)' -> \(params)")
+            w.increaseIndentionLevel()
+
+        case .endClassPrivateSetter:
+            w.decreaseIndentionLevel()
+            w.emit("EndClassPrivateSetter")
         case .endClassDefinition:
             w.decreaseIndentionLevel()
             w.emit("EndClassDefinition")
@@ -347,19 +432,20 @@ public class FuzzILLifter: Lifter {
             w.emit("\(output()) <- CreateTemplateString [\(parts)], [\(values)]")
 
         case .getProperty(let op):
-            let opcode = op.isGuarded ? "GetProperty (guarded)" : "GetProperty"
-            w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.propertyName)'")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- GetProperty\(flagsStr) \(input(0)), '\(op.propertyName)'")
 
         case .setProperty(let op):
             let opcode = op.isGuarded ? "SetProperty (guarded)" : "SetProperty"
             w.emit("\(opcode) \(input(0)), '\(op.propertyName)', \(input(1))")
 
         case .updateProperty(let op):
-            w.emit("UpdateProperty \(input(0)), '\(op.op.token)', \(input(1))")
+            let opcode = op.isGuarded ? "UpdateProperty (guarded)" : "UpdateProperty"
+            w.emit("\(opcode) \(input(0)), '\(op.propertyName)', '\(op.op.token)', \(input(1))")
 
         case .deleteProperty(let op):
-            let opcode = op.isGuarded ? "DeleteProperty (guarded)" : "DeleteProperty"
-            w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.propertyName)'")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- DeleteProperty\(flagsStr) \(input(0)), '\(op.propertyName)'")
 
         case .configureProperty(let op):
             w.emit(
@@ -367,18 +453,20 @@ public class FuzzILLifter: Lifter {
             )
 
         case .getElement(let op):
-            let opcode = op.isGuarded ? "GetElement (guarded)" : "GetElement"
-            w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.index)'")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- GetElement\(flagsStr) \(input(0)), '\(op.index)'")
 
         case .setElement(let op):
-            w.emit("SetElement \(input(0)), '\(op.index)', \(input(1))")
+            let opcode = op.isGuarded ? "SetElement (guarded)" : "SetElement"
+            w.emit("\(opcode) \(input(0)), '\(op.index)', \(input(1))")
 
         case .updateElement(let op):
-            w.emit("UpdateElement \(instr.input(0)), '\(op.index)', '\(op.op.token)', \(input(1))")
+            let opcode = op.isGuarded ? "UpdateElement (guarded)" : "UpdateElement"
+            w.emit("\(opcode) \(input(0)), '\(op.index)', '\(op.op.token)', \(input(1))")
 
         case .deleteElement(let op):
-            let opcode = op.isGuarded ? "DeleteElement (guarded)" : "DeleteElement"
-            w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.index)'")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- DeleteElement\(flagsStr) \(input(0)), '\(op.index)'")
 
         case .configureElement(let op):
             w.emit(
@@ -386,19 +474,21 @@ public class FuzzILLifter: Lifter {
             )
 
         case .getComputedProperty(let op):
-            let opcode = op.isGuarded ? "GetComputedProperty (guarded)" : "GetComputedProperty"
-            w.emit("\(output()) <- \(opcode) \(input(0)), \(input(1))")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- GetComputedProperty\(flagsStr) \(input(0)), \(input(1))")
 
-        case .setComputedProperty:
-            w.emit("SetComputedProperty \(input(0)), \(input(1)), \(input(2))")
+        case .setComputedProperty(let op):
+            let opcode = op.isGuarded ? "SetComputedProperty (guarded)" : "SetComputedProperty"
+            w.emit("\(opcode) \(input(0)), \(input(1)), \(input(2))")
 
         case .updateComputedProperty(let op):
-            w.emit("UpdateComputedProperty \(input(0)), \(input(1)), '\(op.op.token)',\(input(2))")
+            let opcode =
+                op.isGuarded ? "UpdateComputedProperty (guarded)" : "UpdateComputedProperty"
+            w.emit("\(opcode) \(input(0)), \(input(1)), '\(op.op.token)', \(input(2))")
 
         case .deleteComputedProperty(let op):
-            let opcode =
-                op.isGuarded ? "DeleteComputedProperty (guarded)" : "DeleteComputedProperty"
-            w.emit("\(output()) <- \(opcode) \(input(0)), \(input(1))")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- DeleteComputedProperty\(flagsStr) \(input(0)), \(input(1))")
 
         case .configureComputedProperty(let op):
             w.emit(
@@ -424,7 +514,7 @@ public class FuzzILLifter: Lifter {
             .beginAsyncFunction(let op as BeginAnyFunction),
             .beginAsyncArrowFunction(let op as BeginAnyFunction),
             .beginAsyncGeneratorFunction(let op as BeginAnyFunction):
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParameters(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
             w.emit("\(output()) <- \(op.name)\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -440,7 +530,7 @@ public class FuzzILLifter: Lifter {
             w.emit("\(op.name)")
 
         case .beginConstructor(let op):
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
             w.emit("\(output()) <- \(op.name)\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -473,54 +563,59 @@ public class FuzzILLifter: Lifter {
             w.emit("\(output()) <- Await \(input(0))")
 
         case .callFunction(let op):
-            let opcode = op.isGuarded ? "CallFunction (guarded)" : "CallFunction"
+            let flagsStr = formatFlags(guarded: op.isGuarded, callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- CallFunction\(flagsStr) \(input(0)), [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .callFunctionWithSpread(let op):
-            let opcode =
-                op.isGuarded ? "CallFunctionWithSpread (guarded)" : "CallFunctionWithSpread"
+            let flagsStr = formatFlags(guarded: op.isGuarded, callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
+                "\(output()) <- CallFunctionWithSpread\(flagsStr) \(input(0)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .construct(let op):
-            let opcode = op.isGuarded ? "Construct (guarded)" : "Construct"
+            let flagsStr = formatFlags(guarded: op.isGuarded)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- Construct\(flagsStr) \(input(0)), [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .constructWithSpread(let op):
-            let opcode = op.isGuarded ? "ConstructWithSpread (guarded)" : "ConstructWithSpread"
+            let flagsStr = formatFlags(guarded: op.isGuarded)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
+                "\(output()) <- ConstructWithSpread\(flagsStr) \(input(0)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .callMethod(let op):
-            let opcode = op.isGuarded ? "CallMethod (guarded)" : "CallMethod"
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- CallMethod\(flagsStr) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .callMethodWithSpread(let op):
-            let opcode = op.isGuarded ? "CallMethodWithSpread (guarded)" : "CallMethodWithSpread"
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
+                "\(output()) <- CallMethodWithSpread\(flagsStr) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .callComputedMethod(let op):
-            let opcode = op.isGuarded ? "CallComputedMethod (guarded)" : "CallComputedMethod"
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), \(input(1)), [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- CallComputedMethod\(flagsStr) \(input(0)), \(input(1)), [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .callComputedMethodWithSpread(let op):
-            let opcode =
-                op.isGuarded
-                ? "CallComputedMethodWithSpread (guarded)" : "CallComputedMethodWithSpread"
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), \(input(1)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
+                "\(output()) <- CallComputedMethodWithSpread\(flagsStr) \(input(0)), \(input(1)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .unaryOperation(let op):
@@ -547,17 +642,18 @@ public class FuzzILLifter: Lifter {
 
         case .destruct(let op):
             let outputs = instr.outputs.map(lift)
-            var inputIdx = 1
-            var outputIdx = 0
+            let inputIter = Ref(instr.inputs.dropFirst().makeIterator())
+            let outputIter = Ref(outputs.makeIterator())
             w.emit(
-                "\(liftDestructuringPattern(op.pattern, isReassign: false, inputIdx: &inputIdx, outputIdx: &outputIdx, inputs: instr.inputs.map(lift), outputs: outputs)) <- Destruct \(input(0))"
+                "\(liftDestructuringPattern(op.pattern, isReassign: false, inputIterator: inputIter, outputIterator: outputIter)) <- Destruct \(input(0))"
             )
 
         case .destructAndReassign(let op):
-            var inputIdx = 1
-            var outputIdx = 0
+            let inputIter = Ref(instr.inputs.dropFirst().makeIterator())
+            let outputs = [String]()
+            let outputIter = Ref(outputs.makeIterator())
             w.emit(
-                "\(liftDestructuringPattern(op.pattern, isReassign: true, inputIdx: &inputIdx, outputIdx: &outputIdx, inputs: instr.inputs.map(lift), outputs: [])) <- DestructAndReassign \(input(0))"
+                "\(liftDestructuringPattern(op.pattern, isReassign: true, inputIterator: inputIter, outputIterator: outputIter)) <- DestructAndReassign \(input(0))"
             )
 
         case .compare(let op):
@@ -571,19 +667,16 @@ public class FuzzILLifter: Lifter {
                 w.emit("Eval '\(op.code)', [\(args)]")
             }
 
-        case .explore:
+        case .explore(let op):
             let arguments = instr.inputs.suffix(from: 1).map(lift).joined(separator: ", ")
-            w.emit("Explore \(instr.input(0)), [\(arguments)]")
+            w.emit("Explore '\(op.id)', \(op.rngSeed), \(input(0)), [\(arguments)]")
 
-        case .probe:
-            w.emit("Probe \(instr.input(0))")
+        case .probe(let op):
+            w.emit("Probe '\(op.id)', \(input(0))")
 
         case .fixup(let op):
-            if op.hasOutput {
-                w.emit("\(output()) <- Fixup \(op.id)")
-            } else {
-                w.emit("Fixup \(op.id)")
-            }
+            let out = op.hasOutput ? "\(output()) <- " : ""
+            w.emit("\(out)Fixup '\(op.id)', '\(op.action)', '\(op.originalOperation)'")
 
         case .beginWith:
             w.emit("BeginWith \(input(0))")
@@ -594,7 +687,12 @@ public class FuzzILLifter: Lifter {
             w.emit("EndWith")
 
         case .nop:
-            w.emit("Nop")
+            if instr.hasOutputs {
+                let outputs = instr.outputs.map(lift).joined(separator: ", ")
+                w.emit("\(outputs) <- Nop")
+            } else {
+                w.emit("Nop")
+            }
 
         case .beginIf(let op):
             let mode = op.inverted ? "(inverted) " : ""
@@ -634,22 +732,41 @@ public class FuzzILLifter: Lifter {
             w.emit("CallSuperConstructor [\(liftCallArguments(instr.variadicInputs))]")
 
         case .callSuperMethod(let op):
+            let flagsStr = formatFlags(guarded: op.isGuarded, callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- CallSuperMethod '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- CallSuperMethod\(flagsStr) '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .getPrivateProperty(let op):
-            w.emit("\(output()) <- GetPrivateProperty '\(op.propertyName)'")
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional)
+            w.emit("\(output()) <- GetPrivateProperty\(flagsStr) \(input(0)), '\(op.propertyName)'")
 
         case .setPrivateProperty(let op):
-            w.emit("SetPrivateProperty '\(op.propertyName)', \(input(0))")
+            let opcode = op.isGuarded ? "SetPrivateProperty (guarded)" : "SetPrivateProperty"
+            w.emit("\(opcode) \(input(0)), '\(op.propertyName)', \(input(1))")
 
         case .updatePrivateProperty(let op):
-            w.emit("UpdatePrivateProperty '\(op.propertyName)', '\(op.op.token)', \(input(0))")
+            let opcode =
+                op.isGuarded ? "UpdatePrivateProperty (guarded)" : "UpdatePrivateProperty"
+            w.emit(
+                "\(opcode) \(input(0)), '\(op.propertyName)', '\(op.op.token)', \(input(1))"
+            )
 
         case .callPrivateMethod(let op):
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- CallPrivateMethod \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- CallPrivateMethod\(flagsStr) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
+            )
+
+        case .callPrivateMethodWithSpread(let op):
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
+            w.emit(
+                "\(output()) <- CallPrivateMethodWithSpread\(flagsStr) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .getSuperProperty(let op):
@@ -724,7 +841,6 @@ public class FuzzILLifter: Lifter {
             w.increaseIndentionLevel()
 
         case .beginForLoop(let op):
-            let outputs = instr.innerOutputs.dropLast().map(lift)
             let label = lift(instr.innerOutputs.last!)
             var line = "BeginForLoop type='\(op.type)' async='\(op.isAsync)'"
             if op.usingType != .none {
@@ -736,12 +852,12 @@ public class FuzzILLifter: Lifter {
                 let allOutputs = instr.innerOutputs.map(lift).joined(separator: ", ")
                 w.emit("\(line) \(input(0)) -> \(allOutputs)")
             case .destruct(let pattern):
-                var nextInputIndex = 1
-                var nextOutputIndex = 0
+                let outputs = instr.innerOutputs.dropLast().map(lift)
+                let inputIter = Ref(instr.inputs.dropFirst().makeIterator())
+                let outputIter = Ref(outputs.makeIterator())
                 let patStr = liftDestructuringPattern(
                     pattern, isReassign: false,
-                    inputIdx: &nextInputIndex, outputIdx: &nextOutputIndex,
-                    inputs: instr.inputs.map(lift), outputs: outputs)
+                    inputIterator: inputIter, outputIterator: outputIter)
                 w.emit("\(line) \(input(0)) -> \(patStr), \(label)")
             }
             w.increaseIndentionLevel()
@@ -924,8 +1040,8 @@ public class FuzzILLifter: Lifter {
         case .wrapSuspending(_):
             w.emit("\(output()) <- WrapSuspending \(input(0))")
 
-        case .bindMethod(_):
-            w.emit("\(output()) <- BindMethod \(input(0))")
+        case .bindMethod(let op):
+            w.emit("\(output()) <- BindMethod \(input(0)), '\(op.methodName)'")
 
         case .bindFunction(_):
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
@@ -946,7 +1062,14 @@ public class FuzzILLifter: Lifter {
             w.emit("\(output()) <- EndWasmFunction \(inputs)")
 
         case .wasmDefineGlobal(let op):
-            w.emit("\(output()) <- WasmDefineGlobal \(op.wasmGlobal)")
+            let isMutable = op.isMutable ? ", mutable" : ""
+            if case .indexRef = op.wasmGlobal {
+                w.emit("\(output()) <- WasmDefineGlobal (ref null \(input(0)))\(isMutable)")
+            } else if case .indexExactRef = op.wasmGlobal {
+                w.emit("\(output()) <- WasmDefineGlobal (ref null exact \(input(0)))\(isMutable)")
+            } else {
+                w.emit("\(output()) <- WasmDefineGlobal \(op.wasmGlobal)\(isMutable)")
+            }
 
         case .wasmDefineTable(let op):
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
@@ -955,8 +1078,9 @@ public class FuzzILLifter: Lifter {
                 "\(output()) <- WasmDefineTable \(op.elementType)\(isTable64Str), (\(op.limits.min), \(String(describing: op.limits.max))), [\(inputs)]"
             )
 
-        case .wasmDefineElementSegment(_):
-            w.emit("\(output()) <- WasmDefineElementSegment [...]")
+        case .wasmDefineElementSegment:
+            let inputs = instr.inputs.map(lift).joined(separator: ", ")
+            w.emit("\(output()) <- WasmDefineElementSegment [\(inputs)]")
 
         case .wasmDropElementSegment:
             w.emit("WasmDropElementSegment \(input(0))")
@@ -966,6 +1090,9 @@ public class FuzzILLifter: Lifter {
 
         case .wasmTableCopy:
             w.emit("WasmTableCopy \(input(0)), \(input(1)), \(input(2)), \(input(3)), \(input(4))")
+
+        case .wasmTableFill:
+            w.emit("WasmTableFill \(input(0)), \(input(1)), \(input(2)), \(input(3))")
 
         case .wasmDefineMemory(let op):
             assert(op.wasmMemory.isWasmMemoryType)
@@ -977,8 +1104,8 @@ public class FuzzILLifter: Lifter {
                 "\(output()) <- WasmDefineMemory [\(mem.limits.min),\(maxPagesStr)],\(isMem64Str)\(sharedStr)"
             )
 
-        case .wasmDefineDataSegment(_):
-            w.emit("\(output()) <- WasmDefineDataSegment [...]")
+        case .wasmDefineDataSegment(let op):
+            w.emit("\(output()) <- WasmDefineDataSegment [\(op.segment.count) bytes]")
 
         case .wasmDefineTag(_):
             w.emit("\(output()) <- WasmDefineTag \(input(0))")
@@ -1434,6 +1561,28 @@ public class FuzzILLifter: Lifter {
                 "\(outputs) <- WasmBranchOnCast \(op.targetType) \(ref) to \(label) [\(args)]\(typeInput)"
             )
 
+        case .wasmBranchOnCastDescEq(let op):
+            let descriptorRef = instr.inputs.last!
+            let structRef = instr.inputs.dropLast().last!
+            let label = instr.inputs.first!
+            let args = instr.inputs.dropFirst().dropLast(2).map(lift).joined(separator: ", ")
+
+            let outputs = instr.outputs.map(lift).joined(separator: ", ")
+            w.emit(
+                "\(outputs) <- WasmBranchOnCastDescEq \(op.targetType) structRef:\(structRef) descRef:\(descriptorRef) to \(label) [\(args)]"
+            )
+
+        case .wasmBranchOnCastDescEqFail(let op):
+            let descriptorRef = instr.inputs.last!
+            let structRef = instr.inputs.dropLast().last!
+            let label = instr.inputs.first!
+            let args = instr.inputs.dropFirst().dropLast(2).map(lift).joined(separator: ", ")
+
+            let outputs = instr.outputs.map(lift).joined(separator: ", ")
+            w.emit(
+                "\(outputs) <- WasmBranchOnCastDescEqFail \(op.targetType) structRef:\(structRef) descRef:\(descriptorRef) to \(label) [\(args)]"
+            )
+
         case .wasmBranchOnCastFail(let op):
             let typeDefCount = op.targetType.requiredInputCount()  // 0 or 1
             let ref = instr.inputs.dropLast(typeDefCount).last!
@@ -1492,7 +1641,12 @@ public class FuzzILLifter: Lifter {
             w.emit("Print \(input(0))")
 
         case .wasmNop:
-            w.emit("WasmNop")
+            if instr.hasOutputs {
+                let outputs = instr.outputs.map(lift).joined(separator: ", ")
+                w.emit("\(outputs) <- WasmNop")
+            } else {
+                w.emit("WasmNop")
+            }
 
         case .wasmUnreachable:
             w.emit("WasmUnreachable")
@@ -1565,6 +1719,16 @@ public class FuzzILLifter: Lifter {
         case .wasmArrayNewDefault(_):
             w.emit("\(output()) <- WasmArrayNewDefault [\(input(0)), \(input(1))]")
 
+        case .wasmArrayNewData(_):
+            w.emit(
+                "\(output()) <- WasmArrayNewData [\(input(0)), \(input(1)), \(input(2)), \(input(3))]"
+            )
+
+        case .wasmArrayNewElem(_):
+            w.emit(
+                "\(output()) <- WasmArrayNewElem [\(input(0)), \(input(1)), \(input(2)), \(input(3))]"
+            )
+
         case .wasmArrayLen(_):
             w.emit("\(output()) <- WasmArrayLen \(input(0))")
 
@@ -1583,8 +1747,20 @@ public class FuzzILLifter: Lifter {
         case .wasmStructNewDefault(_):
             w.emit("\(output()) <- WasmStructNewDefault [\(input(0))]")
 
+        case .wasmStructNewDesc(_):
+            let inputs = instr.inputs.map(lift).joined(separator: ", ")
+            w.emit("\(output()) <- WasmStructNewDesc [\(inputs)]")
+
+        case .wasmRefGetDesc(_):
+            w.emit("\(output()) <- WasmRefGetDesc [\(input(0))]")
+
+        case .wasmStructNewDefaultDesc(_):
+            w.emit("\(output()) <- WasmStructNewDefaultDesc [\(input(0)), \(input(1))]")
+
         case .wasmStructGet(let op):
-            w.emit("\(output()) <- WasmStructGet [\(input(0))].\(op.fieldIndex)")
+            w.emit(
+                "\(output()) <- WasmStructGet \(op.isSigned ? "signed" : "unsigned") [\(input(0))].\(op.fieldIndex)"
+            )
 
         case .wasmStructSet(let op):
             w.emit("WasmStructSet [\(input(0))].\(op.fieldIndex) = [\(input(1))]")
@@ -1605,8 +1781,9 @@ public class FuzzILLifter: Lifter {
         case .wasmRefEq(_):
             w.emit("\(output()) <- WasmRefEq \(input(0)) \(input(1))")
 
-        case .wasmRefI31(_):
-            w.emit("\(output()) <- WasmRefI31 \(input(0))")
+        case .wasmRefI31(let op):
+            let sharedStr = op.isShared ? " shared" : ""
+            w.emit("\(output()) <- WasmRefI31\(sharedStr) \(input(0))")
 
         case .wasmI31Get(let op):
             w.emit("\(output()) <- WasmI31Get \(op.isSigned ? "signed" : "unsigned") \(input(0))")
@@ -1624,6 +1801,11 @@ public class FuzzILLifter: Lifter {
         case .wasmRefCast(let op):
             let typeInput = op.type.requiredInputCount() > 0 ? " (IndexType: \(input(1)))" : ""
             w.emit("\(output()) <- WasmRefCast \(op.type) \(input(0))\(typeInput)")
+
+        case .wasmRefCastDescEq(let op):
+            w.emit(
+                "\(output()) <- WasmRefCastDescEq \(op.type) \(input(0)) \(input(1))"
+            )
 
         case .wasmBeginTypeGroup(_):
             w.emit("WasmBeginTypeGroup")
@@ -1662,11 +1844,18 @@ public class FuzzILLifter: Lifter {
         case .wasmDefineStructType(let op):
             let fields = op.fields.map { "\($0.type) mutability=\($0.mutability)" }.joined(
                 separator: ", ")
-            let superTypeInput = op.hasSuperType ? " superType=\(lift(instr.inputs.first!))" : ""
-            let structInputs = (op.hasSuperType ? instr.inputs.dropFirst() : instr.inputs).map(lift)
+            var inputIndex = 0
+            let superTypeInput =
+                op.hasSuperType ? " superType=\(lift(instr.input(inputIndex)))" : ""
+            if op.hasSuperType { inputIndex += 1 }
+            let describesInput =
+                op.hasDescribes ? " describes=\(lift(instr.input(inputIndex)))" : ""
+            if op.hasDescribes { inputIndex += 1 }
+
+            let structInputs = instr.inputs.dropFirst(inputIndex).map(lift)
                 .joined(separator: ", ")
             w.emit(
-                "\(output()) <- WasmDefineStructType(\(fields))\(superTypeInput) isFinal=\(op.isFinal) [\(structInputs)]"
+                "\(output()) <- WasmDefineStructType(\(fields))\(superTypeInput)\(describesInput) isFinal=\(op.isFinal) [\(structInputs)]"
             )
 
         case .wasmDefineForwardOrSelfReference(_):
@@ -1678,8 +1867,39 @@ public class FuzzILLifter: Lifter {
         case .rawWasmModule(let op):
             w.emit("\(output()) <- RawWasmModule [\(op.bytes.count) bytes]")
 
-        default:
-            fatalError("No FuzzIL lifting for this operation!")
+        // Wasm JS String Builtins
+        case .wasmJSStringLength(_):
+            w.emit("\(output()) <- WasmJSStringLength \(input(0))")
+        case .wasmJSStringFromCharCodeArray(_):
+            w.emit(
+                "\(output()) <- WasmJSStringFromCharCodeArray \(input(0)), \(input(1)), \(input(2))"
+            )
+        case .wasmJSStringFromCharCode(_):
+            w.emit("\(output()) <- WasmJSStringFromCharCode \(input(0))")
+        case .wasmJSStringFromCodePoint(_):
+            w.emit("\(output()) <- WasmJSStringFromCodePoint \(input(0))")
+        case .wasmJSStringCharCodeAt(_):
+            w.emit("\(output()) <- WasmJSStringCharCodeAt \(input(0)), \(input(1))")
+        case .wasmJSStringCodePointAt(_):
+            w.emit("\(output()) <- WasmJSStringCodePointAt \(input(0)), \(input(1))")
+        case .wasmJSStringIntoCharCodeArray(_):
+            w.emit(
+                "\(output()) <- WasmJSStringIntoCharCodeArray \(input(0)), \(input(1)), \(input(2))"
+            )
+        case .wasmJSStringCast(_):
+            w.emit("\(output()) <- WasmJSStringCast \(input(0))")
+        case .wasmJSStringTest(_):
+            w.emit("\(output()) <- WasmJSStringTest \(input(0))")
+        case .wasmJSStringConcat(_):
+            w.emit("\(output()) <- WasmJSStringConcat \(input(0)), \(input(1))")
+        case .wasmJSStringSubstring(_):
+            w.emit("\(output()) <- WasmJSStringSubstring \(input(0)), \(input(1)), \(input(2))")
+        case .wasmJSStringEquals(_):
+            w.emit("\(output()) <- WasmJSStringEquals \(input(0)), \(input(1))")
+        case .wasmJSStringCompare(_):
+            w.emit("\(output()) <- WasmJSStringCompare \(input(0)), \(input(1))")
+        case .wasmStringConstant(let op):
+            w.emit("\(output()) <- WasmStringConstant '\(op.value)'")
         }
 
     }
@@ -1766,114 +1986,84 @@ public class FuzzILLifter: Lifter {
         return objectPattern
     }
 
-    private func liftDestructuringTarget(
+    private func liftDestructuringTarget<InputIter: IteratorProtocol, OutputIter: IteratorProtocol>(
         _ target: DestructuringPattern.Target, isReassign: Bool,
-        inputIdx: inout Int, outputIdx: inout Int,
-        inputs: [String], outputs: [String]
-    ) -> String {
+        inputIterator: Ref<InputIter>, outputIterator: Ref<OutputIter>
+    ) -> String where InputIter.Element == Variable, OutputIter.Element == String {
         switch target {
         case .flatBinding:
-            let propertyName = isReassign ? inputs[inputIdx] : outputs[outputIdx]
-            if isReassign { inputIdx += 1 } else { outputIdx += 1 }
-            return propertyName
+            let s = isReassign ? lift(inputIterator.val.next()!) : outputIterator.val.next()!
+            return s
         case .pattern(let p):
             return liftDestructuringPattern(
-                p, isReassign: isReassign, inputIdx: &inputIdx, outputIdx: &outputIdx,
-                inputs: inputs, outputs: outputs)
-        case .property(let propertyName):
-            let obj = inputs[inputIdx]
-            inputIdx += 1
-            return "\(obj).\(propertyName)"
-        case .element(let index):
-            let obj = inputs[inputIdx]
-            inputIdx += 1
-            return "\(obj)[\(index)]"
+                p, isReassign: isReassign,
+                inputIterator: inputIterator, outputIterator: outputIterator)
+        case .property(let s):
+            let obj = lift(inputIterator.val.next()!)
+            return "\(obj).\(s)"
+        case .privateProperty(let s):
+            let obj = lift(inputIterator.val.next()!)
+            return "\(obj).#\(s)"
+        case .element(let i):
+            let obj = lift(inputIterator.val.next()!)
+            return "\(obj)[\(i)]"
         case .computedProperty:
-            let obj = inputs[inputIdx]
-            inputIdx += 1
-            let key = inputs[inputIdx]
-            inputIdx += 1
+            let obj = lift(inputIterator.val.next()!)
+            let key = lift(inputIterator.val.next()!)
             return "\(obj)[\(key)]"
-        case .superProperty(let propertyName):
-            return "super.\(propertyName)"
-        case .superElement(let index):
-            return "super[\(index)]"
+        case .superProperty(let s):
+            return "super.\(s)"
+        case .superElement(let i):
+            return "super[\(i)]"
         case .superComputedProperty:
-            let key = inputs[inputIdx]
-            inputIdx += 1
+            let key = lift(inputIterator.val.next()!)
             return "super[\(key)]"
         }
     }
 
-    private func liftDestructuringPattern(
+    private func liftParameterDestructuringPattern<Iter: IteratorProtocol>(
+        _ pattern: DestructuringPattern, iterator: Ref<Iter>
+    ) -> String where Iter.Element == String {
+        return pattern.lift(
+            formatStringKey: { "\"\($0)\"" },
+            formatComputedKey: {
+                fatalError("Computed keys in parameter destructuring are not yet supported")
+            },
+            formatTarget: { target in
+                switch target {
+                case .flatBinding:
+                    return iterator.val.next()!
+                case .pattern(let p):
+                    return self.liftParameterDestructuringPattern(p, iterator: iterator)
+                default:
+                    fatalError("Invalid parameter destructuring target")
+                }
+            },
+            formatDefaultValue: {
+                fatalError("Default values in parameter destructuring are not yet supported")
+            }
+        )
+    }
+
+    private func liftDestructuringPattern<
+        InputIter: IteratorProtocol, OutputIter: IteratorProtocol
+    >(
         _ pattern: DestructuringPattern, isReassign: Bool,
-        inputIdx: inout Int, outputIdx: inout Int,
-        inputs: [String], outputs: [String]
-    ) -> String {
-        switch pattern {
-        case .object(let obj):
-            var props = [String]()
-            for prop in obj.properties {
-                var keyStr = ""
-                switch prop.key {
-                case .string(let s): keyStr = "\"\(s)\""
-                case .computed:
-                    keyStr = "[\(inputs[inputIdx])]"
-                    inputIdx += 1
-                }
-
-                let targetStr = liftDestructuringTarget(
-                    prop.target, isReassign: isReassign, inputIdx: &inputIdx, outputIdx: &outputIdx,
-                    inputs: inputs, outputs: outputs)
-
-                var defStr = ""
-                if prop.hasDefaultValue {
-                    defStr = " = \(inputs[inputIdx])"
-                    inputIdx += 1
-                }
-
-                props.append("\(keyStr): \(targetStr)\(defStr)")
+        inputIterator: Ref<InputIter>, outputIterator: Ref<OutputIter>
+    ) -> String where InputIter.Element == Variable, OutputIter.Element == String {
+        return pattern.lift(
+            formatStringKey: { "\"\($0)\"" },
+            formatComputedKey: {
+                self.lift(inputIterator.val.next()!)
+            },
+            formatTarget: { target in
+                self.liftDestructuringTarget(
+                    target, isReassign: isReassign,
+                    inputIterator: inputIterator, outputIterator: outputIterator)
+            },
+            formatDefaultValue: {
+                self.lift(inputIterator.val.next()!)
             }
-            if obj.hasRestElement {
-                let targetStr =
-                    isReassign ? inputs[inputIdx] : outputs[outputIdx]
-                if isReassign { inputIdx += 1 } else { outputIdx += 1 }
-                props.append("...\(targetStr)")
-            }
-            return "{\(props.joined(separator: ", "))}"
-
-        case .array(let arr):
-            var elems = [String]()
-            for elem in arr.elements {
-                if let target = elem.target {
-                    let targetStr = liftDestructuringTarget(
-                        target, isReassign: isReassign, inputIdx: &inputIdx, outputIdx: &outputIdx,
-                        inputs: inputs, outputs: outputs)
-                    if elem.hasDefaultValue {
-                        elems.append(
-                            "\(targetStr)=\(inputs[inputIdx])")
-                        inputIdx += 1
-                    } else {
-                        elems.append(targetStr)
-                    }
-                } else {
-                    assert(!elem.hasDefaultValue)
-                    elems.append("")
-                }
-            }
-            if let restTarget = arr.restTarget {
-                let targetStr = liftDestructuringTarget(
-                    restTarget, isReassign: isReassign, inputIdx: &inputIdx, outputIdx: &outputIdx,
-                    inputs: inputs, outputs: outputs)
-                elems.append("...\(targetStr)")
-            }
-            if let last = arr.elements.last, last.target == nil, arr.restTarget == nil {
-                // In JavaScript, a single trailing comma in an array destructuring pattern (e.g. `[x, ]`)
-                // is ignored, resulting in a pattern of length 1. To represent an actual elision at
-                // the very end (length 2), we must emit `[x, ,]`. Hence the extra empty element.
-                elems.append("")
-            }
-            return "[\(elems.joined(separator: ", "))]"
-        }
+        )
     }
 }

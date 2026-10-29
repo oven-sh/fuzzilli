@@ -61,11 +61,14 @@ public let v8Profile = Profile(
         (ForceMaglevCompilationGenerator, 5),
         (ForceOsrGenerator, 5),
         (TurbofanVerifyTypeGenerator, 10),
+        (NeverOptimizeFunctionGenerator, 5),
 
         (WorkerGenerator, 10),
         (V8GcGenerator, 5),
         (V8AllocationTimeoutGenerator, 5),
+        (V8DispatchTableGCIntervalGenerator, 5),
         (V8MajorGcGenerator, 5),
+        (V8SimulateNewspaceFullGenerator, 5),
 
         (WasmStructGenerator, 15),
         (WasmArrayGenerator, 15),
@@ -75,6 +78,9 @@ public let v8Profile = Profile(
         (UndefinedNanGenerator, 5),
         (StringShapeGenerator, 5),
         (HeapNumberGenerator, 5),
+        (V8InterceptorObjectGenerator, 5),
+        (V8AccessCheckedObjectGenerator, 5),
+        (V8SetAccessPolicyGenerator, 5),
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([
@@ -83,7 +89,8 @@ public let v8Profile = Profile(
         (V8RegExpFuzzer, 1),
         (WasmFastCallFuzzer, 1),
         (FastApiCallFuzzer, 1),
-        (LazyDeoptFuzzer, 1),
+        (IndirectLazyDeoptFuzzer, 1),
+        (RecursiveLazyDeoptFuzzer, 1),
         (HomomorphicFeedbackFuzzer, 1),
         (WasmDeoptFuzzer, 1),
         (WasmInJsInliningFuzzer, 1),
@@ -97,7 +104,7 @@ public let v8Profile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise)),
+        "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise())),
         "d8": .jsD8,
         "Worker": .jsWorkerConstructor,
         // via --expose-externalize-string:
@@ -108,11 +115,13 @@ public let v8Profile = Profile(
     ],
 
     additionalObjectGroups: [
-        jsD8, jsD8Test, jsD8FastCAPI, gcOptions, .jsWorkers, .jsWorkerPrototype,
+        jsD8, jsD8Test, jsD8FastCAPI, gcOptions,
+        jsD8AccessCheckedObject,
+        .jsWorkers, .jsWorkerPrototype,
         .jsWorkerConstructors,
     ],
 
-    additionalEnumerations: [.gcTypeEnum, .gcExecutionEnum],
+    additionalEnumerations: [.gcTypeEnum, .gcExecutionEnum, .jsD8AccessPolicyEnum],
 
     additionalOptionsBags: [],
 

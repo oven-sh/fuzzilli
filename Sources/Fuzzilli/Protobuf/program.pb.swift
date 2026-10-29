@@ -2897,6 +2897,230 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
     set {operation = .endPendingBundleModule(newValue)}
   }
 
+  public var beginClassPrivateGetter: Fuzzilli_Protobuf_BeginClassPrivateGetter {
+    get {
+      if case .beginClassPrivateGetter(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_BeginClassPrivateGetter()
+    }
+    set {operation = .beginClassPrivateGetter(newValue)}
+  }
+
+  public var endClassPrivateGetter: Fuzzilli_Protobuf_EndClassPrivateGetter {
+    get {
+      if case .endClassPrivateGetter(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_EndClassPrivateGetter()
+    }
+    set {operation = .endClassPrivateGetter(newValue)}
+  }
+
+  public var beginClassPrivateSetter: Fuzzilli_Protobuf_BeginClassPrivateSetter {
+    get {
+      if case .beginClassPrivateSetter(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_BeginClassPrivateSetter()
+    }
+    set {operation = .beginClassPrivateSetter(newValue)}
+  }
+
+  public var endClassPrivateSetter: Fuzzilli_Protobuf_EndClassPrivateSetter {
+    get {
+      if case .endClassPrivateSetter(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_EndClassPrivateSetter()
+    }
+    set {operation = .endClassPrivateSetter(newValue)}
+  }
+
+  public var callPrivateMethodWithSpread: Fuzzilli_Protobuf_CallPrivateMethodWithSpread {
+    get {
+      if case .callPrivateMethodWithSpread(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_CallPrivateMethodWithSpread()
+    }
+    set {operation = .callPrivateMethodWithSpread(newValue)}
+  }
+
+  public var wasmJsstringLength: Fuzzilli_Protobuf_WasmJSStringLength {
+    get {
+      if case .wasmJsstringLength(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringLength()
+    }
+    set {operation = .wasmJsstringLength(newValue)}
+  }
+
+  public var wasmJsstringFromCharCodeArray: Fuzzilli_Protobuf_WasmJSStringFromCharCodeArray {
+    get {
+      if case .wasmJsstringFromCharCodeArray(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringFromCharCodeArray()
+    }
+    set {operation = .wasmJsstringFromCharCodeArray(newValue)}
+  }
+
+  public var wasmJsstringFromCharCode: Fuzzilli_Protobuf_WasmJSStringFromCharCode {
+    get {
+      if case .wasmJsstringFromCharCode(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringFromCharCode()
+    }
+    set {operation = .wasmJsstringFromCharCode(newValue)}
+  }
+
+  public var wasmJsstringFromCodePoint: Fuzzilli_Protobuf_WasmJSStringFromCodePoint {
+    get {
+      if case .wasmJsstringFromCodePoint(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringFromCodePoint()
+    }
+    set {operation = .wasmJsstringFromCodePoint(newValue)}
+  }
+
+  public var wasmJsstringCharCodeAt: Fuzzilli_Protobuf_WasmJSStringCharCodeAt {
+    get {
+      if case .wasmJsstringCharCodeAt(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringCharCodeAt()
+    }
+    set {operation = .wasmJsstringCharCodeAt(newValue)}
+  }
+
+  public var wasmJsstringCodePointAt: Fuzzilli_Protobuf_WasmJSStringCodePointAt {
+    get {
+      if case .wasmJsstringCodePointAt(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringCodePointAt()
+    }
+    set {operation = .wasmJsstringCodePointAt(newValue)}
+  }
+
+  public var wasmJsstringIntoCharCodeArray: Fuzzilli_Protobuf_WasmJSStringIntoCharCodeArray {
+    get {
+      if case .wasmJsstringIntoCharCodeArray(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringIntoCharCodeArray()
+    }
+    set {operation = .wasmJsstringIntoCharCodeArray(newValue)}
+  }
+
+  public var wasmJsstringCast: Fuzzilli_Protobuf_WasmJSStringCast {
+    get {
+      if case .wasmJsstringCast(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringCast()
+    }
+    set {operation = .wasmJsstringCast(newValue)}
+  }
+
+  public var wasmJsstringTest: Fuzzilli_Protobuf_WasmJSStringTest {
+    get {
+      if case .wasmJsstringTest(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringTest()
+    }
+    set {operation = .wasmJsstringTest(newValue)}
+  }
+
+  public var wasmJsstringConcat: Fuzzilli_Protobuf_WasmJSStringConcat {
+    get {
+      if case .wasmJsstringConcat(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringConcat()
+    }
+    set {operation = .wasmJsstringConcat(newValue)}
+  }
+
+  public var wasmJsstringSubstring: Fuzzilli_Protobuf_WasmJSStringSubstring {
+    get {
+      if case .wasmJsstringSubstring(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringSubstring()
+    }
+    set {operation = .wasmJsstringSubstring(newValue)}
+  }
+
+  public var wasmJsstringEquals: Fuzzilli_Protobuf_WasmJSStringEquals {
+    get {
+      if case .wasmJsstringEquals(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringEquals()
+    }
+    set {operation = .wasmJsstringEquals(newValue)}
+  }
+
+  public var wasmJsstringCompare: Fuzzilli_Protobuf_WasmJSStringCompare {
+    get {
+      if case .wasmJsstringCompare(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmJSStringCompare()
+    }
+    set {operation = .wasmJsstringCompare(newValue)}
+  }
+
+  public var wasmStringConstant: Fuzzilli_Protobuf_WasmStringConstant {
+    get {
+      if case .wasmStringConstant(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmStringConstant()
+    }
+    set {operation = .wasmStringConstant(newValue)}
+  }
+
+  public var wasmStructNewDefaultDesc: Fuzzilli_Protobuf_WasmStructNewDefaultDesc {
+    get {
+      if case .wasmStructNewDefaultDesc(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmStructNewDefaultDesc()
+    }
+    set {operation = .wasmStructNewDefaultDesc(newValue)}
+  }
+
+  public var wasmStructNewDesc: Fuzzilli_Protobuf_WasmStructNewDesc {
+    get {
+      if case .wasmStructNewDesc(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmStructNewDesc()
+    }
+    set {operation = .wasmStructNewDesc(newValue)}
+  }
+
+  public var wasmRefGetDesc: Fuzzilli_Protobuf_WasmRefGetDesc {
+    get {
+      if case .wasmRefGetDesc(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmRefGetDesc()
+    }
+    set {operation = .wasmRefGetDesc(newValue)}
+  }
+
+  public var wasmRefCastDescEq: Fuzzilli_Protobuf_WasmRefCastDescEq {
+    get {
+      if case .wasmRefCastDescEq(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmRefCastDescEq()
+    }
+    set {operation = .wasmRefCastDescEq(newValue)}
+  }
+
+  public var wasmBranchOnCastDescEq: Fuzzilli_Protobuf_WasmBranchOnCastDescEq {
+    get {
+      if case .wasmBranchOnCastDescEq(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmBranchOnCastDescEq()
+    }
+    set {operation = .wasmBranchOnCastDescEq(newValue)}
+  }
+
+  public var wasmBranchOnCastDescEqFail: Fuzzilli_Protobuf_WasmBranchOnCastDescEqFail {
+    get {
+      if case .wasmBranchOnCastDescEqFail(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmBranchOnCastDescEqFail()
+    }
+    set {operation = .wasmBranchOnCastDescEqFail(newValue)}
+  }
+
+  public var wasmTableFill: Fuzzilli_Protobuf_WasmTableFill {
+    get {
+      if case .wasmTableFill(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmTableFill()
+    }
+    set {operation = .wasmTableFill(newValue)}
+  }
+
+  public var wasmArrayNewData: Fuzzilli_Protobuf_WasmArrayNewData {
+    get {
+      if case .wasmArrayNewData(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmArrayNewData()
+    }
+    set {operation = .wasmArrayNewData(newValue)}
+  }
+
+  public var wasmArrayNewElem: Fuzzilli_Protobuf_WasmArrayNewElem {
+    get {
+      if case .wasmArrayNewElem(let v)? = operation {return v}
+      return Fuzzilli_Protobuf_WasmArrayNewElem()
+    }
+    set {operation = .wasmArrayNewElem(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Operation: Equatable, Sendable {
@@ -3256,6 +3480,34 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
     case declarePendingBundleModule(Fuzzilli_Protobuf_DeclarePendingBundleModule)
     case beginPendingBundleModule(Fuzzilli_Protobuf_BeginPendingBundleModule)
     case endPendingBundleModule(Fuzzilli_Protobuf_EndPendingBundleModule)
+    case beginClassPrivateGetter(Fuzzilli_Protobuf_BeginClassPrivateGetter)
+    case endClassPrivateGetter(Fuzzilli_Protobuf_EndClassPrivateGetter)
+    case beginClassPrivateSetter(Fuzzilli_Protobuf_BeginClassPrivateSetter)
+    case endClassPrivateSetter(Fuzzilli_Protobuf_EndClassPrivateSetter)
+    case callPrivateMethodWithSpread(Fuzzilli_Protobuf_CallPrivateMethodWithSpread)
+    case wasmJsstringLength(Fuzzilli_Protobuf_WasmJSStringLength)
+    case wasmJsstringFromCharCodeArray(Fuzzilli_Protobuf_WasmJSStringFromCharCodeArray)
+    case wasmJsstringFromCharCode(Fuzzilli_Protobuf_WasmJSStringFromCharCode)
+    case wasmJsstringFromCodePoint(Fuzzilli_Protobuf_WasmJSStringFromCodePoint)
+    case wasmJsstringCharCodeAt(Fuzzilli_Protobuf_WasmJSStringCharCodeAt)
+    case wasmJsstringCodePointAt(Fuzzilli_Protobuf_WasmJSStringCodePointAt)
+    case wasmJsstringIntoCharCodeArray(Fuzzilli_Protobuf_WasmJSStringIntoCharCodeArray)
+    case wasmJsstringCast(Fuzzilli_Protobuf_WasmJSStringCast)
+    case wasmJsstringTest(Fuzzilli_Protobuf_WasmJSStringTest)
+    case wasmJsstringConcat(Fuzzilli_Protobuf_WasmJSStringConcat)
+    case wasmJsstringSubstring(Fuzzilli_Protobuf_WasmJSStringSubstring)
+    case wasmJsstringEquals(Fuzzilli_Protobuf_WasmJSStringEquals)
+    case wasmJsstringCompare(Fuzzilli_Protobuf_WasmJSStringCompare)
+    case wasmStringConstant(Fuzzilli_Protobuf_WasmStringConstant)
+    case wasmStructNewDefaultDesc(Fuzzilli_Protobuf_WasmStructNewDefaultDesc)
+    case wasmStructNewDesc(Fuzzilli_Protobuf_WasmStructNewDesc)
+    case wasmRefGetDesc(Fuzzilli_Protobuf_WasmRefGetDesc)
+    case wasmRefCastDescEq(Fuzzilli_Protobuf_WasmRefCastDescEq)
+    case wasmBranchOnCastDescEq(Fuzzilli_Protobuf_WasmBranchOnCastDescEq)
+    case wasmBranchOnCastDescEqFail(Fuzzilli_Protobuf_WasmBranchOnCastDescEqFail)
+    case wasmTableFill(Fuzzilli_Protobuf_WasmTableFill)
+    case wasmArrayNewData(Fuzzilli_Protobuf_WasmArrayNewData)
+    case wasmArrayNewElem(Fuzzilli_Protobuf_WasmArrayNewElem)
 
   }
 
@@ -3314,7 +3566,7 @@ fileprivate let _protobuf_package = "fuzzilli.protobuf"
 
 extension Fuzzilli_Protobuf_Instruction: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Instruction"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}inouts\0\u{1}opIdx\0\u{1}nop\0\u{1}loadInteger\0\u{1}loadBigInt\0\u{1}loadFloat\0\u{1}loadString\0\u{1}loadBoolean\0\u{1}loadUndefined\0\u{1}loadNull\0\u{1}loadThis\0\u{1}loadArguments\0\u{1}createNamedVariable\0\u{1}loadDisposableVariable\0\u{1}loadAsyncDisposableVariable\0\u{1}loadRegExp\0\u{1}beginObjectLiteral\0\u{1}objectLiteralAddProperty\0\u{1}objectLiteralAddElement\0\u{1}objectLiteralAddComputedProperty\0\u{1}objectLiteralCopyProperties\0\u{1}objectLiteralSetPrototype\0\u{1}beginObjectLiteralMethod\0\u{1}endObjectLiteralMethod\0\u{1}beginObjectLiteralComputedMethod\0\u{1}endObjectLiteralComputedMethod\0\u{1}beginObjectLiteralGetter\0\u{1}endObjectLiteralGetter\0\u{1}beginObjectLiteralSetter\0\u{1}endObjectLiteralSetter\0\u{1}endObjectLiteral\0\u{1}beginClassDefinition\0\u{1}beginClassConstructor\0\u{1}endClassConstructor\0\u{1}classAddProperty\0\u{1}classAddElement\0\u{1}classAddComputedProperty\0\u{1}beginClassMethod\0\u{1}endClassMethod\0\u{1}beginClassComputedMethod\0\u{1}endClassComputedMethod\0\u{1}beginClassGetter\0\u{1}endClassGetter\0\u{1}beginClassSetter\0\u{1}endClassSetter\0\u{1}beginClassStaticInitializer\0\u{1}endClassStaticInitializer\0\u{1}classAddPrivateProperty\0\u{1}beginClassPrivateMethod\0\u{1}endClassPrivateMethod\0\u{1}endClassDefinition\0\u{1}createArray\0\u{1}createIntArray\0\u{1}createFloatArray\0\u{1}createArrayWithSpread\0\u{1}createTemplateString\0\u{1}getProperty\0\u{1}setProperty\0\u{1}updateProperty\0\u{1}deleteProperty\0\u{1}configureProperty\0\u{1}getElement\0\u{1}setElement\0\u{1}updateElement\0\u{1}deleteElement\0\u{1}configureElement\0\u{1}getComputedProperty\0\u{1}setComputedProperty\0\u{1}updateComputedProperty\0\u{1}deleteComputedProperty\0\u{1}configureComputedProperty\0\u{1}typeOf\0\u{1}void\0\u{1}testInstanceOf\0\u{1}testIn\0\u{1}beginPlainFunction\0\u{1}endPlainFunction\0\u{1}beginArrowFunction\0\u{1}endArrowFunction\0\u{1}beginGeneratorFunction\0\u{1}endGeneratorFunction\0\u{1}beginAsyncFunction\0\u{1}endAsyncFunction\0\u{1}beginAsyncArrowFunction\0\u{1}endAsyncArrowFunction\0\u{1}beginAsyncGeneratorFunction\0\u{1}endAsyncGeneratorFunction\0\u{1}beginConstructor\0\u{1}endConstructor\0\u{1}directive\0\u{1}return\0\u{1}yield\0\u{1}yieldEach\0\u{1}await\0\u{1}callFunction\0\u{1}callFunctionWithSpread\0\u{1}construct\0\u{1}constructWithSpread\0\u{1}callMethod\0\u{1}callMethodWithSpread\0\u{1}callComputedMethod\0\u{1}callComputedMethodWithSpread\0\u{1}unaryOperation\0\u{1}binaryOperation\0\u{1}ternaryOperation\0\u{1}update\0\u{1}dup\0\u{1}reassign\0\u{1}compare\0\u{1}eval\0\u{1}beginWith\0\u{1}endWith\0\u{1}callSuperConstructor\0\u{1}callSuperMethod\0\u{1}getPrivateProperty\0\u{1}setPrivateProperty\0\u{1}updatePrivateProperty\0\u{1}callPrivateMethod\0\u{1}getSuperProperty\0\u{1}setSuperProperty\0\u{1}getComputedSuperProperty\0\u{1}setComputedSuperProperty\0\u{1}updateSuperProperty\0\u{1}beginIf\0\u{1}beginElse\0\u{1}endIf\0\u{1}beginWhileLoopHeader\0\u{1}beginWhileLoopBody\0\u{1}endWhileLoop\0\u{1}beginDoWhileLoopBody\0\u{1}beginDoWhileLoopHeader\0\u{1}endDoWhileLoop\0\u{1}beginForLoopInitializer\0\u{1}beginForLoopCondition\0\u{1}beginForLoopAfterthought\0\u{1}beginForLoopBody\0\u{1}endForLoop\0\u{1}beginForLoop\0\u{1}beginRepeatLoop\0\u{1}endRepeatLoop\0\u{1}loopBreak\0\u{1}loopContinue\0\u{1}beginTry\0\u{1}beginCatch\0\u{1}beginFinally\0\u{1}endTryCatchFinally\0\u{1}throwException\0\u{1}beginCodeString\0\u{1}endCodeString\0\u{1}beginBlockStatement\0\u{1}endBlockStatement\0\u{1}beginSwitch\0\u{1}beginSwitchCase\0\u{1}beginSwitchDefaultCase\0\u{1}endSwitchCase\0\u{1}endSwitch\0\u{1}switchBreak\0\u{1}loadNewTarget\0\u{1}print\0\u{1}explore\0\u{1}probe\0\u{1}fixup\0\u{1}beginWasmModule\0\u{1}endWasmModule\0\u{1}createWasmGlobal\0\u{1}createWasmMemory\0\u{1}createWasmTable\0\u{1}createWasmJSTag\0\u{1}createWasmTag\0\u{1}wrapPromising\0\u{1}wrapSuspending\0\u{1}bindMethod\0\u{1}bindFunction\0\u{1}consti64\0\u{1}consti32\0\u{1}constf32\0\u{1}constf64\0\u{1}wasmReturn\0\u{1}wasmJsCall\0\u{1}wasmi32CompareOp\0\u{1}wasmi64CompareOp\0\u{1}wasmf32CompareOp\0\u{1}wasmf64CompareOp\0\u{1}wasmi32EqualZero\0\u{1}wasmi64EqualZero\0\u{1}wasmi32BinOp\0\u{1}wasmi64BinOp\0\u{1}wasmi32UnOp\0\u{1}wasmi64UnOp\0\u{1}wasmf32BinOp\0\u{1}wasmf64BinOp\0\u{1}wasmf32UnOp\0\u{1}wasmf64UnOp\0\u{1}wasmWrapi64Toi32\0\u{1}wasmTruncatef32Toi32\0\u{1}wasmTruncatef64Toi32\0\u{1}wasmExtendi32Toi64\0\u{1}wasmTruncatef32Toi64\0\u{1}wasmTruncatef64Toi64\0\u{1}wasmConverti32Tof32\0\u{1}wasmConverti64Tof32\0\u{1}wasmDemotef64Tof32\0\u{1}wasmConverti32Tof64\0\u{1}wasmConverti64Tof64\0\u{1}wasmPromotef32Tof64\0\u{1}wasmReinterpretf32Asi32\0\u{1}wasmReinterpretf64Asi64\0\u{1}wasmReinterpreti32Asf32\0\u{1}wasmReinterpreti64Asf64\0\u{1}wasmSignExtend8Intoi32\0\u{1}wasmSignExtend16Intoi32\0\u{1}wasmSignExtend8Intoi64\0\u{1}wasmSignExtend16Intoi64\0\u{1}wasmSignExtend32Intoi64\0\u{1}wasmTruncateSatf32Toi32\0\u{1}wasmTruncateSatf64Toi32\0\u{1}wasmTruncateSatf32Toi64\0\u{1}wasmTruncateSatf64Toi64\0\u{1}wasmReassign\0\u{1}wasmDefineGlobal\0\u{1}wasmDefineTable\0\u{1}wasmDefineMemory\0\u{1}wasmDefineDataSegment\0\u{1}wasmLoadGlobal\0\u{1}wasmStoreGlobal\0\u{1}wasmTableGet\0\u{1}wasmTableSet\0\u{1}wasmTableSize\0\u{1}wasmTableGrow\0\u{1}wasmCallIndirect\0\u{1}wasmCallDirect\0\u{1}wasmReturnCallDirect\0\u{1}wasmReturnCallIndirect\0\u{1}wasmMemoryLoad\0\u{1}wasmMemoryStore\0\u{1}wasmAtomicLoad\0\u{1}wasmAtomicStore\0\u{1}wasmAtomicRMW\0\u{1}wasmAtomicCmpxchg\0\u{1}wasmMemorySize\0\u{1}wasmMemoryGrow\0\u{1}wasmMemoryFill\0\u{1}wasmMemoryInit\0\u{1}wasmDropDataSegment\0\u{1}beginWasmFunction\0\u{1}endWasmFunction\0\u{1}wasmBeginBlock\0\u{1}wasmEndBlock\0\u{1}wasmBeginLoop\0\u{1}wasmEndLoop\0\u{1}wasmBranch\0\u{1}wasmBranchIf\0\u{1}wasmBranchTable\0\u{1}wasmNop\0\u{1}wasmBeginIf\0\u{1}wasmBeginElse\0\u{1}wasmEndIf\0\u{1}wasmBeginTryTable\0\u{1}wasmEndTryTable\0\u{1}wasmBeginTry\0\u{1}wasmBeginCatchAll\0\u{1}wasmBeginCatch\0\u{1}wasmEndTry\0\u{1}wasmBeginTryDelegate\0\u{1}wasmEndTryDelegate\0\u{1}wasmThrow\0\u{1}wasmRethrow\0\u{1}wasmThrowRef\0\u{1}wasmDefineTag\0\u{1}constSimd128\0\u{1}wasmSimd128Compare\0\u{1}wasmSimd128IntegerUnOp\0\u{1}wasmSimd128IntegerBinOp\0\u{1}wasmSimd128IntegerTernaryOp\0\u{1}wasmSimd128FloatUnOp\0\u{1}wasmSimd128FloatBinOp\0\u{1}wasmSimd128FloatTernaryOp\0\u{1}wasmSimdSplat\0\u{1}wasmSimdExtractLane\0\u{1}wasmSimdReplaceLane\0\u{1}wasmSimdStoreLane\0\u{1}wasmSimdLoadLane\0\u{1}wasmSimdLoad\0\u{1}wasmUnreachable\0\u{1}wasmSelect\0\u{1}wasmBeginTypeGroup\0\u{1}wasmEndTypeGroup\0\u{1}wasmDefineArrayType\0\u{1}wasmDefineStructType\0\u{1}wasmDefineForwardOrSelfReference\0\u{1}wasmResolveForwardReference\0\u{1}wasmArrayNewFixed\0\u{1}wasmArrayNewDefault\0\u{1}wasmArrayLen\0\u{1}wasmArrayGet\0\u{1}wasmArraySet\0\u{1}wasmStructNewDefault\0\u{1}wasmStructGet\0\u{1}wasmStructSet\0\u{1}wasmRefNull\0\u{1}wasmRefIsNull\0\u{1}wasmRefI31\0\u{1}wasmI31Get\0\u{1}wasmAnyConvertExtern\0\u{1}wasmExternConvertAny\0\u{1}wasmMemoryCopy\0\u{1}wasmDefineElementSegment\0\u{1}wasmTableInit\0\u{1}wasmDropElementSegment\0\u{1}wasmTableCopy\0\u{1}wasmDefineSignatureType\0\u{1}createNamedDisposableVariable\0\u{1}createNamedAsyncDisposableVariable\0\u{1}wasmDefineAdHocSignatureType\0\u{1}wasmStructNew\0\u{1}wasmRefEq\0\u{1}wasmRefTest\0\u{1}wasmDefineAdHocModuleSignatureType\0\u{1}wasmRefCast\0\u{1}beginObjectLiteralComputedGetter\0\u{1}endObjectLiteralComputedGetter\0\u{1}beginObjectLiteralComputedSetter\0\u{1}endObjectLiteralComputedSetter\0\u{1}beginClassComputedGetter\0\u{1}endClassComputedGetter\0\u{1}beginClassComputedSetter\0\u{1}endClassComputedSetter\0\u{1}beginBundleScript\0\u{1}endBundleScript\0\u{1}blockBreak\0\u{1}rawWasmModule\0\u{1}beginBundleModule\0\u{1}endBundleModule\0\u{1}exportVariables\0\u{1}importVariables\0\u{1}beginBundleModuleEntryPoint\0\u{1}endBundleModuleEntryPoint\0\u{1}wasmBranchOnNull\0\u{1}wasmBranchOnNonNull\0\u{1}createMap\0\u{1}wasmi64WideBinOp\0\u{1}wasmi64WideMulOp\0\u{1}beginWorkerFunction\0\u{1}endWorkerFunction\0\u{1}wasmBranchOnCast\0\u{1}importNamespace\0\u{1}wasmBranchOnCastFail\0\u{1}wasmRefFunc\0\u{1}wasmRefAsNonNull\0\u{1}wasmCallRef\0\u{1}wasmReturnCallRef\0\u{1}dynamicImport\0\u{1}destruct\0\u{1}destructAndReassign\0\u{1}declarePendingBundleModule\0\u{1}beginPendingBundleModule\0\u{1}endPendingBundleModule\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}inouts\0\u{1}opIdx\0\u{1}nop\0\u{1}loadInteger\0\u{1}loadBigInt\0\u{1}loadFloat\0\u{1}loadString\0\u{1}loadBoolean\0\u{1}loadUndefined\0\u{1}loadNull\0\u{1}loadThis\0\u{1}loadArguments\0\u{1}createNamedVariable\0\u{1}loadDisposableVariable\0\u{1}loadAsyncDisposableVariable\0\u{1}loadRegExp\0\u{1}beginObjectLiteral\0\u{1}objectLiteralAddProperty\0\u{1}objectLiteralAddElement\0\u{1}objectLiteralAddComputedProperty\0\u{1}objectLiteralCopyProperties\0\u{1}objectLiteralSetPrototype\0\u{1}beginObjectLiteralMethod\0\u{1}endObjectLiteralMethod\0\u{1}beginObjectLiteralComputedMethod\0\u{1}endObjectLiteralComputedMethod\0\u{1}beginObjectLiteralGetter\0\u{1}endObjectLiteralGetter\0\u{1}beginObjectLiteralSetter\0\u{1}endObjectLiteralSetter\0\u{1}endObjectLiteral\0\u{1}beginClassDefinition\0\u{1}beginClassConstructor\0\u{1}endClassConstructor\0\u{1}classAddProperty\0\u{1}classAddElement\0\u{1}classAddComputedProperty\0\u{1}beginClassMethod\0\u{1}endClassMethod\0\u{1}beginClassComputedMethod\0\u{1}endClassComputedMethod\0\u{1}beginClassGetter\0\u{1}endClassGetter\0\u{1}beginClassSetter\0\u{1}endClassSetter\0\u{1}beginClassStaticInitializer\0\u{1}endClassStaticInitializer\0\u{1}classAddPrivateProperty\0\u{1}beginClassPrivateMethod\0\u{1}endClassPrivateMethod\0\u{1}endClassDefinition\0\u{1}createArray\0\u{1}createIntArray\0\u{1}createFloatArray\0\u{1}createArrayWithSpread\0\u{1}createTemplateString\0\u{1}getProperty\0\u{1}setProperty\0\u{1}updateProperty\0\u{1}deleteProperty\0\u{1}configureProperty\0\u{1}getElement\0\u{1}setElement\0\u{1}updateElement\0\u{1}deleteElement\0\u{1}configureElement\0\u{1}getComputedProperty\0\u{1}setComputedProperty\0\u{1}updateComputedProperty\0\u{1}deleteComputedProperty\0\u{1}configureComputedProperty\0\u{1}typeOf\0\u{1}void\0\u{1}testInstanceOf\0\u{1}testIn\0\u{1}beginPlainFunction\0\u{1}endPlainFunction\0\u{1}beginArrowFunction\0\u{1}endArrowFunction\0\u{1}beginGeneratorFunction\0\u{1}endGeneratorFunction\0\u{1}beginAsyncFunction\0\u{1}endAsyncFunction\0\u{1}beginAsyncArrowFunction\0\u{1}endAsyncArrowFunction\0\u{1}beginAsyncGeneratorFunction\0\u{1}endAsyncGeneratorFunction\0\u{1}beginConstructor\0\u{1}endConstructor\0\u{1}directive\0\u{1}return\0\u{1}yield\0\u{1}yieldEach\0\u{1}await\0\u{1}callFunction\0\u{1}callFunctionWithSpread\0\u{1}construct\0\u{1}constructWithSpread\0\u{1}callMethod\0\u{1}callMethodWithSpread\0\u{1}callComputedMethod\0\u{1}callComputedMethodWithSpread\0\u{1}unaryOperation\0\u{1}binaryOperation\0\u{1}ternaryOperation\0\u{1}update\0\u{1}dup\0\u{1}reassign\0\u{1}compare\0\u{1}eval\0\u{1}beginWith\0\u{1}endWith\0\u{1}callSuperConstructor\0\u{1}callSuperMethod\0\u{1}getPrivateProperty\0\u{1}setPrivateProperty\0\u{1}updatePrivateProperty\0\u{1}callPrivateMethod\0\u{1}getSuperProperty\0\u{1}setSuperProperty\0\u{1}getComputedSuperProperty\0\u{1}setComputedSuperProperty\0\u{1}updateSuperProperty\0\u{1}beginIf\0\u{1}beginElse\0\u{1}endIf\0\u{1}beginWhileLoopHeader\0\u{1}beginWhileLoopBody\0\u{1}endWhileLoop\0\u{1}beginDoWhileLoopBody\0\u{1}beginDoWhileLoopHeader\0\u{1}endDoWhileLoop\0\u{1}beginForLoopInitializer\0\u{1}beginForLoopCondition\0\u{1}beginForLoopAfterthought\0\u{1}beginForLoopBody\0\u{1}endForLoop\0\u{1}beginForLoop\0\u{1}beginRepeatLoop\0\u{1}endRepeatLoop\0\u{1}loopBreak\0\u{1}loopContinue\0\u{1}beginTry\0\u{1}beginCatch\0\u{1}beginFinally\0\u{1}endTryCatchFinally\0\u{1}throwException\0\u{1}beginCodeString\0\u{1}endCodeString\0\u{1}beginBlockStatement\0\u{1}endBlockStatement\0\u{1}beginSwitch\0\u{1}beginSwitchCase\0\u{1}beginSwitchDefaultCase\0\u{1}endSwitchCase\0\u{1}endSwitch\0\u{1}switchBreak\0\u{1}loadNewTarget\0\u{1}print\0\u{1}explore\0\u{1}probe\0\u{1}fixup\0\u{1}beginWasmModule\0\u{1}endWasmModule\0\u{1}createWasmGlobal\0\u{1}createWasmMemory\0\u{1}createWasmTable\0\u{1}createWasmJSTag\0\u{1}createWasmTag\0\u{1}wrapPromising\0\u{1}wrapSuspending\0\u{1}bindMethod\0\u{1}bindFunction\0\u{1}consti64\0\u{1}consti32\0\u{1}constf32\0\u{1}constf64\0\u{1}wasmReturn\0\u{1}wasmJsCall\0\u{1}wasmi32CompareOp\0\u{1}wasmi64CompareOp\0\u{1}wasmf32CompareOp\0\u{1}wasmf64CompareOp\0\u{1}wasmi32EqualZero\0\u{1}wasmi64EqualZero\0\u{1}wasmi32BinOp\0\u{1}wasmi64BinOp\0\u{1}wasmi32UnOp\0\u{1}wasmi64UnOp\0\u{1}wasmf32BinOp\0\u{1}wasmf64BinOp\0\u{1}wasmf32UnOp\0\u{1}wasmf64UnOp\0\u{1}wasmWrapi64Toi32\0\u{1}wasmTruncatef32Toi32\0\u{1}wasmTruncatef64Toi32\0\u{1}wasmExtendi32Toi64\0\u{1}wasmTruncatef32Toi64\0\u{1}wasmTruncatef64Toi64\0\u{1}wasmConverti32Tof32\0\u{1}wasmConverti64Tof32\0\u{1}wasmDemotef64Tof32\0\u{1}wasmConverti32Tof64\0\u{1}wasmConverti64Tof64\0\u{1}wasmPromotef32Tof64\0\u{1}wasmReinterpretf32Asi32\0\u{1}wasmReinterpretf64Asi64\0\u{1}wasmReinterpreti32Asf32\0\u{1}wasmReinterpreti64Asf64\0\u{1}wasmSignExtend8Intoi32\0\u{1}wasmSignExtend16Intoi32\0\u{1}wasmSignExtend8Intoi64\0\u{1}wasmSignExtend16Intoi64\0\u{1}wasmSignExtend32Intoi64\0\u{1}wasmTruncateSatf32Toi32\0\u{1}wasmTruncateSatf64Toi32\0\u{1}wasmTruncateSatf32Toi64\0\u{1}wasmTruncateSatf64Toi64\0\u{1}wasmReassign\0\u{1}wasmDefineGlobal\0\u{1}wasmDefineTable\0\u{1}wasmDefineMemory\0\u{1}wasmDefineDataSegment\0\u{1}wasmLoadGlobal\0\u{1}wasmStoreGlobal\0\u{1}wasmTableGet\0\u{1}wasmTableSet\0\u{1}wasmTableSize\0\u{1}wasmTableGrow\0\u{1}wasmCallIndirect\0\u{1}wasmCallDirect\0\u{1}wasmReturnCallDirect\0\u{1}wasmReturnCallIndirect\0\u{1}wasmMemoryLoad\0\u{1}wasmMemoryStore\0\u{1}wasmAtomicLoad\0\u{1}wasmAtomicStore\0\u{1}wasmAtomicRMW\0\u{1}wasmAtomicCmpxchg\0\u{1}wasmMemorySize\0\u{1}wasmMemoryGrow\0\u{1}wasmMemoryFill\0\u{1}wasmMemoryInit\0\u{1}wasmDropDataSegment\0\u{1}beginWasmFunction\0\u{1}endWasmFunction\0\u{1}wasmBeginBlock\0\u{1}wasmEndBlock\0\u{1}wasmBeginLoop\0\u{1}wasmEndLoop\0\u{1}wasmBranch\0\u{1}wasmBranchIf\0\u{1}wasmBranchTable\0\u{1}wasmNop\0\u{1}wasmBeginIf\0\u{1}wasmBeginElse\0\u{1}wasmEndIf\0\u{1}wasmBeginTryTable\0\u{1}wasmEndTryTable\0\u{1}wasmBeginTry\0\u{1}wasmBeginCatchAll\0\u{1}wasmBeginCatch\0\u{1}wasmEndTry\0\u{1}wasmBeginTryDelegate\0\u{1}wasmEndTryDelegate\0\u{1}wasmThrow\0\u{1}wasmRethrow\0\u{1}wasmThrowRef\0\u{1}wasmDefineTag\0\u{1}constSimd128\0\u{1}wasmSimd128Compare\0\u{1}wasmSimd128IntegerUnOp\0\u{1}wasmSimd128IntegerBinOp\0\u{1}wasmSimd128IntegerTernaryOp\0\u{1}wasmSimd128FloatUnOp\0\u{1}wasmSimd128FloatBinOp\0\u{1}wasmSimd128FloatTernaryOp\0\u{1}wasmSimdSplat\0\u{1}wasmSimdExtractLane\0\u{1}wasmSimdReplaceLane\0\u{1}wasmSimdStoreLane\0\u{1}wasmSimdLoadLane\0\u{1}wasmSimdLoad\0\u{1}wasmUnreachable\0\u{1}wasmSelect\0\u{1}wasmBeginTypeGroup\0\u{1}wasmEndTypeGroup\0\u{1}wasmDefineArrayType\0\u{1}wasmDefineStructType\0\u{1}wasmDefineForwardOrSelfReference\0\u{1}wasmResolveForwardReference\0\u{1}wasmArrayNewFixed\0\u{1}wasmArrayNewDefault\0\u{1}wasmArrayLen\0\u{1}wasmArrayGet\0\u{1}wasmArraySet\0\u{1}wasmStructNewDefault\0\u{1}wasmStructGet\0\u{1}wasmStructSet\0\u{1}wasmRefNull\0\u{1}wasmRefIsNull\0\u{1}wasmRefI31\0\u{1}wasmI31Get\0\u{1}wasmAnyConvertExtern\0\u{1}wasmExternConvertAny\0\u{1}wasmMemoryCopy\0\u{1}wasmDefineElementSegment\0\u{1}wasmTableInit\0\u{1}wasmDropElementSegment\0\u{1}wasmTableCopy\0\u{1}wasmDefineSignatureType\0\u{1}createNamedDisposableVariable\0\u{1}createNamedAsyncDisposableVariable\0\u{1}wasmDefineAdHocSignatureType\0\u{1}wasmStructNew\0\u{1}wasmRefEq\0\u{1}wasmRefTest\0\u{1}wasmDefineAdHocModuleSignatureType\0\u{1}wasmRefCast\0\u{1}beginObjectLiteralComputedGetter\0\u{1}endObjectLiteralComputedGetter\0\u{1}beginObjectLiteralComputedSetter\0\u{1}endObjectLiteralComputedSetter\0\u{1}beginClassComputedGetter\0\u{1}endClassComputedGetter\0\u{1}beginClassComputedSetter\0\u{1}endClassComputedSetter\0\u{1}beginBundleScript\0\u{1}endBundleScript\0\u{1}blockBreak\0\u{1}rawWasmModule\0\u{1}beginBundleModule\0\u{1}endBundleModule\0\u{1}exportVariables\0\u{1}importVariables\0\u{1}beginBundleModuleEntryPoint\0\u{1}endBundleModuleEntryPoint\0\u{1}wasmBranchOnNull\0\u{1}wasmBranchOnNonNull\0\u{1}createMap\0\u{1}wasmi64WideBinOp\0\u{1}wasmi64WideMulOp\0\u{1}beginWorkerFunction\0\u{1}endWorkerFunction\0\u{1}wasmBranchOnCast\0\u{1}importNamespace\0\u{1}wasmBranchOnCastFail\0\u{1}wasmRefFunc\0\u{1}wasmRefAsNonNull\0\u{1}wasmCallRef\0\u{1}wasmReturnCallRef\0\u{1}dynamicImport\0\u{1}destruct\0\u{1}destructAndReassign\0\u{1}declarePendingBundleModule\0\u{1}beginPendingBundleModule\0\u{1}endPendingBundleModule\0\u{1}beginClassPrivateGetter\0\u{1}endClassPrivateGetter\0\u{1}beginClassPrivateSetter\0\u{1}endClassPrivateSetter\0\u{1}callPrivateMethodWithSpread\0\u{1}wasmJSStringLength\0\u{1}wasmJSStringFromCharCodeArray\0\u{1}wasmJSStringFromCharCode\0\u{1}wasmJSStringFromCodePoint\0\u{1}wasmJSStringCharCodeAt\0\u{1}wasmJSStringCodePointAt\0\u{1}wasmJSStringIntoCharCodeArray\0\u{1}wasmJSStringCast\0\u{1}wasmJSStringTest\0\u{1}wasmJSStringConcat\0\u{1}wasmJSStringSubstring\0\u{1}wasmJSStringEquals\0\u{1}wasmJSStringCompare\0\u{1}wasmStringConstant\0\u{1}wasmStructNewDefaultDesc\0\u{1}wasmStructNewDesc\0\u{1}wasmRefGetDesc\0\u{1}wasmRefCastDescEq\0\u{1}wasmBranchOnCastDescEq\0\u{1}wasmBranchOnCastDescEqFail\0\u{1}wasmTableFill\0\u{1}wasmArrayNewData\0\u{1}wasmArrayNewElem\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7946,6 +8198,370 @@ extension Fuzzilli_Protobuf_Instruction: SwiftProtobuf.Message, SwiftProtobuf._M
           self.operation = .endPendingBundleModule(v)
         }
       }()
+      case 358: try {
+        var v: Fuzzilli_Protobuf_BeginClassPrivateGetter?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .beginClassPrivateGetter(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .beginClassPrivateGetter(v)
+        }
+      }()
+      case 359: try {
+        var v: Fuzzilli_Protobuf_EndClassPrivateGetter?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .endClassPrivateGetter(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .endClassPrivateGetter(v)
+        }
+      }()
+      case 360: try {
+        var v: Fuzzilli_Protobuf_BeginClassPrivateSetter?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .beginClassPrivateSetter(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .beginClassPrivateSetter(v)
+        }
+      }()
+      case 361: try {
+        var v: Fuzzilli_Protobuf_EndClassPrivateSetter?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .endClassPrivateSetter(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .endClassPrivateSetter(v)
+        }
+      }()
+      case 362: try {
+        var v: Fuzzilli_Protobuf_CallPrivateMethodWithSpread?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .callPrivateMethodWithSpread(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .callPrivateMethodWithSpread(v)
+        }
+      }()
+      case 363: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringLength?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringLength(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringLength(v)
+        }
+      }()
+      case 364: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringFromCharCodeArray?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringFromCharCodeArray(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringFromCharCodeArray(v)
+        }
+      }()
+      case 365: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringFromCharCode?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringFromCharCode(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringFromCharCode(v)
+        }
+      }()
+      case 366: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringFromCodePoint?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringFromCodePoint(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringFromCodePoint(v)
+        }
+      }()
+      case 367: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringCharCodeAt?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringCharCodeAt(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringCharCodeAt(v)
+        }
+      }()
+      case 368: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringCodePointAt?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringCodePointAt(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringCodePointAt(v)
+        }
+      }()
+      case 369: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringIntoCharCodeArray?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringIntoCharCodeArray(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringIntoCharCodeArray(v)
+        }
+      }()
+      case 370: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringCast?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringCast(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringCast(v)
+        }
+      }()
+      case 371: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringTest?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringTest(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringTest(v)
+        }
+      }()
+      case 372: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringConcat?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringConcat(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringConcat(v)
+        }
+      }()
+      case 373: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringSubstring?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringSubstring(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringSubstring(v)
+        }
+      }()
+      case 374: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringEquals?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringEquals(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringEquals(v)
+        }
+      }()
+      case 375: try {
+        var v: Fuzzilli_Protobuf_WasmJSStringCompare?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmJsstringCompare(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmJsstringCompare(v)
+        }
+      }()
+      case 376: try {
+        var v: Fuzzilli_Protobuf_WasmStringConstant?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmStringConstant(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmStringConstant(v)
+        }
+      }()
+      case 377: try {
+        var v: Fuzzilli_Protobuf_WasmStructNewDefaultDesc?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmStructNewDefaultDesc(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmStructNewDefaultDesc(v)
+        }
+      }()
+      case 378: try {
+        var v: Fuzzilli_Protobuf_WasmStructNewDesc?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmStructNewDesc(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmStructNewDesc(v)
+        }
+      }()
+      case 379: try {
+        var v: Fuzzilli_Protobuf_WasmRefGetDesc?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmRefGetDesc(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmRefGetDesc(v)
+        }
+      }()
+      case 380: try {
+        var v: Fuzzilli_Protobuf_WasmRefCastDescEq?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmRefCastDescEq(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmRefCastDescEq(v)
+        }
+      }()
+      case 381: try {
+        var v: Fuzzilli_Protobuf_WasmBranchOnCastDescEq?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmBranchOnCastDescEq(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmBranchOnCastDescEq(v)
+        }
+      }()
+      case 382: try {
+        var v: Fuzzilli_Protobuf_WasmBranchOnCastDescEqFail?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmBranchOnCastDescEqFail(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmBranchOnCastDescEqFail(v)
+        }
+      }()
+      case 383: try {
+        var v: Fuzzilli_Protobuf_WasmTableFill?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmTableFill(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmTableFill(v)
+        }
+      }()
+      case 384: try {
+        var v: Fuzzilli_Protobuf_WasmArrayNewData?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmArrayNewData(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmArrayNewData(v)
+        }
+      }()
+      case 385: try {
+        var v: Fuzzilli_Protobuf_WasmArrayNewElem?
+        var hadOneofValue = false
+        if let current = self.operation {
+          hadOneofValue = true
+          if case .wasmArrayNewElem(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.operation = .wasmArrayNewElem(v)
+        }
+      }()
       default: break
       }
     }
@@ -9383,6 +9999,118 @@ extension Fuzzilli_Protobuf_Instruction: SwiftProtobuf.Message, SwiftProtobuf._M
     case .endPendingBundleModule?: try {
       guard case .endPendingBundleModule(let v)? = self.operation else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 357)
+    }()
+    case .beginClassPrivateGetter?: try {
+      guard case .beginClassPrivateGetter(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 358)
+    }()
+    case .endClassPrivateGetter?: try {
+      guard case .endClassPrivateGetter(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 359)
+    }()
+    case .beginClassPrivateSetter?: try {
+      guard case .beginClassPrivateSetter(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 360)
+    }()
+    case .endClassPrivateSetter?: try {
+      guard case .endClassPrivateSetter(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 361)
+    }()
+    case .callPrivateMethodWithSpread?: try {
+      guard case .callPrivateMethodWithSpread(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 362)
+    }()
+    case .wasmJsstringLength?: try {
+      guard case .wasmJsstringLength(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 363)
+    }()
+    case .wasmJsstringFromCharCodeArray?: try {
+      guard case .wasmJsstringFromCharCodeArray(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 364)
+    }()
+    case .wasmJsstringFromCharCode?: try {
+      guard case .wasmJsstringFromCharCode(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 365)
+    }()
+    case .wasmJsstringFromCodePoint?: try {
+      guard case .wasmJsstringFromCodePoint(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 366)
+    }()
+    case .wasmJsstringCharCodeAt?: try {
+      guard case .wasmJsstringCharCodeAt(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 367)
+    }()
+    case .wasmJsstringCodePointAt?: try {
+      guard case .wasmJsstringCodePointAt(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 368)
+    }()
+    case .wasmJsstringIntoCharCodeArray?: try {
+      guard case .wasmJsstringIntoCharCodeArray(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 369)
+    }()
+    case .wasmJsstringCast?: try {
+      guard case .wasmJsstringCast(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 370)
+    }()
+    case .wasmJsstringTest?: try {
+      guard case .wasmJsstringTest(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 371)
+    }()
+    case .wasmJsstringConcat?: try {
+      guard case .wasmJsstringConcat(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 372)
+    }()
+    case .wasmJsstringSubstring?: try {
+      guard case .wasmJsstringSubstring(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 373)
+    }()
+    case .wasmJsstringEquals?: try {
+      guard case .wasmJsstringEquals(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 374)
+    }()
+    case .wasmJsstringCompare?: try {
+      guard case .wasmJsstringCompare(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 375)
+    }()
+    case .wasmStringConstant?: try {
+      guard case .wasmStringConstant(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 376)
+    }()
+    case .wasmStructNewDefaultDesc?: try {
+      guard case .wasmStructNewDefaultDesc(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 377)
+    }()
+    case .wasmStructNewDesc?: try {
+      guard case .wasmStructNewDesc(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 378)
+    }()
+    case .wasmRefGetDesc?: try {
+      guard case .wasmRefGetDesc(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 379)
+    }()
+    case .wasmRefCastDescEq?: try {
+      guard case .wasmRefCastDescEq(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 380)
+    }()
+    case .wasmBranchOnCastDescEq?: try {
+      guard case .wasmBranchOnCastDescEq(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 381)
+    }()
+    case .wasmBranchOnCastDescEqFail?: try {
+      guard case .wasmBranchOnCastDescEqFail(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 382)
+    }()
+    case .wasmTableFill?: try {
+      guard case .wasmTableFill(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 383)
+    }()
+    case .wasmArrayNewData?: try {
+      guard case .wasmArrayNewData(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 384)
+    }()
+    case .wasmArrayNewElem?: try {
+      guard case .wasmArrayNewElem(let v)? = self.operation else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 385)
     }()
     case nil: break
     }

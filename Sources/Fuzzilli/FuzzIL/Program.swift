@@ -29,6 +29,14 @@ public final class Program: CustomStringConvertible {
         FuzzILLifter().lift(self, withOptions: [.includeComments, .includeLineNumbers])
     }
 
+    public func checkOrDie(onFailure message: String) {
+        do {
+            try code.check(checkVisibility: false)
+        } catch {
+            fatalError("\(message): \(error)\nFuzzIL program:\n\(description)")
+        }
+    }
+
     /// The immutable code of this program.
     public let code: Code
 
@@ -48,7 +56,7 @@ public final class Program: CustomStringConvertible {
 
     /// The current version of the FuzzIL/Protobuf schema.
     /// This version should be bumped whenever a breaking change is made to the protobuf format.
-    public static let protobufVersion: UInt32 = 6
+    public static let protobufVersion: UInt32 = 8
 
     /// Constructs an empty program.
     public init(isBundle: Bool) {
@@ -67,8 +75,6 @@ public final class Program: CustomStringConvertible {
         code: Code, parent: Program? = nil, comments: ProgramComments = ProgramComments(),
         contributors: Contributors = Contributors()
     ) {
-        // We should never see instructions with set flags here, as Flags are currently only used temporarily (e.g. Minimizer)
-        assert(code.allSatisfy { instr in instr.flags == Instruction.Flags.empty })
         self.init(with: code)
         self.comments = comments
         self.contributors = contributors

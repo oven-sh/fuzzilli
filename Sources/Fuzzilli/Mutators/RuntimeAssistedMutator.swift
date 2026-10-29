@@ -88,7 +88,7 @@ public class RuntimeAssistedMutator: Mutator {
     // Lift the instrumented program to JS and try to transpile it back to FuzzIL.
     // If we can convert the instrumented program including its additional JS code to IL, the crash
     // reporting can perform proper minimization on it.
-    private func tryRoundtripTranspileInstrumentedProgramToFuzzIL(
+    func tryRoundtripTranspileInstrumentedProgramToFuzzIL(
         _ fuzzer: Fuzzer, _ instrumentedProgram: Program, expectedSignal: Int
     )
         -> Program?
@@ -137,14 +137,6 @@ public class RuntimeAssistedMutator: Mutator {
     override final func mutate(_ program: Program, using b: ProgramBuilder, for fuzzer: Fuzzer)
         -> Program?
     {
-        // Ensure that the input program is statically valid.
-        // This check is also active in release builds as an invalid program here
-        // usually indicates a bug in a previous mutator or the fuzzer engine.
-        guard program.code.isStaticallyValid() else {
-            print(fuzzer.lifter.lift(program, withOptions: .includeComments))
-            fatalError("Input program for \(name) is statically invalid:\n\(program.description)")
-        }
-
         // Build the instrumented program.
         guard let instrumentedProgram = instrument(program, for: fuzzer) else {
             return failure(.cannotInstrument)
@@ -293,6 +285,7 @@ public class RuntimeAssistedMutator: Mutator {
         case ConstructMethod = "CONSTRUCT_METHOD"
         case GetProperty = "GET_PROPERTY"
         case SetProperty = "SET_PROPERTY"
+        case UpdateProperty = "UPDATE_PROPERTY"
         case DeleteProperty = "DELETE_PROPERTY"
         case Add = "ADD"
         case Sub = "SUB"
@@ -452,10 +445,10 @@ extension RuntimeAssistedMutator.Action {
             let c: Variable
             switch try getInput(1) {
             case .string(let member):
-                c = b.getProperty(member, of: o, guard: isGuarded)
+                c = b.getProperty(member, of: o)
             default:
                 let member = try translateInput(1)
-                c = b.getComputedProperty(member, of: o, guard: isGuarded)
+                c = b.getComputedProperty(member, of: o)
             }
             let args = try translateInputs(2...)
             b.construct(c, withArgs: args, guard: isGuarded)
@@ -463,12 +456,12 @@ extension RuntimeAssistedMutator.Action {
             let o = try translateInput(0)
             switch try getInput(1) {
             case .string(let propertyName):
-                b.getProperty(propertyName, of: o, guard: isGuarded)
+                b.getProperty(propertyName, of: o)
             case .int(let index):
-                b.getElement(index, of: o, guard: isGuarded)
+                b.getElement(index, of: o)
             default:
                 let property = try translateInput(1)
-                b.getComputedProperty(property, of: o, guard: isGuarded)
+                b.getComputedProperty(property, of: o)
             }
         case .SetProperty:
             let o = try translateInput(0)
@@ -477,21 +470,39 @@ extension RuntimeAssistedMutator.Action {
             case .string(let propertyName):
                 b.setProperty(propertyName, of: o, to: v, guard: isGuarded)
             case .int(let index):
-                b.setElement(index, of: o, to: v)
+                b.setElement(index, of: o, to: v, guard: isGuarded)
             default:
                 let property = try translateInput(1)
-                b.setComputedProperty(property, of: o, to: v)
+                b.setComputedProperty(property, of: o, to: v, guard: isGuarded)
+            }
+        case .UpdateProperty:
+            let o = try translateInput(0)
+            let v = try translateInput(2)
+            guard case .string(let opString) = try getInput(3),
+                let op = BinaryOperator(rawValue: opString)
+            else {
+                throw RuntimeAssistedMutator.ActionError.actionTranslationError(
+                    "Invalid or missing binary operator for UpdateProperty")
+            }
+            switch try getInput(1) {
+            case .string(let propertyName):
+                b.updateProperty(propertyName, of: o, with: v, using: op, guard: isGuarded)
+            case .int(let index):
+                b.updateElement(index, of: o, with: v, using: op, guard: isGuarded)
+            default:
+                let property = try translateInput(1)
+                b.updateComputedProperty(property, of: o, with: v, using: op, guard: isGuarded)
             }
         case .DeleteProperty:
             let o = try translateInput(0)
             switch try getInput(1) {
             case .string(let propertyName):
-                b.deleteProperty(propertyName, of: o, guard: isGuarded)
+                b.deleteProperty(propertyName, of: o)
             case .int(let index):
-                b.deleteElement(index, of: o, guard: isGuarded)
+                b.deleteElement(index, of: o)
             default:
                 let property = try translateInput(1)
-                b.deleteComputedProperty(property, of: o, guard: isGuarded)
+                b.deleteComputedProperty(property, of: o)
             }
         case .Add:
             try translateBinaryOperation(.Add)

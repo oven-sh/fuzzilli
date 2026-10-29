@@ -136,8 +136,8 @@ public struct ILType: Hashable {
     public static let regexp = ILType(definiteType: .regexp)
 
     /// A type that can be iterated over, such as an array or a generator.
-    public static func iterable(ofElementType: ILType? = nil) -> ILType {
-        guard let elementType = ofElementType else {
+    public static func iterable(ofElementType elementType: ILType = .jsAnything) -> ILType {
+        if elementType == .jsAnything {
             return ILType(definiteType: .iterable)
         }
 
@@ -148,8 +148,8 @@ public struct ILType: Hashable {
     }
 
     /// A type that can be asynchronously iterated over, which yields Promises.
-    public static func asyncIterable(ofElementType: ILType? = nil) -> ILType {
-        guard let elementType = ofElementType else {
+    public static func asyncIterable(ofElementType elementType: ILType = .jsAnything) -> ILType {
+        if elementType == .jsAnything {
             return ILType(definiteType: .asyncIterable)
         }
 
@@ -168,6 +168,9 @@ public struct ILType: Hashable {
     /// The type that is subsumed by all others.
     public static let nothing = ILType(definiteType: .nothing, possibleType: .nothing)
 
+    /// A type representing a typing error (e.g. dangling reference), avoiding crashes on invalid programs.
+    public static let error = ILType(definiteType: .error)
+
     /// A number: either an integer or a float.
     public static let number: ILType = .integer | .float
 
@@ -181,11 +184,16 @@ public struct ILType: Hashable {
     public static func object(
         ofGroup group: String? = nil, withProperties properties: [String] = [],
         withMethods methods: [String] = [], withSymbolMethods symbolMethods: [String] = [],
-        withWasmType wasmExt: WasmTypeExtension? = nil
+        withPrivateProperties privateProperties: [String] = [],
+        withPrivateMethods privateMethods: [String] = [],
+        withWasmType wasmExt: WasmTypeExtension? = nil,
+        promiseResolvingTo: ILType? = nil
     ) -> ILType {
         let ext = TypeExtension(
             group: group, properties: Set(properties), methods: Set(methods),
-            symbolMethods: Set(symbolMethods), signature: nil, wasmExt: wasmExt)
+            symbolMethods: Set(symbolMethods), privateProperties: Set(privateProperties),
+            privateMethods: Set(privateMethods), signature: nil, wasmExt: wasmExt,
+            promiseResolvingTo: promiseResolvingTo)
         return ILType(definiteType: .object, ext: ext)
     }
 
@@ -214,6 +222,16 @@ public struct ILType: Hashable {
         let ext = TypeExtension(
             group: name, properties: Set(), methods: Set(), signature: nil, wasmExt: nil)
         return ILType(definiteType: .string, ext: ext)
+    }
+
+    /// Constructs a named integer: this is an integer that typically has some specific range or format.
+    ///
+    /// Most code will treat these as integers, but the JavaScriptEnvironment can register
+    /// namedIntegerGenerators for them so they can be generated more intelligently.
+    public static func namedInteger(ofName name: String) -> ILType {
+        let ext = TypeExtension(
+            group: name, properties: Set(), methods: Set(), signature: nil, wasmExt: nil)
+        return ILType(definiteType: .integer, ext: ext)
     }
 
     /// An object for which it is not known what properties or methods it has, if any.
@@ -336,6 +354,12 @@ public struct ILType: Hashable {
     public static func wasmRefExtern(shared: Bool = false) -> ILType {
         wasmRef(.WasmExtern, shared: shared, nullability: false)
     }
+    public static func wasmJSStringRef(shared: Bool = false) -> ILType {
+        wasmRef(.WasmJSString, shared: shared, nullability: true)
+    }
+    public static func wasmRefJSString(shared: Bool = false) -> ILType {
+        wasmRef(.WasmJSString, shared: shared, nullability: false)
+    }
     public static func wasmFuncRef(shared: Bool = false) -> ILType {
         wasmRef(.WasmFunc, shared: shared, nullability: true)
     }
@@ -420,8 +444,11 @@ public struct ILType: Hashable {
                 wasmExt: WasmReferenceType(kind, nullability: nullability)))
     }
 
-    static func wasmIndexRef(_ desc: WasmTypeDescription, nullability: Bool) -> ILType {
-        return wasmRef(.Index(UnownedWasmTypeDescription(desc)), nullability: nullability)
+    static func wasmIndexRef(_ desc: WasmTypeDescription, nullability: Bool, isExact: Bool = false)
+        -> ILType
+    {
+        return wasmRef(
+            .Index(UnownedWasmTypeDescription(desc), isExact: isExact), nullability: nullability)
     }
 
     // The union of all primitive wasm types
@@ -441,6 +468,7 @@ public struct ILType: Hashable {
 
     public static let anyNonNullableIndexRef = wasmRef(.Index(), nullability: false)
     public static let anyIndexRef = wasmRef(.Index(), nullability: true)
+    public static let anyExactIndexRef = wasmRef(.Index(isExact: true), nullability: true)
 
     //
     // Type testing
@@ -524,24 +552,20 @@ public struct ILType: Hashable {
 
         // If we are a union (so our possible type is larger than the definite type)
         // then check that our possible type is larger than the other possible type.
-        // However, there are some special rules to consider:
-        //  1. If the other type is a merged type, it is enough if our possible
-        //    type is a superset of one of the merged base types.
         if isUnion {
-            // Verify that either the other definite type is empty or that there is some overlap between
-            // our possible type and the other definite type
-            guard
-                other.definiteType.isEmpty
-                    || !other.definiteType.intersection(self.possibleType).isEmpty
-            else {
-                return false
-            }
-
-            // Given the above, we can subtract the other's definite type here from its possible type so that
-            // e.g. StringObjects are correctly subsumed by both .string and .object.
-            guard
-                self.possibleType.isSuperset(of: other.possibleType.subtracting(other.definiteType))
-            else {
+            let remainingPossible = other.possibleType.subtracting(other.definiteType)
+            if !other.definiteType.intersection(self.possibleType).isEmpty {
+                // Every instance of other is guaranteed to have a type accepted by us.
+                // In that case, we don't need to check anything else.
+            } else if !remainingPossible.isEmpty {
+                // If there is no definite overlap, then our possible type must be a superset
+                // of all the other's non-definite possible types.
+                guard self.possibleType.isSuperset(of: remainingPossible) else {
+                    return false
+                }
+            } else {
+                // If there is no definite overlap and no remaining possible types,
+                // then other is not accepted by us.
                 return false
             }
         }
@@ -582,8 +606,14 @@ public struct ILType: Hashable {
         guard symbolMethods.isSubset(of: other.symbolMethods) else {
             return false
         }
+        guard privateProperties.isSubset(of: other.privateProperties) else {
+            return false
+        }
+        guard privateMethods.isSubset(of: other.privateMethods) else {
+            return false
+        }
 
-        guard receiver == nil || (other.receiver != nil && receiver!.subsumes(other.receiver!))
+        guard receiver == nil || (other.receiver != nil && other.receiver!.subsumes(receiver!))
         else {
             return false
         }
@@ -601,6 +631,15 @@ public struct ILType: Hashable {
             iterableElementType == nil
                 || (other.iterableElementType != nil
                     && iterableElementType!.subsumes(other.iterableElementType!))
+        else {
+            return false
+        }
+
+        // Promise resolving type.
+        guard
+            self.ext?.promiseResolvingTo == nil
+                || (other.ext?.promiseResolvingTo != nil
+                    && self.ext!.promiseResolvingTo!.subsumes(other.ext!.promiseResolvingTo!))
         else {
             return false
         }
@@ -692,6 +731,16 @@ public struct ILType: Hashable {
         return ext?.isEnumeration ?? false
     }
 
+    public var isThenable: Bool {
+        return methods.contains("then")
+    }
+
+    public var mayBeThenable: Bool {
+        // The value is a thenable if it definitely has a "then" method (isThenable).
+        // Otherwise, if it can be an .object, it might have a "then" method (even if it's not listed in `methods`).
+        return isThenable || possibleType.contains(.object)
+    }
+
     public var isNamedString: Bool {
         return (Is(.string) && ext != nil && group != nil)
     }
@@ -702,6 +751,15 @@ public struct ILType: Hashable {
 
     public var iterableElementType: ILType? {
         return ext?.iterableElementType
+    }
+
+    /// In JavaScript, any value can be `await`ed.
+    /// This getter conceptually returns the `promiseResolvingTo` of this ILType.
+    /// 1. If we have strict metadata (e.g., from `Promise<.integer>`), we return it.
+    /// 2. If it is (or might be) a Thenable without metadata, we don't know what it resolves to (`.jsAnything`).
+    /// 3. If it's strictly a primitive, `await` returns the value itself (`self`).
+    public var promiseResolvingTo: ILType {
+        return ext?.promiseResolvingTo ?? (self.mayBeThenable ? .jsAnything : self)
     }
 
     public var exports: [String: ILType] {
@@ -766,10 +824,6 @@ public struct ILType: Hashable {
 
     public var wasmLabelType: WasmLabelType? {
         return wasmType as? WasmLabelType
-    }
-
-    public var isWasmLabelType: Bool {
-        return wasmTagType != nil
     }
 
     public var wasmReferenceType: WasmReferenceType? {
@@ -860,6 +914,30 @@ public struct ILType: Hashable {
         return ext?.symbolMethods.randomElement()
     }
 
+    public var privateProperties: Set<String> {
+        return ext?.privateProperties ?? Set()
+    }
+
+    public var privateMethods: Set<String> {
+        return ext?.privateMethods ?? Set()
+    }
+
+    public var numPrivateProperties: Int {
+        return ext?.privateProperties.count ?? 0
+    }
+
+    public var numPrivateMethods: Int {
+        return ext?.privateMethods.count ?? 0
+    }
+
+    public func randomPrivateProperty() -> String? {
+        return ext?.privateProperties.randomElement()
+    }
+
+    public func randomPrivateMethod() -> String? {
+        return ext?.privateMethods.randomElement()
+    }
+
     // Returns how many additional inputs an operation using this type will need
     // to "refine" the type. This value is 1 for indexed wasm-gc reference
     // types, zero otherwise.
@@ -880,6 +958,18 @@ public struct ILType: Hashable {
     // Returns the same type but "unpacks" .wasmPackedI8 and .wasmPackedI16 to .wasmi32.
     public func unpacked() -> ILType {
         return isPacked() ? .wasmi32 : self
+    }
+
+    // Returns the byte size of a numeric, vector, or packed Wasm storage type, or nil for reference types.
+    public var wasmByteSize: Int? {
+        switch self {
+        case .wasmPackedI8: return 1
+        case .wasmPackedI16: return 2
+        case .wasmi32, .wasmf32: return 4
+        case .wasmi64, .wasmf64: return 8
+        case .wasmSimd128: return 16
+        default: return nil
+        }
     }
 
     //
@@ -928,9 +1018,25 @@ public struct ILType: Hashable {
         let commonProperties = self.properties.intersection(other.properties)
         let commonMethods = self.methods.intersection(other.methods)
         let commonSymbolMethods = self.symbolMethods.intersection(other.symbolMethods)
+        let commonPrivateProperties = self.privateProperties.intersection(other.privateProperties)
+        let commonPrivateMethods = self.privateMethods.intersection(other.privateMethods)
         let signature = self.signature == other.signature ? self.signature : nil  // TODO: this is overly coarse, we could also see if one signature subsumes the other, then take the subsuming one.
-        let receiver =
+
+        // Note that the receiver is an input, so it is contravariant:
+        // Given:
+        // if (some_condition) {
+        //   var fct = Date.prototype.getDay;
+        // } else {
+        //   var fct = RegExp.prototype.compile;
+        // }
+        // After this merge point, valid receivers for `fct` are those types that are both a Date
+        // and a RegExp, which is the intersection (Date ∩ RegExp) which is bottom / .nothing.
+        // There simply is no type that can be used as a valid receiver in all cases.
+        // As .nothing is somewhat special in Fuzzilli, we unset the receiver type in such cases.
+        let receiverIntersection =
             other.receiver != nil ? self.receiver?.intersection(with: other.receiver!) : nil
+        let receiver = receiverIntersection != .nothing ? receiverIntersection : nil
+
         var group: String? = nil
         if self.group == other.group {
             group = self.group
@@ -964,14 +1070,27 @@ public struct ILType: Hashable {
             }
         }
 
+        let promiseResolvingTo: ILType?
+        // If both sides have strict resolving type metadata (e.g. `Promise<.integer> | Promise<.string>`),
+        // the union is `Promise<.integer | .string>`.
+        // We set promiseResolvingTo only for types which are surely Promises. If one side lacks it
+        // (e.g. `Promise<.integer> | .string`), the union is not a Promise, so we won't set the
+        // promiseResolvingTo field for it. Its `promiseResolvingTo` gracefully degrades to `.jsAnything`.
+        if let p1 = self.ext?.promiseResolvingTo, let p2 = other.ext?.promiseResolvingTo {
+            promiseResolvingTo = p1.union(with: p2)
+        } else {
+            promiseResolvingTo = nil
+        }
+
         return ILType(
             definiteType: definiteType, possibleType: possibleType,
             ext: TypeExtension(
                 group: group, properties: commonProperties, methods: commonMethods,
                 symbolMethods: commonSymbolMethods,
+                privateProperties: commonPrivateProperties, privateMethods: commonPrivateMethods,
                 signature: signature, wasmExt: wasmExt, receiver: receiver,
                 isEnumeration: isEnumeration, iterableElementType: iterableElementType,
-                exports: commonExports))
+                exports: commonExports, promiseResolvingTo: promiseResolvingTo))
     }
 
     public static func | (lhs: ILType, rhs: ILType) -> ILType {
@@ -1017,20 +1136,17 @@ public struct ILType: Hashable {
         // object with properties ["foo", "bar"] is an object with properties
         // ["foo", "bar"], as that is the "smaller" type, subsumed by the first.
         // The same rules apply for methods.
+
+        // However, the properties and methods are "open bounds". `.object(withProperties: ["foo"])`
+        // means it has at least a property `foo`, it doesn't mean that it doesn't have any other
+        // properties, so the intersection of an object with properties ["foo"] and an object with
+        // properties ["bar"] is an object with properties ["foo", "bar"].
         let properties = self.properties.union(other.properties)
-        guard properties.count == max(self.numProperties, other.numProperties) else {
-            return .nothing
-        }
-
         let methods = self.methods.union(other.methods)
-        guard methods.count == max(self.numMethods, other.numMethods) else {
-            return .nothing
-        }
-
         let symbolMethods = self.symbolMethods.union(other.symbolMethods)
-        guard symbolMethods.count == max(self.numSymbolMethods, other.numSymbolMethods) else {
-            return .nothing
-        }
+
+        let privateProperties = self.privateProperties.union(other.privateProperties)
+        let privateMethods = self.privateMethods.union(other.privateMethods)
 
         // Groups must either be equal or one of them must be nil, in which case
         // the result will have the non-nil group as that is again the smaller type.
@@ -1102,18 +1218,36 @@ public struct ILType: Hashable {
             iterableElementType = self.iterableElementType ?? other.iterableElementType
         }
 
-        var commonExports: [String: ILType] = [:]
+        var exports: [String: ILType] = [:]
         let selfExports = self.ext?.exports ?? [:]
         let otherExports = other.ext?.exports ?? [:]
         for (name, type) in selfExports {
             if let otherType = otherExports[name] {
-                commonExports[name] = type.intersection(with: otherType)
+                exports[name] = type.intersection(with: otherType)
             } else {
-                commonExports[name] = type
+                exports[name] = type
             }
         }
-        for (name, type) in otherExports where commonExports[name] == nil {
-            commonExports[name] = type
+        for (name, type) in otherExports where exports[name] == nil {
+            exports[name] = type
+        }
+
+        // Intersection means "a value that is simultaneously Type A and Type B".
+        // If we intersect `Promise<.integer>` with a generic `.object` supertype, the result
+        // must remain `Promise<.integer>`. Therefore, we must preserve `promiseResolvingTo`
+        // if one side has it. If both sides have it, we intersect them.
+
+        // We have already handled empty types like intersection(Promise<.integer>, .string)
+        // above, so we don't need to handle them here.
+        let promiseResolvingTo: ILType?
+        if let p1 = self.ext?.promiseResolvingTo, let p2 = other.ext?.promiseResolvingTo {
+            promiseResolvingTo = p1.intersection(with: p2)
+            if promiseResolvingTo == .nothing {
+                // The type is impossible, so return the empty type instead of Promise<.nothing>.
+                return .nothing
+            }
+        } else {
+            promiseResolvingTo = self.ext?.promiseResolvingTo ?? other.ext?.promiseResolvingTo
         }
 
         return ILType(
@@ -1121,9 +1255,11 @@ public struct ILType: Hashable {
             ext: TypeExtension(
                 group: group, properties: properties, methods: methods,
                 symbolMethods: symbolMethods,
+                privateProperties: privateProperties, privateMethods: privateMethods,
                 signature: signature, wasmExt: wasmExt, receiver: receiver,
                 isEnumeration: isEnumeration,
-                iterableElementType: iterableElementType, exports: commonExports))
+                iterableElementType: iterableElementType, exports: exports,
+                promiseResolvingTo: promiseResolvingTo))
     }
 
     public static func & (lhs: ILType, rhs: ILType) -> ILType {
@@ -1179,6 +1315,14 @@ public struct ILType: Hashable {
             return false
         }
 
+        // Merging promises with different resolving types is not allowed.
+        guard
+            self.ext?.promiseResolvingTo == nil || other.ext?.promiseResolvingTo == nil
+                || self.ext?.promiseResolvingTo == other.ext?.promiseResolvingTo
+        else {
+            return false
+        }
+
         return true
     }
 
@@ -1208,14 +1352,18 @@ public struct ILType: Hashable {
 
         let iterableElementType = self.iterableElementType ?? other.iterableElementType
 
+        let promiseResolvingTo = self.ext?.promiseResolvingTo ?? other.ext?.promiseResolvingTo
+
         // We just take the self.wasmExt as they have to be the same, see `canMerge`.
         let ext = TypeExtension(
             group: group, properties: self.properties.union(other.properties),
             methods: self.methods.union(other.methods),
             symbolMethods: self.symbolMethods.union(other.symbolMethods),
+            privateProperties: self.privateProperties.union(other.privateProperties),
+            privateMethods: self.privateMethods.union(other.privateMethods),
             signature: signature, wasmExt: wasmExt, receiver: receiver,
             isEnumeration: isEnumeration,
-            iterableElementType: iterableElementType)
+            iterableElementType: iterableElementType, promiseResolvingTo: promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: ext)
     }
 
@@ -1241,8 +1389,12 @@ public struct ILType: Hashable {
         var newProperties = properties
         newProperties.insert(property)
         let newExt = TypeExtension(
-            group: group, properties: newProperties, methods: methods, signature: signature,
-            wasmExt: wasmType, isEnumeration: isEnumeration)
+            group: group, properties: newProperties, methods: methods, symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
     }
 
@@ -1257,14 +1409,19 @@ public struct ILType: Hashable {
             return self
         }
 
-        // Deleting a property in JavaScript will remove it from either one, whereever it is present.
+        // Deleting a property in JavaScript will remove it from either one, wherever it is present.
         var newProperties = properties
         newProperties.remove(name)
         var newMethods = methods
         newMethods.remove(name)
         let newExt = TypeExtension(
-            group: group, properties: newProperties, methods: newMethods, signature: signature,
-            wasmExt: wasmType, isEnumeration: isEnumeration)
+            group: group, properties: newProperties, methods: newMethods,
+            symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
     }
 
@@ -1276,8 +1433,12 @@ public struct ILType: Hashable {
         var newMethods = methods
         newMethods.insert(method)
         let newExt = TypeExtension(
-            group: group, properties: properties, methods: newMethods, signature: signature,
-            wasmExt: wasmType, isEnumeration: isEnumeration)
+            group: group, properties: properties, methods: newMethods, symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
     }
 
@@ -1294,8 +1455,12 @@ public struct ILType: Hashable {
         var newMethods = methods
         newMethods.remove(method)
         let newExt = TypeExtension(
-            group: group, properties: properties, methods: newMethods, signature: signature,
-            wasmExt: wasmType, isEnumeration: isEnumeration)
+            group: group, properties: properties, methods: newMethods, symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
     }
 
@@ -1304,9 +1469,57 @@ public struct ILType: Hashable {
             return self
         }
         let newExt = TypeExtension(
-            group: group, properties: properties, methods: methods, signature: signature,
-            isEnumeration: isEnumeration)
+            group: group, properties: properties, methods: methods, symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
+    }
+
+    /// Returns a new type that represents this type with the added private property.
+    public func adding(privateProperty: String) -> ILType {
+        guard Is(.object()) else {
+            fatalError("Cannot add private property to non-object ILType")
+        }
+        var newPrivateProperties = privateProperties
+        newPrivateProperties.insert(privateProperty)
+        let newExt = TypeExtension(
+            group: group, properties: properties, methods: methods, symbolMethods: symbolMethods,
+            privateProperties: newPrivateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
+        return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
+    }
+
+    /// Adds a private property to this type.
+    public mutating func add(privateProperty: String) {
+        self = self.adding(privateProperty: privateProperty)
+    }
+
+    /// Returns a new ObjectType that represents this type with the added private method.
+    public func adding(privateMethod: String) -> ILType {
+        guard Is(.object()) else {
+            fatalError("Cannot add private method to non-object ILType")
+        }
+        var newPrivateMethods = privateMethods
+        newPrivateMethods.insert(privateMethod)
+        let newExt = TypeExtension(
+            group: group, properties: properties, methods: methods, symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: newPrivateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
+        return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
+    }
+
+    /// Adds a private method to this type.
+    public mutating func add(privateMethod: String) {
+        self = self.adding(privateMethod: privateMethod)
     }
 
     //
@@ -1425,6 +1638,26 @@ extension ILType: CustomStringConvertible {
                     params.append("withSymbolMethods: \(symbolMethods)")
                 }
             }
+            if !privateProperties.isEmpty {
+                if abbreviate && privateProperties.count > 5 {
+                    let selection = privateProperties.prefix(3).map { "\"\($0)\"" }
+                    params.append(
+                        "withPrivateProperties: [\(selection.joined(separator: ", ")), ...]")
+                } else {
+                    params.append("withPrivateProperties: \(privateProperties)")
+                }
+            }
+            if !privateMethods.isEmpty {
+                if abbreviate && privateMethods.count > 5 {
+                    let selection = privateMethods.prefix(3).map { "\"\($0)\"" }
+                    params.append("withPrivateMethods: [\(selection.joined(separator: ", ")), ...]")
+                } else {
+                    params.append("withPrivateMethods: \(privateMethods)")
+                }
+            }
+            if let target = ext?.promiseResolvingTo {
+                params.append("promiseResolvingTo: \(target.format(abbreviate: abbreviate))")
+            }
             return ".object(\(params.joined(separator: ", ")))"
         case .function:
             if let signature = functionSignature {
@@ -1473,11 +1706,13 @@ extension ILType: CustomStringConvertible {
             case .Abstract(let heapTypeInfo):
                 let sharedPrefix = heapTypeInfo.shared ? "shared " : ""
                 return ".wasmRef(.Abstract(\(nullPrefix)\(sharedPrefix)\(heapTypeInfo.heapType)))"
-            case .Index(let indexRef):
+            case .Index(let indexRef, let isExact):
+                let exactPrefix = isExact ? "exact " : ""
                 if let desc = indexRef.get() {
-                    return ".wasmRef(\(nullPrefix)Index \(desc.format(abbreviate: abbreviate)))"
+                    return
+                        ".wasmRef(\(nullPrefix)\(exactPrefix)Index \(desc.format(abbreviate: abbreviate)))"
                 }
-                return ".wasmRef(\(nullPrefix)Index)"
+                return ".wasmRef(\(nullPrefix)\(exactPrefix)Index)"
             }
         case .wasmFunctionDef:
             if let signature = wasmFunctionDefSignature {
@@ -1595,6 +1830,9 @@ struct BaseType: OptionSet, Hashable {
 
     static let jsModule = BaseType(rawValue: 1 << 29)
 
+    /// A type representing an error, such as an invalid or unowned reference, used to avoid crashing on invalid programs (e.g., during minimization).
+    static let error = BaseType(rawValue: 1 << 30)
+
     static let jsAnything = BaseType([
         .undefined, .integer, .float, .string, .boolean, .object, .function, .constructor,
         .unboundFunction, .bigint, .regexp, .iterable, .asyncIterable,
@@ -1610,7 +1848,7 @@ struct BaseType: OptionSet, Hashable {
         .unboundFunction, .bigint, .regexp, .iterable, .asyncIterable, .wasmf32, .wasmi32, .wasmf64,
         .wasmi64,
         .wasmRef, .wasmSimd128, .wasmTypeDef, .wasmFunctionDef, .jsLoopLabel, .jsBlockLabel,
-        .jsModule,
+        .jsModule, .error,
     ]
 }
 
@@ -1619,6 +1857,8 @@ class TypeExtension: Hashable {
     let properties: Set<String>
     let methods: Set<String>
     let symbolMethods: Set<String>
+    let privateProperties: Set<String>
+    let privateMethods: Set<String>
 
     // The group name. Basically each group is its own sub type of the object type.
     // (For now), there is no subtyping for group: if two objects have a different
@@ -1644,16 +1884,23 @@ class TypeExtension: Hashable {
     // Exports (name -> type). Will only be populated if isJsModule is true.
     let exports: [String: ILType]
 
+    // Used to identify the type a promise resolves to. Only set if the type is surely a promise.
+    let promiseResolvingTo: ILType?
+
     init?(
         group: String? = nil, properties: Set<String>, methods: Set<String>,
-        symbolMethods: Set<String> = [], signature: Signature?,
+        symbolMethods: Set<String> = [], privateProperties: Set<String> = [],
+        privateMethods: Set<String> = [], signature: Signature?,
         wasmExt: WasmTypeExtension? = nil, receiver: ILType? = nil, isEnumeration: Bool = false,
-        iterableElementType: ILType? = nil, exports: [String: ILType] = [:]
+        iterableElementType: ILType? = nil, exports: [String: ILType] = [:],
+        promiseResolvingTo: ILType? = nil
     ) {
         if group == nil && properties.isEmpty && methods.isEmpty && symbolMethods.isEmpty
+            && privateProperties.isEmpty && privateMethods.isEmpty
             && signature == nil
             && wasmExt == nil && receiver == nil && isEnumeration == false
             && iterableElementType == nil && exports.isEmpty
+            && promiseResolvingTo == nil
         {
             return nil
         }
@@ -1661,19 +1908,25 @@ class TypeExtension: Hashable {
         self.properties = properties
         self.methods = methods
         self.symbolMethods = symbolMethods
+        self.privateProperties = privateProperties
+        self.privateMethods = privateMethods
         self.group = group
         self.signature = signature
         self.wasmExt = wasmExt
         self.receiver = receiver
         self.isEnumeration = isEnumeration
-        self.iterableElementType = iterableElementType
+        // Normalize `iterableElementType`. An iterable of `.jsAnything` is treated as unparameterized.
+        self.iterableElementType = iterableElementType == .jsAnything ? nil : iterableElementType
         self.exports = exports
+        self.promiseResolvingTo = promiseResolvingTo
     }
 
     static func == (lhs: TypeExtension, rhs: TypeExtension) -> Bool {
         return lhs.properties == rhs.properties
             && lhs.methods == rhs.methods
             && lhs.symbolMethods == rhs.symbolMethods
+            && lhs.privateProperties == rhs.privateProperties
+            && lhs.privateMethods == rhs.privateMethods
             && lhs.group == rhs.group
             && lhs.signature == rhs.signature
             && lhs.wasmExt == rhs.wasmExt
@@ -1681,6 +1934,7 @@ class TypeExtension: Hashable {
             && lhs.isEnumeration == rhs.isEnumeration
             && lhs.iterableElementType == rhs.iterableElementType
             && lhs.exports == rhs.exports
+            && lhs.promiseResolvingTo == rhs.promiseResolvingTo
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -1688,12 +1942,15 @@ class TypeExtension: Hashable {
         hasher.combine(properties)
         hasher.combine(methods)
         hasher.combine(symbolMethods)
+        hasher.combine(privateProperties)
+        hasher.combine(privateMethods)
         hasher.combine(signature)
         hasher.combine(wasmExt)
         hasher.combine(receiver)
         hasher.combine(isEnumeration)
         hasher.combine(iterableElementType)
         hasher.combine(exports)
+        hasher.combine(promiseResolvingTo)
     }
 }
 
@@ -1875,19 +2132,21 @@ public class WasmTypeDefinition: WasmTypeExtension {
         return nil
     }
 
-    func getReferenceTypeTo(nullability: Bool) -> ILType {
+    func getReferenceTypeTo(nullability: Bool, isExact: Bool = false) -> ILType {
         assert(description != nil)
-        return .wasmIndexRef(description!, nullability: nullability)
+        return .wasmIndexRef(description!, nullability: nullability, isExact: isExact)
     }
 }
 
 // TODO: Add continuation types for core stack switching.
-// TODO: Add internal string type for JS string builtins.
 public enum WasmAbstractHeapType: CaseIterable, Comparable {
     // Note: The union, intersection, ... implementations are inspired by Binaryen's implementation,
     // so when extending the type system, feel free to use that implemenation as an orientation.
     // https://github.com/WebAssembly/binaryen/blob/main/src/wasm/wasm-type.cpp
     case WasmExtern
+    // WasmJSString is a wrapper around WasmExtern that we use to keep track
+    // of JS strings in Fuzzilli. It is not a specified type.
+    case WasmJSString
     case WasmFunc
     case WasmAny
     case WasmEq
@@ -1918,7 +2177,7 @@ public enum WasmAbstractHeapType: CaseIterable, Comparable {
 
     func getBottom() -> Self {
         switch self {
-        case .WasmExtern, .WasmNoExtern:
+        case .WasmExtern, .WasmJSString, .WasmNoExtern:
             return .WasmNoExtern
         case .WasmFunc, .WasmNoFunc:
             return .WasmNoFunc
@@ -1931,7 +2190,7 @@ public enum WasmAbstractHeapType: CaseIterable, Comparable {
 
     func getTop() -> Self {
         switch self {
-        case .WasmExtern, .WasmNoExtern:
+        case .WasmExtern, .WasmJSString, .WasmNoExtern:
             return .WasmExtern
         case .WasmFunc, .WasmNoFunc:
             return .WasmFunc
@@ -1969,7 +2228,9 @@ public enum WasmAbstractHeapType: CaseIterable, Comparable {
             .WasmEq
         case .WasmArray:
             .WasmAny
-        case .WasmExtern, .WasmFunc, .WasmExn, .WasmNone, .WasmNoExtern, .WasmNoFunc, .WasmNoExn:
+        case .WasmExtern, .WasmJSString:
+            .WasmExtern
+        case .WasmFunc, .WasmExn, .WasmNone, .WasmNoExtern, .WasmNoFunc, .WasmNoExn:
             fatalError("unhandled subtyping for a=\(a) b=\(b)")
         }
     }
@@ -2066,14 +2327,21 @@ public class WasmReferenceType: WasmTypeExtension {
         // leaks. The underlying WasmTypeDescription is always owned and kept alive by the
         // corresponding WasmTypeDefinition extension attached to the type of the operation
         // defining the wasm-gc type (and is kept alive by the JSTyper).
-        case Index(UnownedWasmTypeDescription = UnownedWasmTypeDescription())
+        case Index(UnownedWasmTypeDescription = UnownedWasmTypeDescription(), isExact: Bool = false)
         case Abstract(HeapTypeInfo)
+
+        public var isExact: Bool {
+            if case .Index(_, let exact) = self {
+                return exact
+            }
+            return false
+        }
 
         func topType() -> ILType {
             switch self {
             case .Abstract(let info):
                 return .wasmRef(info.heapType.getTop())
-            case .Index(let idx):
+            case .Index(let idx, _):
                 let desc = idx.get()!
                 return .wasmRef(desc.abstractHeapSupertype!.heapType.getTop())
             }
@@ -2081,18 +2349,19 @@ public class WasmReferenceType: WasmTypeExtension {
 
         func union(_ other: Self) -> Self? {
             switch self {
-            case .Index(let desc):
+            case .Index(let desc, let isExact):
                 switch other {
-                case .Index(let otherDesc):
+                case .Index(let otherDesc, let otherIsExact):
                     if desc.get() == nil || otherDesc.get() == nil {
-                        return .Index(.init())
+                        return .Index(.init(), isExact: isExact && otherIsExact)
                     }
 
                     let selfType = desc.get()!
                     let otherType = otherDesc.get()!
 
                     if let common = selfType.union(otherType) {
-                        return .Index(UnownedWasmTypeDescription(common))
+                        let resultIsExact = isExact && otherIsExact && selfType == otherType
+                        return .Index(UnownedWasmTypeDescription(common), isExact: resultIsExact)
                     }
 
                     if let abstract = selfType.abstractHeapSupertype,
@@ -2110,7 +2379,7 @@ public class WasmReferenceType: WasmTypeExtension {
                 }
             case .Abstract(let heapType):
                 switch other {
-                case .Index(let otherDesc):
+                case .Index(let otherDesc, _):
                     if let otherAbstract = otherDesc.get()?.abstractHeapSupertype,
                         let upperBound = heapType.union(otherAbstract)
                     {
@@ -2127,19 +2396,23 @@ public class WasmReferenceType: WasmTypeExtension {
 
         func intersection(_ other: Self) -> Self? {
             switch self {
-            case .Index(let desc):
+            case .Index(let desc, let isExact):
                 switch other {
-                case .Index(let otherDesc):
+                case .Index(let otherDesc, let otherIsExact):
+                    // If description is nil, this means it's an anyIndexRef.
                     guard let selfType = desc.get() else {
-                        return .Index(otherDesc)
+                        return .Index(otherDesc, isExact: isExact || otherIsExact)
                     }
 
                     guard let otherType = otherDesc.get() else {
-                        return .Index(desc)
+                        return .Index(desc, isExact: isExact || otherIsExact)
                     }
 
                     if let common = selfType.intersection(otherType) {
-                        return .Index(UnownedWasmTypeDescription(common))
+                        if isExact && common != selfType { return nil }
+                        if otherIsExact && common != otherType { return nil }
+                        let resultIsExact = isExact || otherIsExact
+                        return .Index(UnownedWasmTypeDescription(common), isExact: resultIsExact)
                     }
 
                     return nil
@@ -2152,7 +2425,7 @@ public class WasmReferenceType: WasmTypeExtension {
                 }
             case .Abstract(let heapType):
                 switch other {
-                case .Index(let otherDesc):
+                case .Index(let otherDesc, _):
                     if let otherAbstract = otherDesc.get()?.abstractHeapSupertype,
                         heapType.subsumes(otherAbstract)
                     {
@@ -2177,9 +2450,9 @@ public class WasmReferenceType: WasmTypeExtension {
 
     func isAbstract() -> Bool {
         switch self.kind {
-        case .Abstract(_):
+        case .Abstract:
             return true
-        case .Index(_):
+        case .Index:
             return false
         }
     }
@@ -2306,6 +2579,9 @@ public class WasmTableType: WasmTypeExtension {
     let isTable64: Bool
     let knownEntrySignatures: [ILType]
 
+    /// The address type of this table, i.e. the type of its indices and sizes.
+    var addrType: ILType { isTable64 ? .wasmi64 : .wasmi32 }
+
     override func isEqual(to other: WasmTypeExtension) -> Bool {
         guard let other = other as? WasmTableType else { return false }
         return self.elementType == other.elementType
@@ -2347,8 +2623,8 @@ public enum Parameter: Hashable {
     public static let regexp = Parameter.plain(.regexp)
     public static let iterable = Parameter.plain(.iterable())
     public static let asyncIterable = Parameter.plain(.asyncIterable())
-    public static let disposable = Parameter.plain(.disposable())
-    public static let asyncDisposable = Parameter.plain(.asyncDisposable())
+    public static let disposable = Parameter.plain(.disposable)
+    public static let asyncDisposable = Parameter.plain(.asyncDisposable)
     public static let jsAnything = Parameter.plain(.jsAnything)
     public static let number = Parameter.plain(.number)
     public static let primitive = Parameter.plain(.primitive)
@@ -2680,7 +2956,6 @@ class WasmTypeDescription: Hashable, CustomStringConvertible {
         sequence(first: self, next: { $0.concreteHeapSupertype })
     }
 
-    // TODO(gc): We will also need to support subtyping of struct and array types at some point.
     init(
         typeGroupIndex: Int, abstractHeapSupertype: HeapTypeInfo? = nil,
         concreteHeapSupertype: WasmTypeDescription? = nil, isFinal: Bool = false
@@ -2762,7 +3037,7 @@ class WasmSignatureTypeDescription: WasmTypeDescription {
 
     override func hasUnresolvedSelfReferences() -> Bool {
         for type in signature.parameterTypes + signature.outputTypes {
-            if case .Index(let target) = type.wasmReferenceType?.kind {
+            if case .Index(let target, _) = type.wasmReferenceType?.kind {
                 if target.get() == .selfReference {
                     return true
                 }
@@ -2776,6 +3051,13 @@ class WasmSignatureTypeDescription: WasmTypeDescription {
 class WasmArrayTypeDescription: WasmTypeDescription {
     var elementType: ILType
     let mutability: Bool
+    // The two "wasm:js-string" builtins `intoCharCodeArray()` and `fromCharCodeArray()` require
+    // a specifically typed array as a parameter. This array type must live in its own type group.
+    // We set the isCanonicalWasmPackedI16Array flag on type group finalization if the type group
+    // meets those specific constraints. We also have a code generator that generates this type group.
+    // Having the isCanonicalWasmPackedI16Array property on the type description allows the code
+    // generators of the two builtins to specify it as an input requirement.
+    var isCanonicalWasmPackedI16Array: Bool = false
 
     init(
         elementType: ILType, mutability: Bool, typeGroupIndex: Int,
@@ -2799,7 +3081,7 @@ class WasmArrayTypeDescription: WasmTypeDescription {
     }
 
     override func hasUnresolvedSelfReferences() -> Bool {
-        if case .Index(let target) = elementType.wasmReferenceType?.kind {
+        if case .Index(let target, _) = elementType.wasmReferenceType?.kind {
             return target.get() == .selfReference
         }
         return false
@@ -2823,11 +3105,15 @@ class WasmStructTypeDescription: WasmTypeDescription {
 
     let fields: [Field]
 
+    unowned var descriptor: WasmTypeDescription?
+    let describes: WasmTypeDescription?
+
     init(
         fields: [Field], typeGroupIndex: Int, concreteHeapSupertype: WasmTypeDescription? = nil,
-        isFinal: Bool = false
+        isFinal: Bool = false, describes: WasmTypeDescription? = nil
     ) {
         self.fields = fields
+        self.describes = describes
         // TODO(pawkra): support shared variant.
         super.init(
             typeGroupIndex: typeGroupIndex,
@@ -2848,14 +3134,30 @@ class WasmStructTypeDescription: WasmTypeDescription {
         return "\(abbreviated)[\(fields.map {$0.description}.joined(separator: ", "))]"
     }
 
-    override func hasUnresolvedSelfReferences() -> Bool {
+    private func hasUnresolvedSelfReferences(checkCustomDescriptors: Bool) -> Bool {
         for field in fields {
-            if case .Index(let target) = field.type.wasmReferenceType?.kind {
+            if case .Index(let target, _) = field.type.wasmReferenceType?.kind {
                 if target.get() == .selfReference {
                     return true
                 }
             }
         }
+        if checkCustomDescriptors {
+            if let desc = describes as? WasmStructTypeDescription,
+                desc.hasUnresolvedSelfReferences(checkCustomDescriptors: false)
+            {
+                return true
+            }
+            if let desc = descriptor as? WasmStructTypeDescription,
+                desc.hasUnresolvedSelfReferences(checkCustomDescriptors: false)
+            {
+                return true
+            }
+        }
         return false
+    }
+
+    override func hasUnresolvedSelfReferences() -> Bool {
+        return hasUnresolvedSelfReferences(checkCustomDescriptors: true)
     }
 }

@@ -1062,6 +1062,14 @@ struct LifterTests {
                 cls.addPrivateInstanceMethod("in", with: .parameters(n: 1)) { args in
                     let this = args[0]
                     b.callPrivateMethod("im", on: this)
+                    let _ = b.emit(
+                        CallPrivateMethodWithSpread(
+                            methodName: "im", numArguments: 2, spreads: [true, false],
+                            isGuarded: false), withInputs: [this, args[1], args[1]])
+                    let _ = b.emit(
+                        GetPrivateProperty(
+                            propertyName: "ifoo", isGuarded: true, isReceiverOptional: true),
+                        withInputs: [this])
                     b.updatePrivateProperty("ibar", of: this, with: args[1], using: .Add)
                 }
                 cls.addPrivateStaticProperty("sfoo")
@@ -1077,6 +1085,19 @@ struct LifterTests {
                     b.callPrivateMethod("sm", on: this)
                     b.updatePrivateProperty("sbar", of: this, with: args[1], using: .Add)
                 }
+                let _ = b.emit(BeginClassPrivateGetter(propertyName: "iget", isStatic: false))
+                b.doReturn(b.loadInt(1337))
+                b.emit(EndClassPrivateGetter())
+
+                let _ = b.emit(BeginClassPrivateSetter(propertyName: "iset", isStatic: false))
+                b.emit(EndClassPrivateSetter())
+
+                let _ = b.emit(BeginClassPrivateGetter(propertyName: "sget", isStatic: true))
+                b.doReturn(b.loadInt(1337))
+                b.emit(EndClassPrivateGetter())
+
+                let _ = b.emit(BeginClassPrivateSetter(propertyName: "sset", isStatic: true))
+                b.emit(EndClassPrivateSetter())
             }
             b.construct(C, withArgs: [b.loadInt(42)])
             b.reassign(variable: C, value: b.createNamedVariable(forBuiltin: "Uint8Array"))
@@ -1149,18 +1170,30 @@ struct LifterTests {
                     }
                     #in(a38) {
                         this.#im();
+                        this.#im(...a38, a38);
+                        try { this?.#ifoo; } catch (e) {}
                         this.#ibar += a38;
                     }
                     static #sfoo;
                     static #sbar = "baz";
                     static #sm() {
-                        const v41 = this.#sfoo;
-                        this.#sbar = v41;
-                        return v41;
+                        const v43 = this.#sfoo;
+                        this.#sbar = v43;
+                        return v43;
                     }
-                    static #sn(a43) {
+                    static #sn(a45) {
                         this.#sm();
-                        this.#sbar += a43;
+                        this.#sbar += a45;
+                    }
+                    get #iget() {
+                        return 1337;
+                    }
+                    set #iset(a50) {
+                    }
+                    static get #sget() {
+                        return 1337;
+                    }
+                    static set #sset(a54) {
                     }
                 }
                 new C7(42);
@@ -1558,6 +1591,48 @@ struct LifterTests {
         }
     }
 
+    @Test func testRegExpFlagOrder() {
+        // Regexp flags must be emitted in a fixed order.
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+
+            let b = fuzzer.makeBuilder()
+
+            // All flags except the unicodeSets flag, which is mutually exclusive with unicode.
+            let allButUnicodeSets: RegExpFlags = [
+                .hasIndices, .global, .caseInsensitive, .multiline, .dotall, .unicode, .sticky,
+            ]
+            b.loadRegExp("a", allButUnicodeSets)
+            b.loadRegExp(
+                "b",
+                [
+                    .hasIndices, .global, .caseInsensitive, .multiline, .dotall, .unicodeSets,
+                    .sticky,
+                ])
+            // Subsets, to make sure the order doesn't depend on which flags are present.
+            b.loadRegExp("c", [.sticky, .global])
+            b.loadRegExp("d", [.unicode, .caseInsensitive])
+            b.loadRegExp("e", RegExpFlags())
+
+            let program = b.finalize()
+
+            let actual = fuzzer.lifter.lift(program)
+            let expected = """
+                /a/dgimsuy;
+                /b/dgimsvy;
+                /c/gy;
+                /d/iu;
+                /e/;
+
+                """
+
+            #expect(actual == expected)
+
+            // The string representation must also round-trip back to the same flags.
+            #expect(RegExpFlags.fromString(allButUnicodeSets.asString()) == allButUnicodeSets)
+        }
+    }
+
     @Test func testNestedCodeStrings() {
         let fuzzer = makeMockFuzzer()
         fuzzer.sync {
@@ -1649,6 +1724,95 @@ struct LifterTests {
                 """
 
             #expect(actual == expected)
+        }
+    }
+
+    @Test func testFunctionDestructuringParametersLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let p1 = DestructuringPattern.ObjectPattern(
+                properties: [
+                    .init(key: .string("a"), target: .flatBinding, hasDefaultValue: false)
+                ],
+                hasRestElement: false)
+            let p2 = DestructuringPattern.ArrayPattern(
+                elements: [.init(target: .flatBinding, hasDefaultValue: false)], restTarget: nil)
+            let parameters = Parameters(
+                count: 3, hasRestParameter: true,
+                destructuringParameters: [0: .object(p1), 2: .array(p2)]
+            )
+
+            _ = b.buildPlainFunction(with: .parameters(parameters)) { args in
+                b.doReturn(args[0])
+            }
+
+            let program = b.finalize()
+            let actualJS = fuzzer.lifter.lift(program)
+
+            let expectedJS = """
+                function f0({a:a1}, a2, ...[a3]) {
+                    return a1;
+                }
+
+                """
+            #expect(actualJS == expectedJS)
+
+            let lifter = FuzzILLifter()
+            let actualFuzzIL = lifter.lift(program)
+            let expectedFuzzIL = """
+                v0 <- BeginPlainFunction -> {"a":v1}, v2, ...[v3]
+                    Return v1
+                EndPlainFunction
+
+                """
+            #expect(actualFuzzIL == expectedFuzzIL)
+        }
+    }
+
+    @Test func testMethodDestructuringParametersLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b2 = fuzzer.makeBuilder()
+
+            let p = DestructuringPattern.ObjectPattern(
+                properties: [
+                    .init(key: .string("x"), target: .flatBinding, hasDefaultValue: false),
+                    .init(key: .string("y"), target: .flatBinding, hasDefaultValue: false),
+                ],
+                hasRestElement: false)
+            let parameters2 = Parameters(
+                count: 1, hasRestParameter: false,
+                destructuringParameters: [0: .object(p)]
+            )
+            b2.buildObjectLiteral { obj in
+                obj.addMethod("destructMethod", with: .parameters(parameters2)) { params in
+                    b2.doReturn(params[1])
+                }
+            }
+            let program2 = b2.finalize()
+            let actualJS2 = fuzzer.lifter.lift(program2)
+            let expectedJS2 = """
+                const v3 = {
+                    destructMethod({x:a1,y:a2}) {
+                        return a1;
+                    },
+                };
+
+                """
+            #expect(actualJS2 == expectedJS2)
+            let lifter = FuzzILLifter()
+            let actualFuzzIL2 = lifter.lift(program2)
+            let expectedFuzzIL2 = """
+                BeginObjectLiteral
+                    BeginObjectLiteralMethod `destructMethod` -> v0, {"x":v1,"y":v2}
+                        Return v1
+                    EndObjectLiteralMethod
+                v3 <- EndObjectLiteral
+
+                """
+            #expect(actualFuzzIL2 == expectedFuzzIL2)
         }
     }
 
@@ -2191,10 +2355,7 @@ struct LifterTests {
             let i = b.loadInt(1337)
             let s = b.loadString("bar")
             let f = b.loadFloat(13.37)
-            var initialProperties = [String: Variable]()
-            initialProperties["foo"] = i
-            initialProperties["bar"] = f
-            let o = b.createObject(with: initialProperties)
+            let o = b.createObject(with: ["foo": i, "bar": f])
             let _ = b.deleteProperty("foo", of: o)
             let _ = b.deleteComputedProperty(s, of: o)
             let a = b.createArray(with: [
@@ -2206,7 +2367,7 @@ struct LifterTests {
             let actual = fuzzer.lifter.lift(program)
 
             let expected = """
-                const v3 = { bar: 13.37, foo: 1337 };
+                const v3 = { foo: 1337, bar: 13.37 };
                 delete v3.foo;
                 delete v3["bar"];
                 const t1 = [301,4,68,22];
@@ -2225,43 +2386,210 @@ struct LifterTests {
             let b = fuzzer.makeBuilder()
 
             let o = b.createNamedVariable(forBuiltin: "o")
-            let a = b.getProperty("a", of: o, guard: true)
-            b.getProperty("b", of: a, guard: true)
-            b.getElement(0, of: o, guard: true)
-            b.getComputedProperty(b.loadString("bar"), of: o, guard: true)
-            b.deleteProperty("unfoo", of: o, guard: true)
-            b.deleteElement(1, of: o, guard: true)
-            b.deleteComputedProperty(b.loadString("unbar"), of: o, guard: true)
+            // 1. optional only
+            let a = b.getProperty("a", of: o, isReceiverOptional: true)
+            // 2. optional
+            let _ = b.getProperty("b", of: a, isReceiverOptional: true)
+            // 3. basic load
+            let _ = b.getElement(0, of: o)
 
-            // Stores must never use the optional chaining operator on the left-hand side.
+            // Updates (only have guarded, not optional)
+            b.updateProperty("foo", of: o, with: b.loadInt(1), using: .Add, guard: true)
+            b.updateElement(0, of: o, with: b.loadInt(2), using: .Add, guard: true)
+            b.updateComputedProperty(
+                b.loadString("baz"), of: o, with: b.loadInt(3), using: .Add, guard: true)
+
+            // Stores (only have guarded, not optional)
             let v = b.loadInt(42)
-            let t1 = b.getProperty("t1", of: o, guard: true)
-            b.setProperty("foo", of: t1, to: v)
-            let t2 = b.getProperty("t2", of: o, guard: true)
-            b.setElement(0, of: t2, to: v)
-            let t3 = b.getProperty("t3", of: o, guard: true)
-            b.setComputedProperty(b.loadString("baz"), of: t3, to: v)
+            b.setProperty("bar", of: o, to: v, guard: true)
+            b.setElement(0, of: o, to: v, guard: true)
+            b.setComputedProperty(b.loadString("bar"), of: o, to: v, guard: true)
+
+            // Calls
+            let _ = b.callMethod("sayHi", on: o, guard: true, isReceiverOptional: true)
+            let _ = b.callMethod("sayBye", on: o, guard: true)
+            let _ = b.callMethod("sayNothing", on: o, isReceiverOptional: true)
+            let _ = b.callMethod("sayBoth", on: o, isReceiverOptional: true, isCallOptional: true)
+            let _ = b.callMethod("sayCallOnly", on: o, isCallOptional: true)
+            let _ = b.callComputedMethod(
+                b.loadString("compMethod"), on: o, isReceiverOptional: true)
+            let _ = b.callComputedMethod(
+                b.loadString("compBoth"), on: o, isReceiverOptional: true, isCallOptional: true)
+            let _ = b.callComputedMethod(b.loadString("compCallOnly"), on: o, isCallOptional: true)
+
+            // Double chaining (pure optional, no guards to prevent inlining)
+            let a2 = b.getProperty("a2", of: o, isReceiverOptional: true)
+            let _ = b.getProperty("b2", of: a2, isReceiverOptional: true)
+
+            // Exhaustive computed / optional reads and deletes
+            b.getComputedProperty(b.loadString("bar"), of: o, isReceiverOptional: true)
+            b.deleteProperty("unfoo", of: o, isReceiverOptional: true)
+            b.deleteElement(1, of: o, isReceiverOptional: true)
+            b.deleteComputedProperty(b.loadString("unbar"), of: o, isReceiverOptional: true)
 
             let program = b.finalize()
-
             let actual = fuzzer.lifter.lift(program)
+
             let expected = """
                 o?.a?.b;
-                o?.[0];
+                o[0];
+                try { o.foo += 1; } catch (e) {}
+                try { o[0] += 2; } catch (e) {}
+                try { o["baz"] += 3; } catch (e) {}
+                try { o.bar = 42; } catch (e) {}
+                try { o[0] = 42; } catch (e) {}
+                try { o["bar"] = 42; } catch (e) {}
+                try { o?.sayHi(); } catch (e) {}
+                try { o.sayBye(); } catch (e) {}
+                o?.sayNothing();
+                o?.sayBoth?.();
+                o.sayCallOnly?.();
+                o?.["compMethod"]();
+                o?.["compBoth"]?.();
+                o["compCallOnly"]?.();
+                o?.a2?.b2;
                 o?.["bar"];
                 delete o?.unfoo;
                 delete o?.[1];
                 delete o?.["unbar"];
-                const t0 = o?.t1;
-                t0.foo = 42;
-                const t8 = o?.t2;
-                t8[0] = 42;
-                const t10 = o?.t3;
-                t10["baz"] = 42;
 
                 """
 
             #expect(actual == expected)
+        }
+    }
+
+    @Test func testUnboundFunctionCallAndApplyLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let f = b.createNamedVariable(forBuiltin: "f")
+            let receiver = b.createNamedVariable(forBuiltin: "receiver")
+            let arg = b.loadInt(42)
+
+            b.callMethod("call", on: f, withArgs: [receiver, arg], isReceiverOptional: true)
+            b.callMethod(
+                "apply", on: f, withArgs: [receiver, b.createArray(with: [arg])],
+                isReceiverOptional: true)
+
+            let program = b.finalize()
+            let actual = fuzzer.lifter.lift(program)
+            let expected = """
+                f?.call(receiver, 42);
+                f?.apply(receiver, [42]);
+
+                """
+            #expect(actual == expected)
+        }
+    }
+
+    @Test func testAllOptionalAndGuardedCombinationsLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            for isGuarded in [false, true] {
+                for isReceiverOptional in [false, true] {
+                    for isCallOptional in [false, true] {
+                        let b = fuzzer.makeBuilder()
+                        let o = b.createNamedVariable(forBuiltin: "obj")
+                        let f = b.createNamedVariable(forBuiltin: "fn")
+                        let prop = b.loadString("k")
+
+                        b.callMethod(
+                            "m", on: o, guard: isGuarded,
+                            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+                        b.callMethod(
+                            "s", on: o, withArgs: [o], spreading: [true], guard: isGuarded,
+                            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+                        b.callComputedMethod(
+                            prop, on: o, guard: isGuarded,
+                            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+
+                        if isReceiverOptional {
+                            b.callFunction(f, guard: isGuarded, isCallOptional: isCallOptional)
+                            b.callFunction(
+                                f, withArgs: [o], spreading: [true], guard: isGuarded,
+                                isCallOptional: isCallOptional)
+                        }
+
+                        let superCls = b.buildClassDefinition { cls in
+                            cls.addInstanceMethod("superM", with: .parameters(n: 0)) { _ in }
+                        }
+                        let subCls = b.buildClassDefinition(withSuperclass: superCls) { cls in
+                            cls.addPrivateInstanceProperty("privProp")
+                            cls.addPrivateInstanceMethod("privM", with: .parameters(n: 0)) { _ in }
+
+                            cls.addInstanceMethod("testMethod", with: .parameters(n: 0)) { args in
+                                let this = args[0]
+                                b.callPrivateMethod(
+                                    "privM", on: this, guard: isGuarded,
+                                    isReceiverOptional: isReceiverOptional,
+                                    isCallOptional: isCallOptional)
+                                if isReceiverOptional {
+                                    b.callSuperMethod(
+                                        "superM", guard: isGuarded, isCallOptional: isCallOptional)
+                                }
+                                if isCallOptional {
+                                    b.getPrivateProperty(
+                                        "privProp", of: this, guard: isGuarded,
+                                        isReceiverOptional: isReceiverOptional)
+                                }
+                            }
+                        }
+
+                        let dot = isReceiverOptional ? "?." : "."
+                        let callSuffix = isCallOptional ? "?.()" : "()"
+                        let spreadSuffix = isCallOptional ? "?.(...obj)" : "(...obj)"
+                        let compPrefix = isReceiverOptional ? "obj?.[\"k\"]" : "obj[\"k\"]"
+
+                        func wrapGuard(_ stmt: String) -> String {
+                            isGuarded ? "try { \(stmt); } catch (e) {}" : "\(stmt);"
+                        }
+
+                        var expectedLines = [
+                            wrapGuard("obj\(dot)m\(callSuffix)"),
+                            wrapGuard("obj\(dot)s\(spreadSuffix)"),
+                            wrapGuard("\(compPrefix)\(callSuffix)"),
+                        ]
+
+                        if isReceiverOptional {
+                            expectedLines.append(wrapGuard("fn\(callSuffix)"))
+                            expectedLines.append(wrapGuard("fn\(spreadSuffix)"))
+                        }
+
+                        var classBodyLines = [
+                            wrapGuard("this\(dot)#privM\(callSuffix)")
+                        ]
+                        if isReceiverOptional {
+                            classBodyLines.append(wrapGuard("super.superM\(callSuffix)"))
+                        }
+                        if isCallOptional {
+                            classBodyLines.append(wrapGuard("this\(dot)#privProp"))
+                        }
+
+                        let indentedBody =
+                            classBodyLines.map { "        \($0)" }.joined(separator: "\n")
+                        let superName = "C\(superCls.number)"
+                        let subName = "C\(subCls.number)"
+                        let expected = """
+                            \(expectedLines.joined(separator: "\n"))
+                            class \(superName) {
+                                superM() {
+                                }
+                            }
+                            class \(subName) extends \(superName) {
+                                #privProp;
+                                #privM() {
+                                }
+                                testMethod() {
+                            \(indentedBody)
+                                }
+                            }
+
+                            """
+                        #expect(fuzzer.lifter.lift(b.finalize()) == expected)
+                    }
+                }
+            }
         }
     }
 
@@ -2719,7 +3047,8 @@ struct LifterTests {
             for name in ["???", "0", "01", "1", "0.1", "-1", "$valid_id_42", "42_invalid_id"] {
                 b.setProperty(name, of: obj, to: b.getProperty(name, of: obj))
                 b.updateProperty(
-                    name, of: obj, with: b.getProperty(name, of: obj, guard: true), using: .Add)
+                    name, of: obj, with: b.getProperty(name, of: obj, isReceiverOptional: true),
+                    using: .Add)
                 b.deleteProperty(name, of: obj)
             }
 
@@ -2976,7 +3305,7 @@ struct LifterTests {
             let actual = fuzzer.lifter.lift(program)
 
             let expected = """
-                const v2 = { bar: 13.37, foo: 42 };
+                const v2 = { foo: 42, bar: 13.37 };
                 let {"foo":v3,...v4} = v2;
                 let {"foo":v5,"bar":v6,...v7} = v2;
                 let {...v8} = v2;
@@ -3003,7 +3332,7 @@ struct LifterTests {
             let actual = fuzzer.lifter.lift(program)
 
             let expected = """
-                const v2 = { 123: 13.37, "foo-bar": 42 };
+                const v2 = { "foo-bar": 42, 123: 13.37 };
                 let {"foo-bar":v3,...v4} = v2;
                 let {"foo-bar":v5,"123":v6} = v2;
 
@@ -3036,7 +3365,7 @@ struct LifterTests {
                 let v0 = 42;
                 let v1 = 13.37;
                 let v2 = "Hello";
-                const v3 = { bar: v1, foo: v0 };
+                const v3 = { foo: v0, bar: v1 };
                 ({"foo":v2,...v0} = v3);
                 ({"foo":v2,"bar":v0,...v1} = v3);
                 ({...v2} = v3);
@@ -4605,7 +4934,7 @@ struct LifterTests {
                 // Note that index types use generic .Index() descriptions without a type
                 // description (as the operation doesn't know its inputs).
                 let arrayOfArrayi32 = b.wasmDefineArrayType(
-                    elementType: .wasmRef(.Index(), nullability: true),
+                    elementType: .anyIndexRef,
                     mutability: false,
                     indexType: forwardReference)
                 let arrayi32 = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
@@ -4623,9 +4952,9 @@ struct LifterTests {
                         fields: [
                             // Note that index types use generic .Index() descriptions without a type
                             // description (as the operation doesn't know its inputs).
-                            .init(type: .wasmRef(.Index(), nullability: false), mutability: false),
+                            .init(type: .anyNonNullableIndexRef, mutability: false),
                             .init(type: .wasmi32, mutability: true),
-                            .init(type: .wasmRef(.Index(), nullability: true), mutability: true),
+                            .init(type: .anyIndexRef, mutability: true),
                         ],
                         indexTypes: [typeGroupArray[0], selfReference])
                 ]
@@ -5113,6 +5442,121 @@ struct LifterTests {
         }
     }
 
+    @Test func testObjectLiteralAsyncAndGeneratorMethodLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let comp = b.loadString("comp")
+
+            b.buildObjectLiteral { obj in
+                obj.addMethod("gen", with: .parameters(n: 0), isGenerator: true) { args in }
+                obj.addMethod("asyncMeth", with: .parameters(n: 0), isAsync: true) { args in }
+                obj.addMethod("asyncGen", with: .parameters(n: 0), isGenerator: true, isAsync: true)
+                { args in }
+                obj.addComputedMethod(comp, with: .parameters(n: 0), isGenerator: true) { args in }
+                obj.addComputedMethod(comp, with: .parameters(n: 0), isAsync: true) { args in }
+                obj.addComputedMethod(
+                    comp, with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+            }
+
+            let program = b.finalize()
+            let actual = fuzzer.lifter.lift(program)
+
+            let expected = """
+                const v7 = {
+                    *gen() {
+                    },
+                    async asyncMeth() {
+                    },
+                    async *asyncGen() {
+                    },
+                    *["comp"]() {
+                    },
+                    async ["comp"]() {
+                    },
+                    async *["comp"]() {
+                    },
+                };
+
+                """
+
+            #expect(actual == expected)
+        }
+    }
+
+    @Test func testClassDefinitionAsyncAndGeneratorMethodLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let comp = b.loadString("comp")
+
+            b.buildClassDefinition { cls in
+                cls.addInstanceMethod("gen", with: .parameters(n: 0), isGenerator: true) { args in }
+                cls.addInstanceMethod("asyncMeth", with: .parameters(n: 0), isAsync: true) { args in
+                }
+                cls.addInstanceMethod(
+                    "asyncGen", with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+                cls.addStaticMethod("staticGen", with: .parameters(n: 0), isGenerator: true) {
+                    args in
+                }
+                cls.addStaticMethod("staticAsync", with: .parameters(n: 0), isAsync: true) { args in
+                }
+                cls.addStaticMethod(
+                    "staticAsyncGen", with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+                cls.addPrivateInstanceMethod("privGen", with: .parameters(n: 0), isGenerator: true)
+                { args in }
+                cls.addPrivateInstanceMethod("privAsync", with: .parameters(n: 0), isAsync: true) {
+                    args in
+                }
+                cls.addPrivateInstanceMethod(
+                    "privAsyncGen", with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+                cls.addInstanceComputedMethod(
+                    comp, with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+                cls.addStaticComputedMethod(
+                    comp, with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+            }
+
+            let program = b.finalize()
+            let actual = fuzzer.lifter.lift(program)
+
+            let expected = """
+                class C1 {
+                    *gen() {
+                    }
+                    async asyncMeth() {
+                    }
+                    async *asyncGen() {
+                    }
+                    static *staticGen() {
+                    }
+                    static async staticAsync() {
+                    }
+                    static async *staticAsyncGen() {
+                    }
+                    *#privGen() {
+                    }
+                    async #privAsync() {
+                    }
+                    async *#privAsyncGen() {
+                    }
+                    async *["comp"]() {
+                    }
+                    static async *["comp"]() {
+                    }
+                }
+
+                """
+
+            #expect(actual == expected)
+        }
+    }
+
     @Test func testClassConstructorDefaultParameterLifting() {
         let fuzzer = makeMockFuzzer()
         fuzzer.sync {
@@ -5254,7 +5698,7 @@ struct LifterTests {
                 \(JavaScriptLifter.wasmProxyPrefix)
                 const v0 = new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array([
                     0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
-                ])), fuzzing_imports);
+                ]), { builtins: ['js-string'] }), fuzzing_imports);
 
                 """
 
@@ -5674,6 +6118,15 @@ struct LifterTests {
                     hasRestElement: false))
             b.destruct(v2, using: p6, into: [])
 
+            // ({foo: obj.#priv} = obj) and with an inlined non-identifier target
+            let p7 = DestructuringPattern.object(
+                .init(
+                    properties: [.init(key: .string("foo"), target: .privateProperty("priv"))],
+                    hasRestElement: false))
+            b.destruct(v2, using: p7, into: [v2])
+            let v4 = b.binary(v2, v3, with: .LogicOr)
+            b.destruct(v2, using: p7, into: [v4])
+
             let program = b.finalize()
             let actual = fuzzer.lifter.lift(program)
 
@@ -5686,6 +6139,61 @@ struct LifterTests {
                 ({"foo":v2["Hello"]} = v2);
                 ({"foo":super.prop} = v2);
                 ({"foo":super[0]} = v2);
+                ({"foo":v2.#priv} = v2);
+                const t9 = v2 || v3;
+                ({"foo":t9.#priv} = v2);
+
+                """
+            #expect(actual == expected)
+        }
+    }
+
+    @Test func testLiftingAvoidsIdentifierCollisions() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let f = b.buildPlainFunction(with: .parameters(n: 1)) { args in
+                b.createNamedDisposableVariable("C3", args[0])
+            }
+            let cls = b.buildClassDefinition { _ in }
+            b.buildConstructor(with: .parameters(n: 0)) { _ in }
+            let gen = b.buildGeneratorFunction(with: .parameters(n: 0)) { _ in }
+            b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                b.createNamedAsyncDisposableVariable("f6", f)
+            }
+            let instance = b.construct(f)
+            b.createNamedVariable("v9", declarationMode: .const, initialValue: instance)
+            b.createNamedVariable("a1", declarationMode: .let, initialValue: cls)
+            b.buildPlainFunction(with: .parameters(n: 0), named: "F4") { _ in }
+            b.buildGeneratorFunction(with: .parameters(n: 0), named: "f7") { _ in }
+            b.createNamedVariable("f0", declarationMode: .var, initialValue: gen)
+
+            let program = b.finalize()
+            let actual = fuzzer.lifter.lift(program)
+
+            let expected = """
+                function f0_(a1_) {
+                    using C3 = a1_;
+                }
+                class C3_ {
+                }
+                function F4_() {
+                    if (!new.target) { throw 'must be called with new'; }
+                }
+                function* f6_() {
+                }
+                async function f7_() {
+                    await using f6 = f0_;
+                }
+                const v9_ = new f0_();
+                const v9 = v9_;
+                let a1 = C3_;
+                function F4() {
+                }
+                function* f7() {
+                }
+                var f0 = f6_;
 
                 """
             #expect(actual == expected)

@@ -17,6 +17,19 @@ import Testing
 @testable import Fuzzilli
 
 struct ProgramBuilderTests {
+    @Test func testConstructorTypeGenerationForAllGroups() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            for groupName in b.fuzzer.environment.allObjectGroupNames {
+                let requiredType = ILType.constructor() + .object(ofGroup: groupName)
+                if let variable = b.maybeGenerateConstructorAsPath(requiredType) {
+                    #expect(b.type(of: variable).Is(requiredType))
+                }
+            }
+        }
+    }
+
     // Verify that program building doesn't crash and always produce valid programs.
     @Test func testBuilding() {
         let fuzzer = makeMockFuzzer()
@@ -252,7 +265,8 @@ struct ProgramBuilderTests {
         // This API will always return a variable for which `type(of: v).Is(requestedType)` is true,
         // i.e. for which we can statically infer that the variable has the requested type.
 
-        let fuzzer = makeMockFuzzer()
+        let env = JavaScriptEnvironment(additionalBuiltins: ["theNumber": .number])
+        let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
 
@@ -280,7 +294,6 @@ struct ProgramBuilderTests {
             let _ = b.finalize()
 
             let n = b.createNamedVariable(forBuiltin: "theNumber")
-            b.setType(ofVariable: n, to: .number)
             #expect(b.type(of: n) == .number)
             #expect(b.randomVariable(ofType: .integer) == nil)
             #expect(b.randomVariable(ofType: .string) == nil)
@@ -3210,7 +3223,7 @@ struct ProgramBuilderTests {
                 [
                     b.wasmDefineArrayType(elementType: .wasmi32, mutability: true),
                     b.wasmDefineStructType(
-                        fields: [.init(type: .wasmi64, mutability: false)], indexTypes: []),
+                        fields: [.init(type: .wasmi64, mutability: false)]),
                 ]
             }
             let arrayDefI32 = typeGroupA[0]
@@ -3236,8 +3249,8 @@ struct ProgramBuilderTests {
                 wasmModule.addWasmFunction(with: [.wasmi32] => []) { function, label, args in
                     let arrayI32 = function.wasmArrayNewFixed(arrayType: arrayDefI32, elements: [])
                     let arrayI32Type = b.type(of: arrayI32)
-                    #expect(arrayI32Type.Is(.wasmRef(.Index(), nullability: true)))
-                    #expect(arrayI32Type.Is(.wasmRef(.Index(), nullability: false)))
+                    #expect(arrayI32Type.Is(.anyIndexRef))
+                    #expect(arrayI32Type.Is(.anyNonNullableIndexRef))
                     #expect(arrayI32Type.Is(.wasmRef(.WasmArray, nullability: true)))
                     #expect(arrayI32Type.Is(.wasmRef(.WasmArray, nullability: false)))
                     #expect(arrayI32Type.Is(.wasmRef(.WasmEq, nullability: true)))
@@ -3261,8 +3274,8 @@ struct ProgramBuilderTests {
 
                     let structVar = function.wasmStructNewDefault(structType: structDef)
                     let structType = b.type(of: structVar)
-                    #expect(structType.Is(.wasmRef(.Index(), nullability: true)))
-                    #expect(structType.Is(.wasmRef(.Index(), nullability: false)))
+                    #expect(structType.Is(.anyIndexRef))
+                    #expect(structType.Is(.anyNonNullableIndexRef))
                     #expect(structType.Is(.wasmRef(.WasmStruct, nullability: false)))
                     #expect(structType.Is(.wasmRef(.WasmEq, nullability: false)))
                     #expect(structType.Is(.wasmRef(.WasmAny, nullability: false)))
@@ -3278,7 +3291,7 @@ struct ProgramBuilderTests {
 
                     let i31 = function.wasmRefI31(function.consti32(42))
                     let i31Type = b.type(of: i31)
-                    #expect(!i31Type.Is(.wasmRef(.Index(), nullability: true)))
+                    #expect(!i31Type.Is(.anyIndexRef))
                     #expect(i31Type.Is(.wasmRef(.WasmEq, nullability: false)))
                     #expect(i31Type.Is(.wasmRef(.WasmAny, nullability: false)))
                     #expect(!i31Type.Is(.wasmRef(.WasmArray, nullability: false)))
@@ -3314,15 +3327,25 @@ struct ProgramBuilderTests {
 
             b.wasmDefineTypeGroup {
                 let baseStruct = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmi32, mutability: false)], indexTypes: [])
+                    fields: [.init(type: .wasmi32, mutability: false)])
                 let subStruct = b.generateSubtype(for: baseStruct)
 
                 let baseArray = b.wasmDefineArrayType(
-                    elementType: ILType.wasmRef(.Index(), nullability: true), mutability: false,
+                    elementType: ILType.anyIndexRef, mutability: false,
                     indexType: baseStruct)
 
+                let abstractBaseArray = b.wasmDefineArrayType(
+                    elementType: ILType.wasmRef(.WasmAny, nullability: true), mutability: false)
+
                 let subArrays = (0..<20).map { _ in b.generateSubtype(for: baseArray) }
+                let subAbstractArrays = (0..<20).map { _ in
+                    b.generateSubtype(for: abstractBaseArray)
+                }
+
                 let subArraysTypeDescriptions = subArrays.map {
+                    b.type(of: $0).wasmTypeDefinition!.description as! WasmArrayTypeDescription
+                }
+                let subAbstractArraysTypeDescriptions = subAbstractArrays.map {
                     b.type(of: $0).wasmTypeDefinition!.description as! WasmArrayTypeDescription
                 }
 
@@ -3331,6 +3354,12 @@ struct ProgramBuilderTests {
                         $0.concreteHeapSupertype
                             == b.type(of: baseArray).wasmTypeDefinition?.description
                     })
+                #expect(
+                    subAbstractArraysTypeDescriptions.allSatisfy {
+                        $0.concreteHeapSupertype
+                            == b.type(of: abstractBaseArray).wasmTypeDefinition?.description
+                    })
+
                 #expect(subArraysTypeDescriptions.allSatisfy { !$0.mutability })
                 #expect(
                     subArraysTypeDescriptions.contains {
@@ -3341,25 +3370,215 @@ struct ProgramBuilderTests {
                         $0.elementType.wasmReferenceType?.nullability == false
                     })
 
+                #expect(subAbstractArraysTypeDescriptions.allSatisfy { !$0.mutability })
+                #expect(
+                    subAbstractArraysTypeDescriptions.contains {
+                        $0.elementType.wasmReferenceType?.nullability == true
+                    })
+                #expect(
+                    subAbstractArraysTypeDescriptions.contains {
+                        $0.elementType.wasmReferenceType?.nullability == false
+                    })
+
                 let baseStructDesc = b.type(of: baseStruct).wasmTypeDefinition!.description!
                 let subStructDesc = b.type(of: subStruct).wasmTypeDefinition!.description!
 
                 #expect(
                     subArraysTypeDescriptions.contains {
-                        if case .Index(let target) = $0.elementType.wasmReferenceType?.kind {
+                        if case .Index(let target, _) = $0.elementType.wasmReferenceType?.kind {
                             return target.get() == subStructDesc
                         }
                         return false
                     })
                 #expect(
                     subArraysTypeDescriptions.contains {
-                        if case .Index(let target) = $0.elementType.wasmReferenceType?.kind {
+                        if case .Index(let target, _) = $0.elementType.wasmReferenceType?.kind {
                             return target.get() == baseStructDesc
                         }
                         return false
                     })
 
-                return [baseStruct, subStruct, baseArray] + subArrays
+                #expect(
+                    subAbstractArraysTypeDescriptions.contains {
+                        $0.elementType.wasmReferenceType?.isAbstract() == true
+                    })
+                #expect(
+                    subAbstractArraysTypeDescriptions.contains {
+                        $0.elementType.wasmReferenceType?.isAbstract() == false
+                    })
+
+                return [baseStruct, subStruct, baseArray, abstractBaseArray] + subArrays
+                    + subAbstractArrays
+            }
+        }
+    }
+
+    @Test func testWasmStructSubtypeGeneration() {
+        let env = JavaScriptEnvironment()
+        let config = Configuration(logLevel: .error)
+        let fuzzer = makeMockFuzzer(config: config, environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            b.wasmDefineTypeGroup { () -> [Variable] in
+                let innerStruct = b.wasmDefineStructType(
+                    fields: [.init(type: .wasmi32, mutability: false)])
+                let subInnerStruct = b.generateSubtype(for: innerStruct)
+                let outerStruct = b.wasmDefineStructType(
+                    fields: [
+                        .init(type: ILType.anyIndexRef, mutability: false),
+                        .init(type: ILType.wasmRef(.WasmAny, nullability: true), mutability: false),
+                    ],
+                    indexTypes: [innerStruct])
+
+                let subOuterStructs = (0..<20).map { _ in b.generateSubtype(for: outerStruct) }
+                let subOuterStructsTypeDescriptions = subOuterStructs.map {
+                    b.type(of: $0).wasmTypeDefinition!.description as! WasmStructTypeDescription
+                }
+
+                #expect(
+                    subOuterStructsTypeDescriptions.allSatisfy {
+                        $0.concreteHeapSupertype
+                            == b.type(of: outerStruct).wasmTypeDefinition?.description
+                    })
+
+                // Width subtyping
+                #expect(subOuterStructsTypeDescriptions.contains { $0.fields.count == 2 })
+                #expect(subOuterStructsTypeDescriptions.contains { $0.fields.count > 2 })
+
+                // Depth subtyping
+                let innerStructDesc = b.type(of: innerStruct).wasmTypeDefinition!.description!
+                let subInnerStructDesc = b.type(of: subInnerStruct).wasmTypeDefinition!.description!
+
+                #expect(
+                    subOuterStructsTypeDescriptions.contains {
+                        if case .Index(let target, _) = $0.fields[0].type.wasmReferenceType?.kind {
+                            return target.get() == subInnerStructDesc
+                        }
+                        return false
+                    })
+                #expect(
+                    subOuterStructsTypeDescriptions.contains {
+                        if case .Index(let target, _) = $0.fields[0].type.wasmReferenceType?.kind {
+                            return target.get() == innerStructDesc
+                        }
+                        return false
+                    })
+
+                #expect(
+                    subOuterStructsTypeDescriptions.contains {
+                        $0.fields[1].type.wasmReferenceType?.isAbstract() == true
+                    })
+                #expect(
+                    subOuterStructsTypeDescriptions.contains {
+                        $0.fields[1].type.wasmReferenceType?.isAbstract() == false
+                    })
+
+                return [innerStruct, subInnerStruct, outerStruct] + subOuterStructs
+            }
+        }
+    }
+
+    @Test func testWasmSignatureSubtypeGeneration() {
+        let env = JavaScriptEnvironment()
+        let config = Configuration(logLevel: .error)
+        let fuzzer = makeMockFuzzer(config: config, environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            b.wasmDefineTypeGroup { () -> [Variable] in
+                let structType = b.wasmDefineStructType(
+                    fields: [.init(type: .wasmi32, mutability: false)])
+                let subStructType = b.generateSubtype(for: structType)
+                let baseSignatureType = b.wasmDefineSignatureType(
+                    signature: [
+                        ILType.anyIndexRef,
+                        ILType.wasmRef(.WasmEq, nullability: true),
+                    ] => [
+                        ILType.anyIndexRef,
+                        ILType.wasmRef(.WasmAny, nullability: true),
+                    ],
+                    indexTypes: [subStructType, structType])
+
+                let subSignatureTypes = (0..<20).map { _ in
+                    b.generateSubtype(for: baseSignatureType)
+                }
+                let subSignatureTypeDescriptions = subSignatureTypes.map {
+                    b.type(of: $0).wasmTypeDefinition!.description as! WasmSignatureTypeDescription
+                }
+
+                #expect(
+                    subSignatureTypeDescriptions.allSatisfy {
+                        $0.concreteHeapSupertype
+                            == b.type(of: baseSignatureType).wasmTypeDefinition?.description
+                    })
+
+                let structTypeDescription = b.type(of: structType).wasmTypeDefinition!.description!
+                let subStructTypeDescription = b.type(of: subStructType).wasmTypeDefinition!
+                    .description!
+
+                // Parameters are contravariant
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        if case .Index(let target, _) = $0.signature.parameterTypes[0]
+                            .wasmReferenceType?.kind
+                        {
+                            return target.get() == structTypeDescription
+                        }
+                        return false
+                    })
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        if case .Index(let target, _) = $0.signature.parameterTypes[0]
+                            .wasmReferenceType?.kind
+                        {
+                            return target.get() == subStructTypeDescription
+                        }
+                        return false
+                    })
+
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        $0.signature.parameterTypes[1] == ILType.wasmRef(.WasmEq, nullability: true)
+                    })
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        $0.signature.parameterTypes[1]
+                            == ILType.wasmRef(.WasmAny, nullability: true)
+                    })
+
+                // Outputs are covariant
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        if case .Index(let target, _) = $0.signature.outputTypes[0]
+                            .wasmReferenceType?
+                            .kind
+                        {
+                            return target.get() == subStructTypeDescription
+                        }
+                        return false
+                    })
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        if case .Index(let target, _) = $0.signature.outputTypes[0]
+                            .wasmReferenceType?
+                            .kind
+                        {
+                            return target.get() == structTypeDescription
+                        }
+                        return false
+                    })
+
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        $0.signature.outputTypes[1].wasmReferenceType?.isAbstract() == true
+                    })
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        $0.signature.outputTypes[1].wasmReferenceType?.isAbstract() == false
+                    })
+
+                return [structType, subStructType, baseSignatureType] + subSignatureTypes
             }
         }
     }
@@ -3438,6 +3657,48 @@ struct ProgramBuilderTests {
                         return false
                     }
                 }))
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func testGenerateRandomWasmVarFuncRefWithSubtypeSignature(enableCustomDescriptors: Bool) {
+        let config = Configuration(
+            logLevel: .error, enableCustomDescriptors: enableCustomDescriptors)
+        let fuzzer = makeMockFuzzer(config: config)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let signatures = b.wasmDefineTypeGroup {
+                let superSignature = b.wasmDefineSignatureType(
+                    signature: [.wasmi32] => [.wasmi32], indexTypes: [])
+                let subSignature = b.wasmDefineSignatureType(
+                    signature: [.wasmi32] => [.wasmi32], indexTypes: [],
+                    superTypeDef: superSignature)
+                return [superSignature, subSignature]
+            }
+
+            let superDesc = b.type(of: signatures[0]).wasmTypeDefinition!.description!
+            let superRefType = ILType.wasmIndexRef(superDesc, nullability: false)
+
+            b.buildWasmModule { wasmModule in
+                let subFunction = wasmModule.addWasmFunction(signature: signatures[1]) {
+                    function, label, args in
+                    return [args[0]]
+                }
+                wasmModule.addWasmFunction(with: [] => []) { function, label, args in
+                    let ref = function.generateRandomWasmVar(ofType: superRefType)
+                    let refFunc = b.lastInstruction()
+                    #expect(
+                        refFunc.op is WasmRefFunc && refFunc.input(0) == subFunction
+                            && refFunc.output == ref)
+                    if enableCustomDescriptors {
+                        let exactSuperRefType = ILType.wasmIndexRef(
+                            superDesc, nullability: false, isExact: true)
+                        #expect(function.generateRandomWasmVar(ofType: exactSuperRefType) == nil)
+                    }
+                    return []
+                }
+            }
         }
     }
 
@@ -3594,7 +3855,7 @@ struct ProgramBuilderTests {
                                 b.wasmDefineArrayType(elementType: .wasmi32, mutability: true),
                                 b.wasmDefineStructType(
                                     fields: [.init(type: .wasmi32, mutability: true)],
-                                    indexTypes: []),
+                                ),
                             ]
                         }
                     }
@@ -3636,14 +3897,14 @@ struct ProgramBuilderTests {
             let typeGroup = b.wasmDefineTypeGroup {
                 let v0 = b.wasmDefineForwardOrSelfReference()
                 let v1 = b.wasmDefineArrayType(
-                    elementType: .wasmRef(.Index(), nullability: true), mutability: true,
+                    elementType: .anyIndexRef, mutability: true,
                     indexType: v0)
                 #expect(
                     b.type(of: v1).wasmTypeDefinition!.description!.hasUnresolvedSelfReferences())
 
                 let v2 = b.wasmDefineForwardOrSelfReference()
                 let v3 = b.wasmDefineArrayType(
-                    elementType: .wasmRef(.Index(), nullability: true), mutability: true,
+                    elementType: .anyIndexRef, mutability: true,
                     indexType: v2)
                 let v4 = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
                 b.wasmResolveForwardReference(v2, to: v4)
@@ -3652,7 +3913,7 @@ struct ProgramBuilderTests {
 
                 let v5 = b.wasmDefineForwardOrSelfReference()
                 let v6 = b.wasmDefineArrayType(
-                    elementType: .wasmRef(.Index(), nullability: true), mutability: true,
+                    elementType: .anyIndexRef, mutability: true,
                     indexType: v5)
                 b.wasmResolveForwardReference(v5, to: v6)
                 #expect(
@@ -3660,7 +3921,7 @@ struct ProgramBuilderTests {
 
                 let v7 = b.wasmDefineForwardOrSelfReference()
                 let v8 = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmRef(.Index(), nullability: true), mutability: true)],
+                    fields: [.init(type: .anyIndexRef, mutability: true)],
                     indexTypes: [v7])
                 #expect(
                     b.type(of: v8).wasmTypeDefinition!.description!.hasUnresolvedSelfReferences())
@@ -3670,7 +3931,7 @@ struct ProgramBuilderTests {
 
                 let v9 = b.wasmDefineForwardOrSelfReference()
                 let v10 = b.wasmDefineSignatureType(
-                    signature: [.wasmRef(.Index(), nullability: true)] => [], indexTypes: [v9])
+                    signature: [.anyIndexRef] => [], indexTypes: [v9])
                 #expect(
                     b.type(of: v10).wasmTypeDefinition!.description!.hasUnresolvedSelfReferences())
                 b.wasmResolveForwardReference(v9, to: v10)
@@ -3704,81 +3965,979 @@ struct ProgramBuilderTests {
         }
     }
 
-    @Test func testThatGeneratorsExistAndAreBuildableFromJs() {
-        let fuzzer = makeMockFuzzer()
-        let tries: Int = 10
+    // TODO: Fix these generators and remove them from this list.
+    // Except for `DynamicImportGenerator`, they all seem to succeed in FuzzilliCli runs.
+    static let knownUnbuildableGenerators: Set<String> = [
+        "BlockBreakGenerator",
+        "DynamicImportGenerator",
+        "ReassignmentGenerator",
+        "TypedArrayLastIndexGenerator",
+        "UnboundFunctionApplyGenerator",
+        "UnboundFunctionBindGenerator",
+        "UnboundFunctionCallGenerator",
+        "WasmArrayNewElemGenerator",
+        "WasmBranchGenerator",
+        "WasmBranchIfGenerator",
+        "WasmBranchOnNullGenerator",
+        "WasmLegacyRethrowGenerator",
+        "WasmLegacyTryDelegateGenerator",
+    ]
 
-        var failures: [String: Int] = [:]
+    @Test(arguments: [false, true], [false, true])
+    func testThatGeneratorsExistAndAreBuildable(generateBundle: Bool, enableCustomDescriptors: Bool)
+    {
+        let config = Configuration(
+            logLevel: .error, generateBundle: generateBundle,
+            enableCustomDescriptors: enableCustomDescriptors)
+        let fuzzer = makeMockFuzzer(config: config)
+        let tries: Int = 50
 
         for generator in fuzzer.codeGenerators {
-            fuzzer.sync {
-                let b = fuzzer.makeBuilder()
-                b.buildPrefix()
+            if !generateBundle
+                && (generator.requiredContext.contains(.bundle)
+                    || generator.requiredContext.contains(.moduleTopLevel))
+            {
+                // Only buildable in the "bundle" configuration.
+                continue
+            }
+            if Self.knownUnbuildableGenerators.contains(generator.name) {
+                continue
+            }
+            var succeeded = false
+            for _ in 0..<tries where !succeeded {
+                fuzzer.sync {
+                    let b = fuzzer.makeBuilder()
+                    b.buildPrefix()
 
-                if generator.requiredContext.contains(.bundle)
-                    || generator.requiredContext.contains(.moduleTopLevel)
-                {
-                    // Only buildable in the "bundle" configuration.
-                    return
-                }
-                if let syntheticGenerator = b.assembleSyntheticGenerator(for: generator) {
-                    let generatedInstructions = b.complete(
-                        generator: syntheticGenerator, withBudget: 40)
-
-                    if generatedInstructions == 0 {
-                        failures[generator.name, default: 0] += 1
+                    if let syntheticGenerator = b.assembleSyntheticGenerator(for: generator) {
+                        succeeded = b.complete(generator: syntheticGenerator, withBudget: 40) > 0
+                        #expect(syntheticGenerator.parts.count < 10, "for \(generator.name)")
+                    } else {
+                        Issue.record(
+                            "Unable to generate synthetic CodeGenerator for \(generator.name).")
                     }
-                    #expect(syntheticGenerator.parts.count < 10)
-                } else {
-                    Issue.record(
-                        "Unable to generate synthetic CodeGenerator for \(generator.name) from JS.")
                 }
             }
-        }
-
-        for (name, failureCount) in failures {
-            if failureCount == tries {
-                // This might fail very sparsely, if so, we might want to check the offending Generator to see if we can improve handling for it.
-                // OTOH this is a fuzzer and we sometimes have weird situations... :)
-                Issue.record("\(name) always failed to complete.")
+            if !succeeded {
+                Issue.record("\(generator.name) always failed to complete.")
             }
         }
     }
 
-    @Test func testThatGeneratorsAreBuildableFromBundle() throws {
-        let config = Configuration(logLevel: .error, generateBundle: true)
-        let fuzzer = makeMockFuzzer(config: config)
-        let tries: Int = 10
+    @Test func testUnboundFunctionWithImpossibleReceiver() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            b.buildPrefix()
 
-        var failures: [String: Int] = [:]
+            let f = b.loadUndefined()
+            b.buildIfElse(b.loadBool(true)) {
+                let date = b.createNamedVariable(forBuiltin: "Date")
+                let proto = b.getProperty("prototype", of: date)
+                let getTime = b.getProperty("getTime", of: proto)
+                b.reassign(variable: f, value: getTime)
+            } elseBody: {
+                let regExp = b.createNamedVariable(forBuiltin: "RegExp")
+                let proto = b.getProperty("prototype", of: regExp)
+                let test = b.getProperty("test", of: proto)
+                b.reassign(variable: f, value: test)
+            }
 
-        for generator in fuzzer.codeGenerators {
-            fuzzer.sync {
-                let b = fuzzer.makeBuilder()
-                b.buildPrefix()
+            // There isn't any valid type that is both an instance of Date and an instance of
+            // RegExp, so this type "loses" its receiver information.
+            #expect(b.type(of: f) == .unboundFunction(nil, receiver: nil))
+            let gen = CodeGenerators.first { $0.name == "UnboundFunctionCallGenerator" }!
+            let _ = gen.head.run(in: b, with: [f])
+        }
+    }
 
-                if let syntheticGenerator = b.assembleSyntheticGenerator(for: generator) {
-                    let generatedInstructions = b.complete(
-                        generator: syntheticGenerator, withBudget: 40)
+    // A CodeGenerator may declare that it produces a type but still be unable to run
+    // because its required inputs cannot be satisfied in the current context (e.g.
+    // DynamicImportGenerator produces a .jsPromise() but needs a .jsModule(), which is
+    // only available in .bundle context). findOrGenerateType must not pick such a
+    // generator, otherwise it ends up with no value of the requested type.
+    @Test func testFindOrGenerateTypeIgnoresGeneratorsWithUnsatisfiableInputs() {
+        // A type that nothing in the environment can produce, so that the generator
+        // below is the only candidate for producing it.
+        let producedType = ILType.object(withProperties: ["myProperty"])
+        // An input type that no CodeGenerator produces, so this generator can never run.
+        let unsatisfiableInputType = ILType.object(ofGroup: "ThisGroupDoesNotExist")
 
-                    if generatedInstructions == 0 {
-                        failures[generator.name, default: 0] += 1
-                    }
-                    #expect(syntheticGenerator.parts.count < 10, "for \(generator.name)")
-                } else {
-                    Issue.record(
-                        "Unable to generate synthetic CodeGenerator for \(generator.name) from a bundle."
-                    )
-                }
+        let generatorWithUnsatisfiableInputs = CodeGenerator(
+            "UnrunnableGeneratorForTesting",
+            inputs: .required(unsatisfiableInputType),
+            produces: [producedType]
+        ) { b, _ in
+            Issue.record("this generator shouldn't be called, its input cannot be produced")
+        }
+
+        let fuzzer = makeMockFuzzer(codeGenerators: [(generatorWithUnsatisfiableInputs, 1)])
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            b.loadInt(42)
+
+            #expect(b.randomVariable(ofType: unsatisfiableInputType) == nil)
+
+            let v = b.findOrGenerateType(producedType)
+            // The fallback produced a generic object with the wanted property, without invoking the
+            // generator.
+            #expect(b.type(of: v).Is(producedType))
+        }
+    }
+
+    @Test func testGeneratorResolutionLoopDetection() {
+        /*
+         * Generator Graph:
+         *
+         * Trigger --> GenRecursionRoot(req: TypeRoot)
+         *
+         * Path (Dead End Cycle): LoopingGenerator(req: TypeLoop, produces: TypeLoop)
+         *
+         * Cycle detection prevents it from repeatedly considering LoopingGenerator.
+         */
+        var calledGenerators = [String]()
+        let typeRoot = ILType.object(ofGroup: "Root")
+        let typeLoop = ILType.object(ofGroup: "Loop")
+
+        let loopingGenerator = CodeGenerator(
+            "LoopingGenerator", inContext: .single(.javascript),
+            inputs: .required(typeLoop), produces: [typeLoop]
+        ) { b, ref in
+            calledGenerators.append("LoopingGenerator")
+        }
+
+        let genRecursionRoot = CodeGenerator(
+            "GenRecursionRoot", inContext: .single(.javascript),
+            inputs: .required(typeLoop), produces: [typeRoot]
+        ) { b, _ in
+            calledGenerators.append("GenRecursionRoot")
+            let _ = b.createNamedVariable(forBuiltin: "Root")
+        }
+
+        let env = JavaScriptEnvironment(additionalBuiltins: ["Root": typeRoot])
+        let fuzzer = makeMockFuzzer(
+            environment: env,
+            overwriteGenerators: WeightedList<CodeGenerator>([
+                (loopingGenerator, 1), (genRecursionRoot, 1),
+            ]))
+
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let _ = b.loadInt(42)
+            let trigger = CodeGenerator(
+                "Trigger", inContext: .single(.javascript), inputs: .required(typeRoot)
+            ) { _, _ in }
+            let plan = b.assembleSyntheticGenerator(for: trigger)
+            if let plan = plan {
+                let _ = b.complete(generator: plan, withBudget: 10)
             }
         }
 
-        for (name, failureCount) in failures {
-            if failureCount == tries {
-                // This might fail very sparsely, if so, we might want to check the offending Generator to see if we can improve handling for it.
-                // OTOH this is a fuzzer and we sometimes have weird situations... :)
-                Issue.record("\(name) always failed to complete.")
+        #expect(calledGenerators.isEmpty)
+    }
+
+    @Test func testGeneratorResolutionTypeCycleDetectionWithFallback() {
+        /*
+         * Generator Graph:
+         *
+         * Trigger --> GenRecursionRoot(req: TypeRoot)
+         *
+         * Path 1 (Cycle):
+         *    LoopingGeneratorB(req: CycleTypeA, produces: CycleTypeB) --> LoopingGeneratorA(req: CycleTypeB, produces: CycleTypeA)
+         * Path 2 (Success):
+         *    FallbackGenerator(Requires 3 trivial types to guarantee it is picked up after path 1 in the queue, produces: CycleTypeA)
+         *
+         * Cycle detection correctly prevents infinite loop in Path 1 and falls back to FallbackGenerator.
+         */
+        var calledGenerators = [String]()
+        let cycleTypeA = ILType.object(ofGroup: "CycleA")
+        let cycleTypeB = ILType.object(ofGroup: "CycleB")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let loopingGeneratorA = CodeGenerator(
+            "LoopingGeneratorA", inContext: .single(.javascript),
+            inputs: .required(cycleTypeB), produces: [cycleTypeA]
+        ) { b, ref in
+            calledGenerators.append("LoopingGeneratorA")
+            let _ = b.createNamedVariable(forBuiltin: "CycleA")
+        }
+
+        let loopingGeneratorB = CodeGenerator(
+            "LoopingGeneratorB", inContext: .single(.javascript),
+            inputs: .required(cycleTypeA), produces: [cycleTypeB]
+        ) { b, ref in
+            calledGenerators.append("LoopingGeneratorB")
+            let _ = b.createNamedVariable(forBuiltin: "CycleB")
+        }
+
+        let fallbackGenerator = CodeGenerator(
+            "FallbackGenerator", inContext: .single(.javascript),
+            inputs: .required(.integer, .boolean, .string), produces: [cycleTypeA]
+        ) { b, intVar, boolVar, strVar in
+            calledGenerators.append("FallbackGenerator")
+            let _ = b.createNamedVariable(forBuiltin: "FallbackA")
+        }
+
+        let genRecursionRoot = CodeGenerator(
+            "GenRecursionRoot", inContext: .single(.javascript),
+            inputs: .required(cycleTypeA), produces: [typeRoot]
+        ) { b, _ in
+            calledGenerators.append("GenRecursionRoot")
+            let _ = b.createNamedVariable(forBuiltin: "Root")
+        }
+
+        let triggerGenerator = CodeGenerator(
+            "TriggerGenerator", inContext: .single(.javascript),
+            inputs: .required(typeRoot)
+        ) { b, aVar in }
+
+        let intGen = CodeGenerator("IntGen", inContext: .single(.javascript), produces: [.integer])
+        { b in b.loadInt(42) }
+        let boolGen = CodeGenerator(
+            "BoolGen", inContext: .single(.javascript), produces: [.boolean]
+        ) { b in b.loadBool(true) }
+        let strGen = CodeGenerator("StrGen", inContext: .single(.javascript), produces: [.string]) {
+            b in b.loadString("dummy")
+        }
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "CycleA": cycleTypeA,
+            "CycleB": cycleTypeB,
+            "FallbackA": cycleTypeA,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(
+            environment: env,
+            overwriteGenerators: WeightedList<CodeGenerator>([
+                (loopingGeneratorA, 1),
+                (loopingGeneratorB, 1),
+                (fallbackGenerator, 1),
+                (genRecursionRoot, 1),
+                (intGen, 1),
+                (boolGen, 1),
+                (strGen, 1),
+            ]))
+
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let _ = b.loadInt(42)  // To make sure visibleVariables is populated ahead of trigger computation.
+
+            let plan = b.assembleSyntheticGenerator(for: triggerGenerator)
+            #expect(plan != nil)
+            let _ = b.complete(generator: plan!, withBudget: 10)
+        }
+
+        #expect(calledGenerators == ["FallbackGenerator", "GenRecursionRoot"])
+    }
+    @Test func testGeneratorResolutionSharedDependencyNotMistakenForCycle() {
+        /*
+         * Generator Graph:
+         *
+         * Trigger --> GenRecursionRoot(req: TypeA)
+         *
+         *    GeneratorA(req: TypeB, TypeC)
+         *    GeneratorB(req: TypeInt) --> GeneratorInt(no req)
+         *    GeneratorC(req: TypeInt) --> GeneratorInt(no req)
+         *
+         * Both B and C require TypeInt. Searching for TypeInt from C after fulfilling B should NOT be seen as a cycle.
+         */
+        var calledGenerators = [String]()
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeInt = ILType.integer
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let genA = CodeGenerator(
+            "GeneratorA", inContext: .single(.javascript),
+            inputs: .required(typeB, typeC), produces: [typeA]
+        ) { b, bVar, cVar in
+            calledGenerators.append("GeneratorA")
+            let _ = b.createNamedVariable(forBuiltin: "A")
+        }
+
+        let genB = CodeGenerator(
+            "GeneratorB", inContext: .single(.javascript),
+            inputs: .required(typeInt), produces: [typeB]
+        ) { b, intVar in
+            calledGenerators.append("GeneratorB")
+            let _ = b.createNamedVariable(forBuiltin: "B")
+        }
+
+        let genC = CodeGenerator(
+            "GeneratorC", inContext: .single(.javascript),
+            inputs: .required(typeInt), produces: [typeC]
+        ) { b, intVar in
+            calledGenerators.append("GeneratorC")
+            let _ = b.createNamedVariable(forBuiltin: "C")
+        }
+
+        let genInt = CodeGenerator(
+            "GeneratorInt", inContext: .single(.javascript),
+            produces: [typeInt]
+        ) { b in
+            calledGenerators.append("GeneratorInt")
+            let _ = b.loadInt(42)
+        }
+
+        let genRecursionRoot = CodeGenerator(
+            "GenRecursionRoot", inContext: .single(.javascript),
+            inputs: .required(typeA), produces: [typeRoot]
+        ) { b, _ in
+            calledGenerators.append("GenRecursionRoot")
+            let _ = b.createNamedVariable(forBuiltin: "Root")
+        }
+
+        let triggerGenerator = CodeGenerator(
+            "TriggerGenerator", inContext: .single(.javascript),
+            inputs: .required(typeRoot)
+        ) { b, aVar in }
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "B": typeB,
+            "C": typeC,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(
+            environment: env,
+            overwriteGenerators: WeightedList<CodeGenerator>([
+                (genA, 1),
+                (genB, 1),
+                (genC, 1),
+                (genInt, 1),
+                (genRecursionRoot, 1),
+            ]))
+
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let _ = b.loadString("dummy")
+            let plan = b.assembleSyntheticGenerator(for: triggerGenerator)
+            #expect(plan != nil)
+            let _ = b.complete(generator: plan!, withBudget: 10)
+        }
+
+        #expect(calledGenerators.count == 5)
+        #expect(calledGenerators.last == "GenRecursionRoot")
+
+        let iRoot = calledGenerators.firstIndex(of: "GenRecursionRoot")!
+        let iA = calledGenerators.firstIndex(of: "GeneratorA")!
+        let iB = calledGenerators.firstIndex(of: "GeneratorB")!
+        let iC = calledGenerators.firstIndex(of: "GeneratorC")!
+        let iInt = calledGenerators.firstIndex(of: "GeneratorInt")!
+
+        #expect(iInt < iB)
+        #expect(iInt < iC)
+        #expect(iB < iA)
+        #expect(iC < iA)
+        #expect(iA < iRoot)
+    }
+    @Test func testGeneratorResolutionRecursive() throws {
+        /*
+         * Generator Graph:
+         *
+         * Trigger --> GenRecursionRoot(req: .string)
+         *
+         *   GenFloatToString(req: .float, produces: .string)
+         *   GenIntegerToFloat(req: .integer, produces: .float)
+         *   GenInt(no req, produces: .integer)
+         */
+        let typeRoot = ILType.object(ofGroup: "Root")
+        let env = JavaScriptEnvironment(additionalBuiltins: ["Root": typeRoot])
+        let fuzzer = makeMockFuzzer(environment: env)
+        try fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let typeInt = ILType.integer
+            let typeFloat = ILType.float
+            let typeString = ILType.string
+
+            var calledGenerators = [String]()
+
+            let gPrefix = CodeGenerator("GPrefix", produces: [.undefined], useInPrefix: true) { b in
+                Issue.record("this generator shouldn't be called")
             }
+
+            let genInt = CodeGenerator("GenInt", produces: [typeInt], useInPrefix: false) { b in
+                calledGenerators.append("GenInt")
+                let _ = b.loadInt(42)
+            }
+            let genIntegerToFloat = CodeGenerator(
+                "GenIntegerToFloat", inputs: .required(typeInt), produces: [typeFloat]
+            ) { b, _ in
+                calledGenerators.append("GenIntegerToFloat")
+                let _ = b.loadFloat(42.0)
+            }
+            let genFloatToString = CodeGenerator(
+                "GenFloatToString", inputs: .required(typeFloat), produces: [typeString]
+            ) { b, _ in
+                calledGenerators.append("GenFloatToString")
+                let _ = b.loadString("42")
+            }
+
+            let genRecursionRoot = CodeGenerator(
+                "GenRecursionRoot", inputs: .required(typeString), produces: [typeRoot]
+            ) { b, _ in
+                calledGenerators.append("GenRecursionRoot")
+                let _ = b.createNamedVariable(forBuiltin: "Root")
+            }
+
+            fuzzer.setCodeGenerators(
+                WeightedList<CodeGenerator>([
+                    (gPrefix, 1),
+                    (genInt, 1),
+                    (genIntegerToFloat, 1),
+                    (genFloatToString, 1),
+                    (genRecursionRoot, 1),
+                ]))
+
+            b.loadUndefined()
+
+            let trigger = CodeGenerator("Trigger", inputs: .required(typeRoot)) { _, _ in }
+            let plan = b.assembleSyntheticGenerator(for: trigger)
+            #expect(plan != nil)
+            let _ = b.complete(generator: plan!, withBudget: 10)
+
+            let program = b.finalize()
+            // Make sure everything is present.
+            try #require(program.size == 5)
+            #expect(program.code[0].op is LoadUndefined)
+            #expect(program.code[1].op is LoadInteger)
+            #expect(program.code[2].op is LoadFloat)
+            #expect(program.code[3].op is LoadString)
+
+            #expect(
+                calledGenerators == [
+                    "GenInt", "GenIntegerToFloat", "GenFloatToString", "GenRecursionRoot",
+                ])
+        }
+    }
+
+    @Test func testGeneratorResolutionShortestPath() {
+        /*
+         * Generator Graph:
+         *
+         * Trigger --> GenRecursionRoot(req: TypeA)
+         *
+         * Path 1: GenLongA(req: TypeB) --> GenB(req: TypeC) --> GenC
+         * Path 2: GenShortA(req: TypeD) --> GenD
+         *
+         * The search algorithm schedules Path 2 (shorter depth).
+         */
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeD = ILType.object(ofGroup: "D")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "B": typeB,
+            "C": typeC,
+            "D": typeD,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            var calledGenerators = [String]()
+
+            let gPrefix = CodeGenerator("GPrefix", produces: [.undefined], useInPrefix: true) { b in
+                Issue.record("should not be called")
+            }
+
+            // Long path: A requires B, B requires C.
+            let genLongA = CodeGenerator("GenLongA", inputs: .required(typeB), produces: [typeA]) {
+                b, _ in
+                calledGenerators.append("GenLongA")
+                let _ = b.createNamedVariable(forBuiltin: "A")
+            }
+            let genB = CodeGenerator("GenB", inputs: .required(typeC), produces: [typeB]) { b, _ in
+                calledGenerators.append("GenB")
+                let _ = b.createNamedVariable(forBuiltin: "B")
+            }
+            let genC = CodeGenerator("GenC", produces: [typeC]) { b in
+                calledGenerators.append("GenC")
+                let _ = b.createNamedVariable(forBuiltin: "C")
+            }
+
+            // Short path: A requires D.
+            let genShortA = CodeGenerator("GenShortA", inputs: .required(typeD), produces: [typeA])
+            { b, _ in
+                calledGenerators.append("GenShortA")
+                let _ = b.createNamedVariable(forBuiltin: "A")
+            }
+            let genD = CodeGenerator("GenD", produces: [typeD]) { b in
+                calledGenerators.append("GenD")
+                let _ = b.createNamedVariable(forBuiltin: "D")
+            }
+
+            // The unsatisfied requirements of this generator trigger findGeneratorSequence at that one level.
+            let genRecursionRoot = CodeGenerator(
+                "GenRecursionRoot", inputs: .required(typeA), produces: [typeRoot]
+            ) { b, _ in
+                calledGenerators.append("GenRecursionRoot")
+                let _ = b.createNamedVariable(forBuiltin: "Root")
+            }
+
+            fuzzer.setCodeGenerators(
+                WeightedList<CodeGenerator>([
+                    (gPrefix, 1), (genLongA, 1), (genB, 1), (genC, 1),
+                    (genShortA, 1), (genD, 1), (genRecursionRoot, 1),
+                ]))
+
+            b.loadInt(42)
+
+            let trigger = CodeGenerator("Trigger", inputs: .required(typeRoot)) { _, _ in }
+            let plan = b.assembleSyntheticGenerator(for: trigger)
+
+            #expect(plan != nil)
+            _ = b.complete(generator: plan!, withBudget: 10)
+
+            #expect(calledGenerators == ["GenD", "GenShortA", "GenRecursionRoot"])
+        }
+    }
+
+    @Test func testGeneratorResolutionDeadEndFallback() {
+        /*
+         * Generator Graph:
+         *
+         * Trigger --> GenRecursionRoot(req: TypeA)
+         *
+         * Path 1: GenX(req: TypeB, TypeC) --> TypeB has no generator
+         * Path 2: GenY(req: TypeC, TypeD, TypeE) --> GenC, GenD, GenE
+         *
+         * Dead end fallback mechanism tries Path 1 (Cost=2), fails, then tries Path 2 (Cost=3) and succeeds.
+         */
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeD = ILType.object(ofGroup: "D")
+        let typeE = ILType.object(ofGroup: "E")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "C": typeC,
+            "D": typeD,
+            "E": typeE,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            var calledGenerators = [String]()
+
+            let gPrefix = CodeGenerator("GPrefix", produces: [.undefined], useInPrefix: true) { b in
+                Issue.record("should not be called")
+            }
+
+            // GenX needs B and C. B has no generator.
+            let genX = CodeGenerator("GenX", inputs: .required(typeB, typeC), produces: [typeA]) {
+                b, _, _ in
+                Issue.record("Unexpected call to GenX")
+            }
+
+            // GenY needs C, D, and E (Cost=3) to guarantee it is scheduled after GenX (Cost=2). All have generators.
+            let genY = CodeGenerator(
+                "GenY", inputs: .required(typeC, typeD, typeE), produces: [typeA]
+            ) {
+                b, _, _, _ in
+                calledGenerators.append("GenY")
+                let _ = b.createNamedVariable(forBuiltin: "A")
+            }
+
+            let genC = CodeGenerator("GenC", produces: [typeC]) { b in
+                calledGenerators.append("GenC")
+                let _ = b.createNamedVariable(forBuiltin: "C")
+            }
+            let genD = CodeGenerator("GenD", produces: [typeD]) { b in
+                calledGenerators.append("GenD")
+                let _ = b.createNamedVariable(forBuiltin: "D")
+            }
+            let genE = CodeGenerator("GenE", produces: [typeE]) { b in
+                calledGenerators.append("GenE")
+                let _ = b.createNamedVariable(forBuiltin: "E")
+            }
+
+            // The unsatisfied requirements of this generator trigger findGeneratorSequence at that one level.
+            let genRecursionRoot = CodeGenerator(
+                "GenRecursionRoot", inputs: .required(typeA), produces: [typeRoot]
+            ) { b, _ in
+                calledGenerators.append("GenRecursionRoot")
+                let _ = b.createNamedVariable(forBuiltin: "Root")
+            }
+
+            fuzzer.setCodeGenerators(
+                WeightedList<CodeGenerator>([
+                    (gPrefix, 1), (genX, 1), (genY, 1), (genC, 1), (genD, 1), (genE, 1),
+                    (genRecursionRoot, 1),
+                ]))
+
+            b.loadInt(42)
+
+            let trigger = CodeGenerator("Trigger", inputs: .required(typeRoot)) { _, _ in }
+            let plan = b.assembleSyntheticGenerator(for: trigger)
+
+            #expect(plan != nil)
+            _ = b.complete(generator: plan!, withBudget: 10)
+
+            // C, D, E may jitter due to Set non-determinism
+            #expect(calledGenerators.count == 5)
+            #expect(
+                Set(calledGenerators) == [
+                    "GenE", "GenD", "GenC", "GenY", "GenRecursionRoot",
+                ]
+            )
+            #expect(calledGenerators.last == "GenRecursionRoot")
+
+            #expect(
+                calledGenerators.firstIndex(of: "GenY")! > calledGenerators.firstIndex(of: "GenC")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenY")! > calledGenerators.firstIndex(of: "GenD")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenY")! > calledGenerators.firstIndex(of: "GenE")!)
+        }
+    }
+
+    @Test func testGeneratorResolutionDeepDeadEndFallback() {
+        /*
+         * Generator Graph:
+         *
+         * Trigger --> GenRecursionRoot(req: TypeA)
+         *
+         * 1. Dead end paths:
+         *    GenX(req: TypeB, TypeC) --> TypeB has no generator
+         *    GenY(req: TypeC, TypeD, TypeE) --> GenD(req: TypeH) -> TypeH has no generator
+         *
+         * 2. Successful path:
+         *    GenZ(req: TypeC, TypeE, TypeF, TypeG)
+         *         |--> GenC, GenE, GenF, GenG (all have no req)
+         *
+         * GenRecursionRoot will try GenX first, then GenY, hit dead-ends on both, and successfully fallback to GenZ.
+         */
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeD = ILType.object(ofGroup: "D")
+        let typeE = ILType.object(ofGroup: "E")
+        let typeF = ILType.object(ofGroup: "F")
+        let typeG = ILType.object(ofGroup: "G")
+        let typeH = ILType.object(ofGroup: "H")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "C": typeC,
+            "E": typeE,
+            "F": typeF,
+            "G": typeG,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            var calledGenerators = [String]()
+
+            let gPrefix = CodeGenerator("GPrefix", produces: [.undefined], useInPrefix: true) { b in
+                Issue.record("should not be called")
+            }
+
+            // GenX needs B and C. B has no generator.
+            let genX = CodeGenerator("GenX", inputs: .required(typeB, typeC), produces: [typeA]) {
+                b, _, _ in
+                Issue.record("Unexpected call to GenX")
+            }
+
+            // GenY needs C, D, E. D needs H. H has no generator.
+            let genY = CodeGenerator(
+                "GenY", inputs: .required(typeC, typeD, typeE), produces: [typeA]
+            ) { b, _, _, _ in
+                Issue.record("Unexpected call to GenY")
+            }
+            let genD = CodeGenerator("GenD", inputs: .required(typeH), produces: [typeD]) { b, _ in
+                Issue.record("Unexpected call to GenD")
+            }
+
+            // GenZ needs C, E, F, G. All have generators.
+            let genZ = CodeGenerator(
+                "GenZ", inputs: .required(typeC, typeE, typeF, typeG), produces: [typeA]
+            ) { b, _, _, _, _ in
+                calledGenerators.append("GenZ")
+                let _ = b.createNamedVariable(forBuiltin: "A")
+            }
+
+            let genC = CodeGenerator("GenC", produces: [typeC]) { b in
+                calledGenerators.append("GenC")
+                let _ = b.createNamedVariable(forBuiltin: "C")
+            }
+            let genE = CodeGenerator("GenE", produces: [typeE]) { b in
+                calledGenerators.append("GenE")
+                let _ = b.createNamedVariable(forBuiltin: "E")
+            }
+            let genF = CodeGenerator("GenF", produces: [typeF]) { b in
+                calledGenerators.append("GenF")
+                let _ = b.createNamedVariable(forBuiltin: "F")
+            }
+            let genG = CodeGenerator("GenG", produces: [typeG]) { b in
+                calledGenerators.append("GenG")
+                let _ = b.createNamedVariable(forBuiltin: "G")
+            }
+
+            // The unsatisfied requirements of this generator trigger findGeneratorSequence at that one level.
+            let genRecursionRoot = CodeGenerator(
+                "GenRecursionRoot", inputs: .required(typeA), produces: [typeRoot]
+            ) { b, _ in
+                calledGenerators.append("GenRecursionRoot")
+                let _ = b.createNamedVariable(forBuiltin: "Root")
+            }
+
+            fuzzer.setCodeGenerators(
+                WeightedList<CodeGenerator>([
+                    (gPrefix, 1), (genX, 1), (genY, 1), (genZ, 1),
+                    (genD, 1), (genC, 1), (genE, 1), (genF, 1), (genG, 1), (genRecursionRoot, 1),
+                ]))
+
+            b.loadInt(42)
+
+            let trigger = CodeGenerator("Trigger", inputs: .required(typeRoot)) { _, _ in }
+            let plan = b.assembleSyntheticGenerator(for: trigger)
+
+            #expect(plan != nil)
+            _ = b.complete(generator: plan!, withBudget: 10)
+
+            #expect(calledGenerators.count == 6)
+            #expect(
+                Set(calledGenerators) == [
+                    "GenC", "GenE", "GenF", "GenG", "GenZ", "GenRecursionRoot",
+                ]
+            )
+            #expect(calledGenerators.last == "GenRecursionRoot")
+
+            #expect(
+                calledGenerators.firstIndex(of: "GenZ")! > calledGenerators.firstIndex(of: "GenC")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenZ")! > calledGenerators.firstIndex(of: "GenE")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenZ")! > calledGenerators.firstIndex(of: "GenF")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenZ")! > calledGenerators.firstIndex(of: "GenG")!)
+        }
+    }
+
+    @Test func testGeneratorResolutionDeduplicationCost() {
+        /*
+         * Generator Graph:
+         *
+         * Trigger --> GenRecursionRoot(req: TypeA)
+         *
+         * Path 1 (Cost = 2):
+         *    Gen1(req: TypeB, TypeC) --> GenB, GenC
+         *
+         * Path 2 (Cost = 1):
+         *    Gen2(req: TypeD, TypeD) --> GenD
+         *
+         * The algorithm deduplicates the double TypeD requirement, giving Gen2 a lower cost (1 missing input)
+         * compared to Gen1 (2 missing inputs). Thus Gen2 is scheduled.
+         */
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeD = ILType.object(ofGroup: "D")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "B": typeB,
+            "C": typeC,
+            "D": typeD,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            var calledGenerators = [String]()
+
+            let gPrefix = CodeGenerator("GPrefix", produces: [.undefined], useInPrefix: true) { b in
+                Issue.record("should not be called")
+            }
+
+            // Gen1 needs B and C. Cost = 2.
+            let gen1 = CodeGenerator("Gen1", inputs: .required(typeB, typeC), produces: [typeA]) {
+                b, _, _ in
+                calledGenerators.append("Gen1")
+                let _ = b.createNamedVariable(forBuiltin: "A")
+            }
+
+            // Gen2 needs D and D. Cost = 1 (due to Set deduplication).
+            let gen2 = CodeGenerator("Gen2", inputs: .required(typeD, typeD), produces: [typeA]) {
+                b, _, _ in
+                calledGenerators.append("Gen2")
+                let _ = b.createNamedVariable(forBuiltin: "A")
+            }
+
+            let genB = CodeGenerator("GenB", produces: [typeB]) { b in
+                calledGenerators.append("GenB")
+                let _ = b.createNamedVariable(forBuiltin: "B")
+            }
+            let genC = CodeGenerator("GenC", produces: [typeC]) { b in
+                calledGenerators.append("GenC")
+                let _ = b.createNamedVariable(forBuiltin: "C")
+            }
+            let genD = CodeGenerator("GenD", produces: [typeD]) { b in
+                calledGenerators.append("GenD")
+                let _ = b.createNamedVariable(forBuiltin: "D")
+            }
+
+            // The unsatisfied requirements of this generator trigger findGeneratorSequence at that one level.
+            let genRecursionRoot = CodeGenerator(
+                "GenRecursionRoot", inputs: .required(typeA), produces: [typeRoot]
+            ) { b, _ in
+                calledGenerators.append("GenRecursionRoot")
+                let _ = b.createNamedVariable(forBuiltin: "Root")
+            }
+
+            fuzzer.setCodeGenerators(
+                WeightedList<CodeGenerator>([
+                    (gPrefix, 1), (gen1, 1), (gen2, 1), (genB, 1), (genC, 1), (genD, 1),
+                    (genRecursionRoot, 1),
+                ]))
+
+            b.loadInt(42)
+
+            let trigger = CodeGenerator("Trigger", inputs: .required(typeRoot)) { _, _ in }
+            let plan = b.assembleSyntheticGenerator(for: trigger)
+
+            #expect(plan != nil)
+            _ = b.complete(generator: plan!, withBudget: 10)
+
+            // Because Gen2 has a cost of 1 (D is deduplicated), it should be prioritized over Gen1 (cost of 2).
+            #expect(calledGenerators.contains("Gen2"))
+            #expect(!calledGenerators.contains("Gen1"))
+            #expect(calledGenerators == ["GenD", "Gen2", "GenRecursionRoot"])
+        }
+    }
+
+    @Test func testGeneratorResolutionSequenceDeduplication() {
+        /*
+         * Generator Graph:
+         *
+         * Trigger --> GenRecursionRoot(req: TypeA, TypeB)
+         *
+         *    GenA(req: TypeE)
+         *    GenB(req: TypeC, TypeF) --> GenC(req: TypeD) --> GenD(req: SuperTypeOfE)
+         *
+         *    GenE(produces TypeE, fulfills SuperTypeOfE)
+         *    GenF(no req)
+         *
+         * The Min-Heap tie-breaking accidentally generates a duplicate `GenE`,
+         * which relies on finalGeneratorSequence to correctly deduplicate the execution chain.
+         */
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeD = ILType.object(ofGroup: "D")
+        let typeE = ILType.object(ofGroup: "E", withProperties: ["foo"])
+        let typeF = ILType.object(ofGroup: "F")
+        let superTypeOfE = ILType.object(ofGroup: "E")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "B": typeB,
+            "C": typeC,
+            "D": typeD,
+            "E": typeE,
+            "F": typeF,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            var calledGenerators = [String]()
+
+            let gPrefix = CodeGenerator("GPrefix", produces: [.undefined], useInPrefix: true) { b in
+                Issue.record("should not be called")
+            }
+
+            let genE = CodeGenerator("GenE", produces: [typeE]) { b in
+                calledGenerators.append("GenE")
+                let _ = b.createNamedVariable(forBuiltin: "E")
+            }
+            let genD = CodeGenerator("GenD", inputs: .required(superTypeOfE), produces: [typeD]) {
+                b, _ in
+                calledGenerators.append("GenD")
+                let _ = b.createNamedVariable(forBuiltin: "D")
+            }
+            let genC = CodeGenerator("GenC", inputs: .required(typeD), produces: [typeC]) { b, _ in
+                calledGenerators.append("GenC")
+                let _ = b.createNamedVariable(forBuiltin: "C")
+            }
+            let genF = CodeGenerator("GenF", produces: [typeF]) { b in
+                calledGenerators.append("GenF")
+                let _ = b.createNamedVariable(forBuiltin: "F")
+            }
+            let genB = CodeGenerator("GenB", inputs: .required(typeC, typeF), produces: [typeB]) {
+                b, _, _ in
+                calledGenerators.append("GenB")
+                let _ = b.createNamedVariable(forBuiltin: "B")
+            }
+            let genA = CodeGenerator("GenA", inputs: .required(typeE), produces: [typeA]) { b, _ in
+                calledGenerators.append("GenA")
+                let _ = b.createNamedVariable(forBuiltin: "A")
+            }
+
+            // The unsatisfied requirements of this generator trigger findGeneratorSequence at that one level.
+            let genRecursionRoot = CodeGenerator(
+                "GenRecursionRoot", inputs: .required(typeA, typeB), produces: [typeRoot]
+            ) { b, _, _ in
+                calledGenerators.append("GenRecursionRoot")
+                let _ = b.createNamedVariable(forBuiltin: "Root")
+            }
+
+            fuzzer.setCodeGenerators(
+                WeightedList<CodeGenerator>([
+                    (gPrefix, 1), (genA, 1), (genB, 1), (genC, 1), (genD, 1), (genE, 1), (genF, 1),
+                    (genRecursionRoot, 1),
+                ]))
+
+            b.loadInt(42)
+
+            let triggerGenerator = CodeGenerator(
+                "TriggerGenerator", inputs: .required(typeRoot)
+            ) { _, _ in }
+
+            let plan = b.assembleSyntheticGenerator(for: triggerGenerator)
+
+            #expect(plan != nil)
+            _ = b.complete(generator: plan!, withBudget: 10)
+
+            #expect(calledGenerators.count == 7)
+            #expect(
+                Set(calledGenerators) == [
+                    "GenE", "GenA", "GenD", "GenF", "GenC", "GenB", "GenRecursionRoot",
+                ])
+
+            #expect(
+                calledGenerators.firstIndex(of: "GenE")! < calledGenerators.firstIndex(of: "GenA")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenE")! < calledGenerators.firstIndex(of: "GenD")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenD")! < calledGenerators.firstIndex(of: "GenC")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenC")! < calledGenerators.firstIndex(of: "GenB")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenF")! < calledGenerators.firstIndex(of: "GenB")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenB")! < calledGenerators.firstIndex(
+                    of: "GenRecursionRoot")!)
+            #expect(
+                calledGenerators.firstIndex(of: "GenA")! < calledGenerators.firstIndex(
+                    of: "GenRecursionRoot")!)
         }
     }
 }

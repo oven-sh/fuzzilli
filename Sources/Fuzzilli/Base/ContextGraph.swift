@@ -141,6 +141,12 @@ public class ContextGraph {
     /// Get a shortest path (the least amount of generator stubs) from the `from` Context to the `to` Context. Returns an arbitrary one if there are several.
     /// TODO: Do this initially and cache all results?
     func getShortestPath(from src: Context, to dst: Context) -> [EdgeKey]? {
+        guard src.rawValue.nonzeroBitCount <= 1 else {
+            fatalError("getShortestPath called with multi-bit src context: \(src)")
+        }
+        guard dst.rawValue.nonzeroBitCount <= 1 else {
+            fatalError("getShortestPath called with multi-bit dst context: \(dst)")
+        }
         // Do simple BFS to find a shortest path, considering the edge weights.
         var queue: Deque<([Context], Int)> = [([src], 0)]
         var seenNodes: [Context: Int] = [:]
@@ -188,46 +194,22 @@ public class ContextGraph {
         self.edges[EdgeKey(from: src, to: dst)]
     }
 
-    // TODO(cffsmith) implement this to filter for generators that are actually reachable, we can use this to avoid picking a .javascript generator when we're in .wasmFunction context for example.
-    // This is needed since we cannot close Contexts or go back in time yet. This essentially calculates all reachable destinations from `src`.
-    // The caller can then use `fuzzer.codeGenerators.filter { $0.requiredContext.contains(<any reachable>) }` and pick a random one from that subset.
-    func getReachableContexts(from src: Context) -> [Context] {
-        // Do simple BFS to find all possible paths.
-        var queue: Deque<[Context]> = [[src]]
-        var paths: [[Context]] = []
+    func getReachableContexts(from src: Context) -> Set<Context> {
+        // Do simple BFS to find all reachable contexts.
+        var queue: Deque<Context> = [src]
         var seenNodes = Set<Context>([src])
 
         while !queue.isEmpty {
-            let currentPath = queue.popFirst()!
+            let currentNode = queue.popFirst()!
 
-            let currentNode = currentPath.last!
-
-            var stillExploring = false
-
-            // Get all possible edges from here on and push all of those to the queue.
+            // Get all possible edges from here on and push all unseen target nodes to the queue.
             for edge in self.edges
-            where edge.key.from == currentNode && !seenNodes.contains(edge.key.to) {
-                // Prevent cycles, we don't care about complicated paths, but rather simple direct paths.
-                stillExploring = true
+            where edge.key.from.isSubset(of: currentNode) && !seenNodes.contains(edge.key.to) {
                 seenNodes.insert(edge.key.to)
-                queue.append(currentPath + [edge.key.to])
-            }
-
-            // If we haven't added another node, it means we have found an "end".
-            if !stillExploring {
-                paths.append(currentPath)
+                queue.append(edge.key.to)
             }
         }
-
-        if paths.isEmpty {
-            return []
-        }
-
-        // Map to all reachable contexts. so all that are on the path.
-        let contextSet = paths.reduce(Set()) { res, path in
-            res.union(path)
-        }
-        return Array(contextSet)
+        return seenNodes
     }
 
     // The return value is a list of possible Paths.

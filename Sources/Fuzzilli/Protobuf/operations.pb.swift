@@ -151,6 +151,7 @@ public enum Fuzzilli_Protobuf_BinaryOperator: SwiftProtobuf.Enum, Swift.CaseIter
   case rshift // = 11
   case exp // = 12
   case unrshift // = 13
+  case nullCoalesce // = 14
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -173,6 +174,7 @@ public enum Fuzzilli_Protobuf_BinaryOperator: SwiftProtobuf.Enum, Swift.CaseIter
     case 11: self = .rshift
     case 12: self = .exp
     case 13: self = .unrshift
+    case 14: self = .nullCoalesce
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -193,6 +195,7 @@ public enum Fuzzilli_Protobuf_BinaryOperator: SwiftProtobuf.Enum, Swift.CaseIter
     case .rshift: return 11
     case .exp: return 12
     case .unrshift: return 13
+    case .nullCoalesce: return 14
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -213,6 +216,7 @@ public enum Fuzzilli_Protobuf_BinaryOperator: SwiftProtobuf.Enum, Swift.CaseIter
     .rshift,
     .exp,
     .unrshift,
+    .nullCoalesce,
   ]
 
 }
@@ -513,6 +517,7 @@ public enum Fuzzilli_Protobuf_NamedVariableDeclarationMode: SwiftProtobuf.Enum, 
   case global // = 1
   case `var` // = 2
   case `let` // = 3
+  case const // = 4
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -525,6 +530,7 @@ public enum Fuzzilli_Protobuf_NamedVariableDeclarationMode: SwiftProtobuf.Enum, 
     case 1: self = .global
     case 2: self = .var
     case 3: self = .let
+    case 4: self = .const
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -535,6 +541,7 @@ public enum Fuzzilli_Protobuf_NamedVariableDeclarationMode: SwiftProtobuf.Enum, 
     case .global: return 1
     case .var: return 2
     case .let: return 3
+    case .const: return 4
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -545,6 +552,7 @@ public enum Fuzzilli_Protobuf_NamedVariableDeclarationMode: SwiftProtobuf.Enum, 
     .global,
     .var,
     .let,
+    .const,
   ]
 
 }
@@ -617,18 +625,20 @@ public enum Fuzzilli_Protobuf_WasmValueType: SwiftProtobuf.Enum, Swift.CaseItera
 public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case index // = 0
-  case externref // = 1
-  case funcref // = 2
-  case exnref // = 3
-  case i31Ref // = 4
-  case anyref // = 5
-  case eqref // = 6
-  case structref // = 7
-  case arrayref // = 8
-  case noneref // = 9
-  case noexternref // = 10
-  case nofuncref // = 11
-  case noexnref // = 12
+  case indexExact // = 1
+  case externref // = 2
+  case funcref // = 3
+  case exnref // = 4
+  case i31Ref // = 5
+  case anyref // = 6
+  case eqref // = 7
+  case structref // = 8
+  case arrayref // = 9
+  case noneref // = 10
+  case noexternref // = 11
+  case nofuncref // = 12
+  case noexnref // = 13
+  case jsstringref // = 14
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -638,18 +648,20 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
   public init?(rawValue: Int) {
     switch rawValue {
     case 0: self = .index
-    case 1: self = .externref
-    case 2: self = .funcref
-    case 3: self = .exnref
-    case 4: self = .i31Ref
-    case 5: self = .anyref
-    case 6: self = .eqref
-    case 7: self = .structref
-    case 8: self = .arrayref
-    case 9: self = .noneref
-    case 10: self = .noexternref
-    case 11: self = .nofuncref
-    case 12: self = .noexnref
+    case 1: self = .indexExact
+    case 2: self = .externref
+    case 3: self = .funcref
+    case 4: self = .exnref
+    case 5: self = .i31Ref
+    case 6: self = .anyref
+    case 7: self = .eqref
+    case 8: self = .structref
+    case 9: self = .arrayref
+    case 10: self = .noneref
+    case 11: self = .noexternref
+    case 12: self = .nofuncref
+    case 13: self = .noexnref
+    case 14: self = .jsstringref
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -657,18 +669,20 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
   public var rawValue: Int {
     switch self {
     case .index: return 0
-    case .externref: return 1
-    case .funcref: return 2
-    case .exnref: return 3
-    case .i31Ref: return 4
-    case .anyref: return 5
-    case .eqref: return 6
-    case .structref: return 7
-    case .arrayref: return 8
-    case .noneref: return 9
-    case .noexternref: return 10
-    case .nofuncref: return 11
-    case .noexnref: return 12
+    case .indexExact: return 1
+    case .externref: return 2
+    case .funcref: return 3
+    case .exnref: return 4
+    case .i31Ref: return 5
+    case .anyref: return 6
+    case .eqref: return 7
+    case .structref: return 8
+    case .arrayref: return 9
+    case .noneref: return 10
+    case .noexternref: return 11
+    case .nofuncref: return 12
+    case .noexnref: return 13
+    case .jsstringref: return 14
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -676,6 +690,7 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
   // The compiler won't synthesize support with the UNRECOGNIZED case.
   public static let allCases: [Fuzzilli_Protobuf_WasmReferenceTypeKind] = [
     .index,
+    .indexExact,
     .externref,
     .funcref,
     .exnref,
@@ -688,6 +703,7 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
     .noexternref,
     .nofuncref,
     .noexnref,
+    .jsstringref,
   ]
 
 }
@@ -1766,6 +1782,8 @@ public struct Fuzzilli_Protobuf_Parameters: Sendable {
 
   public var defaultParameterIndices: [UInt32] = []
 
+  public var destructuringParameters: Dictionary<UInt32,Fuzzilli_Protobuf_FuzzILDestructuringPattern> = [:]
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2007,6 +2025,10 @@ public struct Fuzzilli_Protobuf_BeginObjectLiteralMethod: Sendable {
   /// Clears the value of `parameters`. Subsequent reads from it will return its default value.
   public mutating func clearParameters() {self._parameters = nil}
 
+  public var isGenerator: Bool = false
+
+  public var isAsync: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2037,6 +2059,10 @@ public struct Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod: Sendable {
   public var hasParameters: Bool {self._parameters != nil}
   /// Clears the value of `parameters`. Subsequent reads from it will return its default value.
   public mutating func clearParameters() {self._parameters = nil}
+
+  public var isGenerator: Bool = false
+
+  public var isAsync: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2258,6 +2284,10 @@ public struct Fuzzilli_Protobuf_BeginClassMethod: Sendable {
 
   public var isStatic: Bool = false
 
+  public var isGenerator: Bool = false
+
+  public var isAsync: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2290,6 +2320,10 @@ public struct Fuzzilli_Protobuf_BeginClassComputedMethod: Sendable {
   public mutating func clearParameters() {self._parameters = nil}
 
   public var isStatic: Bool = false
+
+  public var isGenerator: Bool = false
+
+  public var isAsync: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2454,6 +2488,10 @@ public struct Fuzzilli_Protobuf_BeginClassPrivateMethod: Sendable {
 
   public var isStatic: Bool = false
 
+  public var isGenerator: Bool = false
+
+  public var isAsync: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2462,6 +2500,54 @@ public struct Fuzzilli_Protobuf_BeginClassPrivateMethod: Sendable {
 }
 
 public struct Fuzzilli_Protobuf_EndClassPrivateMethod: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_BeginClassPrivateGetter: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var propertyName: String = String()
+
+  public var isStatic: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_EndClassPrivateGetter: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_BeginClassPrivateSetter: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var propertyName: String = String()
+
+  public var isStatic: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_EndClassPrivateSetter: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2486,20 +2572,9 @@ public struct Fuzzilli_Protobuf_CreateArray: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var elementGroupName: String {
-    get {_elementGroupName ?? String()}
-    set {_elementGroupName = newValue}
-  }
-  /// Returns true if `elementGroupName` has been explicitly set.
-  public var hasElementGroupName: Bool {self._elementGroupName != nil}
-  /// Clears the value of `elementGroupName`. Subsequent reads from it will return its default value.
-  public mutating func clearElementGroupName() {self._elementGroupName = nil}
-
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
-
-  fileprivate var _elementGroupName: String? = nil
 }
 
 public struct Fuzzilli_Protobuf_CreateIntArray: Sendable {
@@ -2557,7 +2632,7 @@ public struct Fuzzilli_Protobuf_GetProperty: Sendable {
 
   public var propertyName: String = String()
 
-  public var isGuarded: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2587,6 +2662,8 @@ public struct Fuzzilli_Protobuf_UpdateProperty: Sendable {
 
   public var op: Fuzzilli_Protobuf_BinaryOperator = .add
 
+  public var isGuarded: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2599,7 +2676,7 @@ public struct Fuzzilli_Protobuf_DeleteProperty: Sendable {
 
   public var propertyName: String = String()
 
-  public var isGuarded: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2633,7 +2710,7 @@ public struct Fuzzilli_Protobuf_GetElement: Sendable {
 
   public var index: Int64 = 0
 
-  public var isGuarded: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2646,6 +2723,8 @@ public struct Fuzzilli_Protobuf_SetElement: Sendable {
   // methods supported on all messages.
 
   public var index: Int64 = 0
+
+  public var isGuarded: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2661,6 +2740,8 @@ public struct Fuzzilli_Protobuf_UpdateElement: Sendable {
 
   public var op: Fuzzilli_Protobuf_BinaryOperator = .add
 
+  public var isGuarded: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2673,7 +2754,7 @@ public struct Fuzzilli_Protobuf_DeleteElement: Sendable {
 
   public var index: Int64 = 0
 
-  public var isGuarded: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2705,7 +2786,7 @@ public struct Fuzzilli_Protobuf_GetComputedProperty: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var isGuarded: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2716,6 +2797,8 @@ public struct Fuzzilli_Protobuf_SetComputedProperty: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
+
+  public var isGuarded: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2729,6 +2812,8 @@ public struct Fuzzilli_Protobuf_UpdateComputedProperty: Sendable {
 
   public var op: Fuzzilli_Protobuf_BinaryOperator = .add
 
+  public var isGuarded: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2739,7 +2824,7 @@ public struct Fuzzilli_Protobuf_DeleteComputedProperty: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var isGuarded: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3126,6 +3211,8 @@ public struct Fuzzilli_Protobuf_CallFunction: Sendable {
 
   public var isGuarded: Bool = false
 
+  public var isCallOptional: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3139,6 +3226,8 @@ public struct Fuzzilli_Protobuf_CallFunctionWithSpread: Sendable {
   public var spreads: [Bool] = []
 
   public var isGuarded: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3180,6 +3269,10 @@ public struct Fuzzilli_Protobuf_CallMethod: Sendable {
 
   public var isGuarded: Bool = false
 
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3196,6 +3289,10 @@ public struct Fuzzilli_Protobuf_CallMethodWithSpread: Sendable {
 
   public var isGuarded: Bool = false
 
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3207,6 +3304,10 @@ public struct Fuzzilli_Protobuf_CallComputedMethod: Sendable {
   // methods supported on all messages.
 
   public var isGuarded: Bool = false
+
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3221,6 +3322,10 @@ public struct Fuzzilli_Protobuf_CallComputedMethodWithSpread: Sendable {
   public var spreads: [Bool] = []
 
   public var isGuarded: Bool = false
+
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3376,6 +3481,10 @@ public struct Fuzzilli_Protobuf_CallSuperMethod: Sendable {
 
   public var methodName: String = String()
 
+  public var isGuarded: Bool = false
+
+  public var isCallOptional: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3388,6 +3497,10 @@ public struct Fuzzilli_Protobuf_GetPrivateProperty: Sendable {
 
   public var propertyName: String = String()
 
+  public var isGuarded: Bool = false
+
+  public var isReceiverOptional: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3399,6 +3512,8 @@ public struct Fuzzilli_Protobuf_SetPrivateProperty: Sendable {
   // methods supported on all messages.
 
   public var propertyName: String = String()
+
+  public var isGuarded: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3414,6 +3529,8 @@ public struct Fuzzilli_Protobuf_UpdatePrivateProperty: Sendable {
 
   public var op: Fuzzilli_Protobuf_BinaryOperator = .add
 
+  public var isGuarded: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3425,6 +3542,32 @@ public struct Fuzzilli_Protobuf_CallPrivateMethod: Sendable {
   // methods supported on all messages.
 
   public var methodName: String = String()
+
+  public var isGuarded: Bool = false
+
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_CallPrivateMethodWithSpread: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var methodName: String = String()
+
+  public var spreads: [Bool] = []
+
+  public var isGuarded: Bool = false
+
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -4080,6 +4223,8 @@ public struct Fuzzilli_Protobuf_EndWasmModule: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
+
+  public var hasStartFunction_p: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -5027,20 +5172,9 @@ public struct Fuzzilli_Protobuf_WasmLoadGlobal: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var globalType: Fuzzilli_Protobuf_WasmILType {
-    get {_globalType ?? Fuzzilli_Protobuf_WasmILType()}
-    set {_globalType = newValue}
-  }
-  /// Returns true if `globalType` has been explicitly set.
-  public var hasGlobalType: Bool {self._globalType != nil}
-  /// Clears the value of `globalType`. Subsequent reads from it will return its default value.
-  public mutating func clearGlobalType() {self._globalType = nil}
-
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
-
-  fileprivate var _globalType: Fuzzilli_Protobuf_WasmILType? = nil
 }
 
 public struct Fuzzilli_Protobuf_WasmStoreGlobal: Sendable {
@@ -5048,20 +5182,9 @@ public struct Fuzzilli_Protobuf_WasmStoreGlobal: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var globalType: Fuzzilli_Protobuf_WasmILType {
-    get {_globalType ?? Fuzzilli_Protobuf_WasmILType()}
-    set {_globalType = newValue}
-  }
-  /// Returns true if `globalType` has been explicitly set.
-  public var hasGlobalType: Bool {self._globalType != nil}
-  /// Clears the value of `globalType`. Subsequent reads from it will return its default value.
-  public mutating func clearGlobalType() {self._globalType = nil}
-
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
-
-  fileprivate var _globalType: Fuzzilli_Protobuf_WasmILType? = nil
 }
 
 public struct Fuzzilli_Protobuf_WasmTableGet: Sendable {
@@ -5902,6 +6025,8 @@ public struct Fuzzilli_Protobuf_WasmDefineStructType: Sendable {
 
   public var isFinal: Bool = false
 
+  public var hasDescribes_p: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -5990,6 +6115,36 @@ public struct Fuzzilli_Protobuf_WasmStructNewDefault: Sendable {
 }
 
 public struct Fuzzilli_Protobuf_WasmStructNew: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmStructNewDefaultDesc: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmStructNewDesc: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmRefGetDesc: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -6118,6 +6273,27 @@ public struct Fuzzilli_Protobuf_WasmRefCast: Sendable {
   fileprivate var _type: Fuzzilli_Protobuf_WasmILType? = nil
 }
 
+public struct Fuzzilli_Protobuf_WasmRefCastDescEq: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var type: Fuzzilli_Protobuf_WasmILType {
+    get {_type ?? Fuzzilli_Protobuf_WasmILType()}
+    set {_type = newValue}
+  }
+  /// Returns true if `type` has been explicitly set.
+  public var hasType: Bool {self._type != nil}
+  /// Clears the value of `type`. Subsequent reads from it will return its default value.
+  public mutating func clearType() {self._type = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _type: Fuzzilli_Protobuf_WasmILType? = nil
+}
+
 public struct Fuzzilli_Protobuf_WasmBranchOnNull: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -6129,6 +6305,48 @@ public struct Fuzzilli_Protobuf_WasmBranchOnNull: Sendable {
 }
 
 public struct Fuzzilli_Protobuf_WasmBranchOnCast: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var type: Fuzzilli_Protobuf_WasmILType {
+    get {_type ?? Fuzzilli_Protobuf_WasmILType()}
+    set {_type = newValue}
+  }
+  /// Returns true if `type` has been explicitly set.
+  public var hasType: Bool {self._type != nil}
+  /// Clears the value of `type`. Subsequent reads from it will return its default value.
+  public mutating func clearType() {self._type = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _type: Fuzzilli_Protobuf_WasmILType? = nil
+}
+
+public struct Fuzzilli_Protobuf_WasmBranchOnCastDescEq: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var type: Fuzzilli_Protobuf_WasmILType {
+    get {_type ?? Fuzzilli_Protobuf_WasmILType()}
+    set {_type = newValue}
+  }
+  /// Returns true if `type` has been explicitly set.
+  public var hasType: Bool {self._type != nil}
+  /// Clears the value of `type`. Subsequent reads from it will return its default value.
+  public mutating func clearType() {self._type = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _type: Fuzzilli_Protobuf_WasmILType? = nil
+}
+
+public struct Fuzzilli_Protobuf_WasmBranchOnCastDescEqFail: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -6372,6 +6590,36 @@ public struct Fuzzilli_Protobuf_WasmTableCopy: Sendable {
   public init() {}
 }
 
+public struct Fuzzilli_Protobuf_WasmTableFill: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmArrayNewData: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmArrayNewElem: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public struct Fuzzilli_Protobuf_BeginBundleScript: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -6569,30 +6817,9 @@ public struct Fuzzilli_Protobuf_CreateMap: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var keyGroupName: String {
-    get {_keyGroupName ?? String()}
-    set {_keyGroupName = newValue}
-  }
-  /// Returns true if `keyGroupName` has been explicitly set.
-  public var hasKeyGroupName: Bool {self._keyGroupName != nil}
-  /// Clears the value of `keyGroupName`. Subsequent reads from it will return its default value.
-  public mutating func clearKeyGroupName() {self._keyGroupName = nil}
-
-  public var valueGroupName: String {
-    get {_valueGroupName ?? String()}
-    set {_valueGroupName = newValue}
-  }
-  /// Returns true if `valueGroupName` has been explicitly set.
-  public var hasValueGroupName: Bool {self._valueGroupName != nil}
-  /// Clears the value of `valueGroupName`. Subsequent reads from it will return its default value.
-  public mutating func clearValueGroupName() {self._valueGroupName = nil}
-
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
-
-  fileprivate var _keyGroupName: String? = nil
-  fileprivate var _valueGroupName: String? = nil
 }
 
 public struct Fuzzilli_Protobuf_WasmRefAsNonNull: Sendable {
@@ -6735,6 +6962,15 @@ public struct Fuzzilli_Protobuf_FuzzILDestructuringPattern: @unchecked Sendable 
       set {_uniqueStorage()._value = .superComputedProperty(newValue)}
     }
 
+    /// e.g. `[this.#prop] = arr`
+    public var privateProperty: String {
+      get {
+        if case .privateProperty(let v)? = _storage._value {return v}
+        return String()
+      }
+      set {_uniqueStorage()._value = .privateProperty(newValue)}
+    }
+
     public var unknownFields = SwiftProtobuf.UnknownStorage()
 
     public enum OneOf_Value: Equatable, Sendable {
@@ -6754,6 +6990,8 @@ public struct Fuzzilli_Protobuf_FuzzILDestructuringPattern: @unchecked Sendable 
       case superElement(Int64)
       /// e.g. `[super[key]] = arr`
       case superComputedProperty(Fuzzilli_Protobuf_Empty)
+      /// e.g. `[this.#prop] = arr`
+      case privateProperty(String)
 
     }
 
@@ -6943,6 +7181,148 @@ public struct Fuzzilli_Protobuf_EndPendingBundleModule: Sendable {
   public init() {}
 }
 
+public struct Fuzzilli_Protobuf_WasmJSStringLength: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringFromCharCodeArray: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringFromCharCode: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringFromCodePoint: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringCharCodeAt: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringCodePointAt: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringIntoCharCodeArray: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringCast: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringTest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringConcat: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringSubstring: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringEquals: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmJSStringCompare: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Fuzzilli_Protobuf_WasmStringConstant: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var value: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "fuzzilli.protobuf"
@@ -6956,7 +7336,7 @@ extension Fuzzilli_Protobuf_UnaryOperator: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Fuzzilli_Protobuf_BinaryOperator: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ADD\0\u{1}SUB\0\u{1}MUL\0\u{1}DIV\0\u{1}MOD\0\u{1}BIT_AND\0\u{1}BIT_OR\0\u{1}LOGICAL_AND\0\u{1}LOGICAL_OR\0\u{1}XOR\0\u{1}LSHIFT\0\u{1}RSHIFT\0\u{1}EXP\0\u{1}UNRSHIFT\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ADD\0\u{1}SUB\0\u{1}MUL\0\u{1}DIV\0\u{1}MOD\0\u{1}BIT_AND\0\u{1}BIT_OR\0\u{1}LOGICAL_AND\0\u{1}LOGICAL_OR\0\u{1}XOR\0\u{1}LSHIFT\0\u{1}RSHIFT\0\u{1}EXP\0\u{1}UNRSHIFT\0\u{1}NULL_COALESCE\0")
 }
 
 extension Fuzzilli_Protobuf_WasmIntegerBinaryOperator: SwiftProtobuf._ProtoNameProviding {
@@ -6980,7 +7360,7 @@ extension Fuzzilli_Protobuf_Comparator: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Fuzzilli_Protobuf_NamedVariableDeclarationMode: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0NONE\0\u{1}GLOBAL\0\u{1}VAR\0\u{1}LET\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0NONE\0\u{1}GLOBAL\0\u{1}VAR\0\u{1}LET\0\u{1}CONST\0")
 }
 
 extension Fuzzilli_Protobuf_WasmValueType: SwiftProtobuf._ProtoNameProviding {
@@ -6988,7 +7368,7 @@ extension Fuzzilli_Protobuf_WasmValueType: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0INDEX\0\u{1}EXTERNREF\0\u{1}FUNCREF\0\u{1}EXNREF\0\u{1}I31REF\0\u{1}ANYREF\0\u{1}EQREF\0\u{1}STRUCTREF\0\u{1}ARRAYREF\0\u{1}NONEREF\0\u{1}NOEXTERNREF\0\u{1}NOFUNCREF\0\u{1}NOEXNREF\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0INDEX\0\u{1}INDEX_EXACT\0\u{1}EXTERNREF\0\u{1}FUNCREF\0\u{1}EXNREF\0\u{1}I31REF\0\u{1}ANYREF\0\u{1}EQREF\0\u{1}STRUCTREF\0\u{1}ARRAYREF\0\u{1}NONEREF\0\u{1}NOEXTERNREF\0\u{1}NOFUNCREF\0\u{1}NOEXNREF\0\u{1}JSSTRINGREF\0")
 }
 
 extension Fuzzilli_Protobuf_WasmMemoryLoadType: SwiftProtobuf._ProtoNameProviding {
@@ -7084,7 +7464,7 @@ extension Fuzzilli_Protobuf_Empty: SwiftProtobuf.Message, SwiftProtobuf._Message
 
 extension Fuzzilli_Protobuf_Parameters: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Parameters"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}count\0\u{1}hasRest\0\u{1}defaultParameterIndices\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}count\0\u{1}hasRest\0\u{1}defaultParameterIndices\0\u{1}destructuringParameters\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7095,6 +7475,7 @@ extension Fuzzilli_Protobuf_Parameters: SwiftProtobuf.Message, SwiftProtobuf._Me
       case 1: try { try decoder.decodeSingularUInt32Field(value: &self.count) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.hasRest_p) }()
       case 3: try { try decoder.decodeRepeatedUInt32Field(value: &self.defaultParameterIndices) }()
+      case 4: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMessageMap<SwiftProtobuf.ProtobufUInt32,Fuzzilli_Protobuf_FuzzILDestructuringPattern>.self, value: &self.destructuringParameters) }()
       default: break
       }
     }
@@ -7110,6 +7491,9 @@ extension Fuzzilli_Protobuf_Parameters: SwiftProtobuf.Message, SwiftProtobuf._Me
     if !self.defaultParameterIndices.isEmpty {
       try visitor.visitPackedUInt32Field(value: self.defaultParameterIndices, fieldNumber: 3)
     }
+    if !self.destructuringParameters.isEmpty {
+      try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMessageMap<SwiftProtobuf.ProtobufUInt32,Fuzzilli_Protobuf_FuzzILDestructuringPattern>.self, value: self.destructuringParameters, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -7117,6 +7501,7 @@ extension Fuzzilli_Protobuf_Parameters: SwiftProtobuf.Message, SwiftProtobuf._Me
     if lhs.count != rhs.count {return false}
     if lhs.hasRest_p != rhs.hasRest_p {return false}
     if lhs.defaultParameterIndices != rhs.defaultParameterIndices {return false}
+    if lhs.destructuringParameters != rhs.destructuringParameters {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -7577,7 +7962,7 @@ extension Fuzzilli_Protobuf_ObjectLiteralSetPrototype: SwiftProtobuf.Message, Sw
 
 extension Fuzzilli_Protobuf_BeginObjectLiteralMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginObjectLiteralMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0\u{3}is_generator\0\u{3}is_async\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7587,6 +7972,8 @@ extension Fuzzilli_Protobuf_BeginObjectLiteralMethod: SwiftProtobuf.Message, Swi
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isGenerator) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isAsync) }()
       default: break
       }
     }
@@ -7603,12 +7990,20 @@ extension Fuzzilli_Protobuf_BeginObjectLiteralMethod: SwiftProtobuf.Message, Swi
     try { if let v = self._parameters {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
     } }()
+    if self.isGenerator != false {
+      try visitor.visitSingularBoolField(value: self.isGenerator, fieldNumber: 3)
+    }
+    if self.isAsync != false {
+      try visitor.visitSingularBoolField(value: self.isAsync, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_BeginObjectLiteralMethod, rhs: Fuzzilli_Protobuf_BeginObjectLiteralMethod) -> Bool {
     if lhs.methodName != rhs.methodName {return false}
     if lhs._parameters != rhs._parameters {return false}
+    if lhs.isGenerator != rhs.isGenerator {return false}
+    if lhs.isAsync != rhs.isAsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -7635,7 +8030,7 @@ extension Fuzzilli_Protobuf_EndObjectLiteralMethod: SwiftProtobuf.Message, Swift
 
 extension Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginObjectLiteralComputedMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}parameters\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}parameters\0\u{3}is_generator\0\u{3}is_async\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7644,6 +8039,8 @@ extension Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod: SwiftProtobuf.Mess
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGenerator) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isAsync) }()
       default: break
       }
     }
@@ -7657,11 +8054,19 @@ extension Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod: SwiftProtobuf.Mess
     try { if let v = self._parameters {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
     } }()
+    if self.isGenerator != false {
+      try visitor.visitSingularBoolField(value: self.isGenerator, fieldNumber: 2)
+    }
+    if self.isAsync != false {
+      try visitor.visitSingularBoolField(value: self.isAsync, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod, rhs: Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod) -> Bool {
     if lhs._parameters != rhs._parameters {return false}
+    if lhs.isGenerator != rhs.isGenerator {return false}
+    if lhs.isAsync != rhs.isAsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8084,7 +8489,7 @@ extension Fuzzilli_Protobuf_ClassAddComputedProperty: SwiftProtobuf.Message, Swi
 
 extension Fuzzilli_Protobuf_BeginClassMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginClassMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0\u{3}is_static\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0\u{3}is_static\0\u{3}is_generator\0\u{3}is_async\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -8095,6 +8500,8 @@ extension Fuzzilli_Protobuf_BeginClassMethod: SwiftProtobuf.Message, SwiftProtob
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isGenerator) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.isAsync) }()
       default: break
       }
     }
@@ -8114,6 +8521,12 @@ extension Fuzzilli_Protobuf_BeginClassMethod: SwiftProtobuf.Message, SwiftProtob
     if self.isStatic != false {
       try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 3)
     }
+    if self.isGenerator != false {
+      try visitor.visitSingularBoolField(value: self.isGenerator, fieldNumber: 4)
+    }
+    if self.isAsync != false {
+      try visitor.visitSingularBoolField(value: self.isAsync, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -8121,6 +8534,8 @@ extension Fuzzilli_Protobuf_BeginClassMethod: SwiftProtobuf.Message, SwiftProtob
     if lhs.methodName != rhs.methodName {return false}
     if lhs._parameters != rhs._parameters {return false}
     if lhs.isStatic != rhs.isStatic {return false}
+    if lhs.isGenerator != rhs.isGenerator {return false}
+    if lhs.isAsync != rhs.isAsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8147,7 +8562,7 @@ extension Fuzzilli_Protobuf_EndClassMethod: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Fuzzilli_Protobuf_BeginClassComputedMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginClassComputedMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}parameters\0\u{3}is_static\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}parameters\0\u{3}is_static\0\u{3}is_generator\0\u{3}is_async\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -8157,6 +8572,8 @@ extension Fuzzilli_Protobuf_BeginClassComputedMethod: SwiftProtobuf.Message, Swi
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isGenerator) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isAsync) }()
       default: break
       }
     }
@@ -8173,12 +8590,20 @@ extension Fuzzilli_Protobuf_BeginClassComputedMethod: SwiftProtobuf.Message, Swi
     if self.isStatic != false {
       try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 2)
     }
+    if self.isGenerator != false {
+      try visitor.visitSingularBoolField(value: self.isGenerator, fieldNumber: 3)
+    }
+    if self.isAsync != false {
+      try visitor.visitSingularBoolField(value: self.isAsync, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_BeginClassComputedMethod, rhs: Fuzzilli_Protobuf_BeginClassComputedMethod) -> Bool {
     if lhs._parameters != rhs._parameters {return false}
     if lhs.isStatic != rhs.isStatic {return false}
+    if lhs.isGenerator != rhs.isGenerator {return false}
+    if lhs.isAsync != rhs.isAsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8489,7 +8914,7 @@ extension Fuzzilli_Protobuf_ClassAddPrivateProperty: SwiftProtobuf.Message, Swif
 
 extension Fuzzilli_Protobuf_BeginClassPrivateMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginClassPrivateMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0\u{3}is_static\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0\u{3}is_static\0\u{3}is_generator\0\u{3}is_async\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -8500,6 +8925,8 @@ extension Fuzzilli_Protobuf_BeginClassPrivateMethod: SwiftProtobuf.Message, Swif
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isGenerator) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.isAsync) }()
       default: break
       }
     }
@@ -8519,6 +8946,12 @@ extension Fuzzilli_Protobuf_BeginClassPrivateMethod: SwiftProtobuf.Message, Swif
     if self.isStatic != false {
       try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 3)
     }
+    if self.isGenerator != false {
+      try visitor.visitSingularBoolField(value: self.isGenerator, fieldNumber: 4)
+    }
+    if self.isAsync != false {
+      try visitor.visitSingularBoolField(value: self.isAsync, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -8526,6 +8959,8 @@ extension Fuzzilli_Protobuf_BeginClassPrivateMethod: SwiftProtobuf.Message, Swif
     if lhs.methodName != rhs.methodName {return false}
     if lhs._parameters != rhs._parameters {return false}
     if lhs.isStatic != rhs.isStatic {return false}
+    if lhs.isGenerator != rhs.isGenerator {return false}
+    if lhs.isAsync != rhs.isAsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8545,6 +8980,114 @@ extension Fuzzilli_Protobuf_EndClassPrivateMethod: SwiftProtobuf.Message, SwiftP
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_EndClassPrivateMethod, rhs: Fuzzilli_Protobuf_EndClassPrivateMethod) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_BeginClassPrivateGetter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".BeginClassPrivateGetter"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{3}is_static\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.propertyName.isEmpty {
+      try visitor.visitSingularStringField(value: self.propertyName, fieldNumber: 1)
+    }
+    if self.isStatic != false {
+      try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_BeginClassPrivateGetter, rhs: Fuzzilli_Protobuf_BeginClassPrivateGetter) -> Bool {
+    if lhs.propertyName != rhs.propertyName {return false}
+    if lhs.isStatic != rhs.isStatic {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_EndClassPrivateGetter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".EndClassPrivateGetter"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_EndClassPrivateGetter, rhs: Fuzzilli_Protobuf_EndClassPrivateGetter) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_BeginClassPrivateSetter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".BeginClassPrivateSetter"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{3}is_static\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.propertyName.isEmpty {
+      try visitor.visitSingularStringField(value: self.propertyName, fieldNumber: 1)
+    }
+    if self.isStatic != false {
+      try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_BeginClassPrivateSetter, rhs: Fuzzilli_Protobuf_BeginClassPrivateSetter) -> Bool {
+    if lhs.propertyName != rhs.propertyName {return false}
+    if lhs.isStatic != rhs.isStatic {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_EndClassPrivateSetter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".EndClassPrivateSetter"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_EndClassPrivateSetter, rhs: Fuzzilli_Protobuf_EndClassPrivateSetter) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8571,33 +9114,18 @@ extension Fuzzilli_Protobuf_EndClassDefinition: SwiftProtobuf.Message, SwiftProt
 
 extension Fuzzilli_Protobuf_CreateArray: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateArray"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}elementGroupName\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self._elementGroupName) }()
-      default: break
-      }
-    }
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._elementGroupName {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CreateArray, rhs: Fuzzilli_Protobuf_CreateArray) -> Bool {
-    if lhs._elementGroupName != rhs._elementGroupName {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8725,7 +9253,7 @@ extension Fuzzilli_Protobuf_CreateArrayWithSpread: SwiftProtobuf.Message, SwiftP
 
 extension Fuzzilli_Protobuf_GetProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isGuarded\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -8734,7 +9262,7 @@ extension Fuzzilli_Protobuf_GetProperty: SwiftProtobuf.Message, SwiftProtobuf._M
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
@@ -8744,15 +9272,15 @@ extension Fuzzilli_Protobuf_GetProperty: SwiftProtobuf.Message, SwiftProtobuf._M
     if !self.propertyName.isEmpty {
       try visitor.visitSingularStringField(value: self.propertyName, fieldNumber: 1)
     }
-    if self.isGuarded != false {
-      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_GetProperty, rhs: Fuzzilli_Protobuf_GetProperty) -> Bool {
     if lhs.propertyName != rhs.propertyName {return false}
-    if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8795,7 +9323,7 @@ extension Fuzzilli_Protobuf_SetProperty: SwiftProtobuf.Message, SwiftProtobuf._M
 
 extension Fuzzilli_Protobuf_UpdateProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}op\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}op\0\u{1}isGuarded\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -8805,6 +9333,7 @@ extension Fuzzilli_Protobuf_UpdateProperty: SwiftProtobuf.Message, SwiftProtobuf
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
       case 2: try { try decoder.decodeSingularEnumField(value: &self.op) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
       default: break
       }
     }
@@ -8817,12 +9346,16 @@ extension Fuzzilli_Protobuf_UpdateProperty: SwiftProtobuf.Message, SwiftProtobuf
     if self.op != .add {
       try visitor.visitSingularEnumField(value: self.op, fieldNumber: 2)
     }
+    if self.isGuarded != false {
+      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_UpdateProperty, rhs: Fuzzilli_Protobuf_UpdateProperty) -> Bool {
     if lhs.propertyName != rhs.propertyName {return false}
     if lhs.op != rhs.op {return false}
+    if lhs.isGuarded != rhs.isGuarded {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8830,7 +9363,7 @@ extension Fuzzilli_Protobuf_UpdateProperty: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Fuzzilli_Protobuf_DeleteProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isGuarded\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -8839,7 +9372,7 @@ extension Fuzzilli_Protobuf_DeleteProperty: SwiftProtobuf.Message, SwiftProtobuf
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
@@ -8849,15 +9382,15 @@ extension Fuzzilli_Protobuf_DeleteProperty: SwiftProtobuf.Message, SwiftProtobuf
     if !self.propertyName.isEmpty {
       try visitor.visitSingularStringField(value: self.propertyName, fieldNumber: 1)
     }
-    if self.isGuarded != false {
-      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_DeleteProperty, rhs: Fuzzilli_Protobuf_DeleteProperty) -> Bool {
     if lhs.propertyName != rhs.propertyName {return false}
-    if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8915,6 +9448,41 @@ extension Fuzzilli_Protobuf_ConfigureProperty: SwiftProtobuf.Message, SwiftProto
 
 extension Fuzzilli_Protobuf_GetElement: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetElement"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}isReceiverOptional\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.index) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.index != 0 {
+      try visitor.visitSingularInt64Field(value: self.index, fieldNumber: 1)
+    }
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_GetElement, rhs: Fuzzilli_Protobuf_GetElement) -> Bool {
+    if lhs.index != rhs.index {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_SetElement: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetElement"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}isGuarded\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -8940,7 +9508,7 @@ extension Fuzzilli_Protobuf_GetElement: SwiftProtobuf.Message, SwiftProtobuf._Me
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Fuzzilli_Protobuf_GetElement, rhs: Fuzzilli_Protobuf_GetElement) -> Bool {
+  public static func ==(lhs: Fuzzilli_Protobuf_SetElement, rhs: Fuzzilli_Protobuf_SetElement) -> Bool {
     if lhs.index != rhs.index {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -8948,39 +9516,9 @@ extension Fuzzilli_Protobuf_GetElement: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension Fuzzilli_Protobuf_SetElement: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".SetElement"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularInt64Field(value: &self.index) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.index != 0 {
-      try visitor.visitSingularInt64Field(value: self.index, fieldNumber: 1)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Fuzzilli_Protobuf_SetElement, rhs: Fuzzilli_Protobuf_SetElement) -> Bool {
-    if lhs.index != rhs.index {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
 extension Fuzzilli_Protobuf_UpdateElement: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateElement"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}op\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}op\0\u{1}isGuarded\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -8990,6 +9528,7 @@ extension Fuzzilli_Protobuf_UpdateElement: SwiftProtobuf.Message, SwiftProtobuf.
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularInt64Field(value: &self.index) }()
       case 2: try { try decoder.decodeSingularEnumField(value: &self.op) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
       default: break
       }
     }
@@ -9002,12 +9541,16 @@ extension Fuzzilli_Protobuf_UpdateElement: SwiftProtobuf.Message, SwiftProtobuf.
     if self.op != .add {
       try visitor.visitSingularEnumField(value: self.op, fieldNumber: 2)
     }
+    if self.isGuarded != false {
+      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_UpdateElement, rhs: Fuzzilli_Protobuf_UpdateElement) -> Bool {
     if lhs.index != rhs.index {return false}
     if lhs.op != rhs.op {return false}
+    if lhs.isGuarded != rhs.isGuarded {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9015,7 +9558,7 @@ extension Fuzzilli_Protobuf_UpdateElement: SwiftProtobuf.Message, SwiftProtobuf.
 
 extension Fuzzilli_Protobuf_DeleteElement: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteElement"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}isGuarded\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9024,7 +9567,7 @@ extension Fuzzilli_Protobuf_DeleteElement: SwiftProtobuf.Message, SwiftProtobuf.
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularInt64Field(value: &self.index) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
@@ -9034,15 +9577,15 @@ extension Fuzzilli_Protobuf_DeleteElement: SwiftProtobuf.Message, SwiftProtobuf.
     if self.index != 0 {
       try visitor.visitSingularInt64Field(value: self.index, fieldNumber: 1)
     }
-    if self.isGuarded != false {
-      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_DeleteElement, rhs: Fuzzilli_Protobuf_DeleteElement) -> Bool {
     if lhs.index != rhs.index {return false}
-    if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9100,6 +9643,36 @@ extension Fuzzilli_Protobuf_ConfigureElement: SwiftProtobuf.Message, SwiftProtob
 
 extension Fuzzilli_Protobuf_GetComputedProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetComputedProperty"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isReceiverOptional\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_GetComputedProperty, rhs: Fuzzilli_Protobuf_GetComputedProperty) -> Bool {
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_SetComputedProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetComputedProperty"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isGuarded\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -9121,27 +9694,8 @@ extension Fuzzilli_Protobuf_GetComputedProperty: SwiftProtobuf.Message, SwiftPro
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Fuzzilli_Protobuf_GetComputedProperty, rhs: Fuzzilli_Protobuf_GetComputedProperty) -> Bool {
-    if lhs.isGuarded != rhs.isGuarded {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Fuzzilli_Protobuf_SetComputedProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".SetComputedProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    // Load everything into unknown fields
-    while try decoder.nextFieldNumber() != nil {}
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
   public static func ==(lhs: Fuzzilli_Protobuf_SetComputedProperty, rhs: Fuzzilli_Protobuf_SetComputedProperty) -> Bool {
+    if lhs.isGuarded != rhs.isGuarded {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9149,7 +9703,7 @@ extension Fuzzilli_Protobuf_SetComputedProperty: SwiftProtobuf.Message, SwiftPro
 
 extension Fuzzilli_Protobuf_UpdateComputedProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateComputedProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}op\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}op\0\u{1}isGuarded\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9158,6 +9712,7 @@ extension Fuzzilli_Protobuf_UpdateComputedProperty: SwiftProtobuf.Message, Swift
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularEnumField(value: &self.op) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
       default: break
       }
     }
@@ -9167,11 +9722,15 @@ extension Fuzzilli_Protobuf_UpdateComputedProperty: SwiftProtobuf.Message, Swift
     if self.op != .add {
       try visitor.visitSingularEnumField(value: self.op, fieldNumber: 1)
     }
+    if self.isGuarded != false {
+      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_UpdateComputedProperty, rhs: Fuzzilli_Protobuf_UpdateComputedProperty) -> Bool {
     if lhs.op != rhs.op {return false}
+    if lhs.isGuarded != rhs.isGuarded {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9179,7 +9738,7 @@ extension Fuzzilli_Protobuf_UpdateComputedProperty: SwiftProtobuf.Message, Swift
 
 extension Fuzzilli_Protobuf_DeleteComputedProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteComputedProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isGuarded\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9187,21 +9746,21 @@ extension Fuzzilli_Protobuf_DeleteComputedProperty: SwiftProtobuf.Message, Swift
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.isGuarded != false {
-      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 1)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_DeleteComputedProperty, rhs: Fuzzilli_Protobuf_DeleteComputedProperty) -> Bool {
-    if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9885,7 +10444,7 @@ extension Fuzzilli_Protobuf_Await: SwiftProtobuf.Message, SwiftProtobuf._Message
 
 extension Fuzzilli_Protobuf_CallFunction: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallFunction"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isGuarded\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isGuarded\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9894,6 +10453,7 @@ extension Fuzzilli_Protobuf_CallFunction: SwiftProtobuf.Message, SwiftProtobuf._
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -9903,11 +10463,15 @@ extension Fuzzilli_Protobuf_CallFunction: SwiftProtobuf.Message, SwiftProtobuf._
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 1)
     }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CallFunction, rhs: Fuzzilli_Protobuf_CallFunction) -> Bool {
     if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9915,7 +10479,7 @@ extension Fuzzilli_Protobuf_CallFunction: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Fuzzilli_Protobuf_CallFunctionWithSpread: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallFunctionWithSpread"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}spreads\0\u{1}isGuarded\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9925,6 +10489,7 @@ extension Fuzzilli_Protobuf_CallFunctionWithSpread: SwiftProtobuf.Message, Swift
       switch fieldNumber {
       case 1: try { try decoder.decodeRepeatedBoolField(value: &self.spreads) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -9937,12 +10502,16 @@ extension Fuzzilli_Protobuf_CallFunctionWithSpread: SwiftProtobuf.Message, Swift
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
     }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CallFunctionWithSpread, rhs: Fuzzilli_Protobuf_CallFunctionWithSpread) -> Bool {
     if lhs.spreads != rhs.spreads {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10015,7 +10584,7 @@ extension Fuzzilli_Protobuf_ConstructWithSpread: SwiftProtobuf.Message, SwiftPro
 
 extension Fuzzilli_Protobuf_CallMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}isGuarded\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10025,6 +10594,8 @@ extension Fuzzilli_Protobuf_CallMethod: SwiftProtobuf.Message, SwiftProtobuf._Me
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10037,12 +10608,20 @@ extension Fuzzilli_Protobuf_CallMethod: SwiftProtobuf.Message, SwiftProtobuf._Me
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
     }
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 3)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CallMethod, rhs: Fuzzilli_Protobuf_CallMethod) -> Bool {
     if lhs.methodName != rhs.methodName {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10050,7 +10629,7 @@ extension Fuzzilli_Protobuf_CallMethod: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 extension Fuzzilli_Protobuf_CallMethodWithSpread: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallMethodWithSpread"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}spreads\0\u{1}isGuarded\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10061,6 +10640,8 @@ extension Fuzzilli_Protobuf_CallMethodWithSpread: SwiftProtobuf.Message, SwiftPr
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeRepeatedBoolField(value: &self.spreads) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10076,6 +10657,12 @@ extension Fuzzilli_Protobuf_CallMethodWithSpread: SwiftProtobuf.Message, SwiftPr
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 3)
     }
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 4)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -10083,6 +10670,8 @@ extension Fuzzilli_Protobuf_CallMethodWithSpread: SwiftProtobuf.Message, SwiftPr
     if lhs.methodName != rhs.methodName {return false}
     if lhs.spreads != rhs.spreads {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10090,7 +10679,7 @@ extension Fuzzilli_Protobuf_CallMethodWithSpread: SwiftProtobuf.Message, SwiftPr
 
 extension Fuzzilli_Protobuf_CallComputedMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallComputedMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isGuarded\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10099,6 +10688,8 @@ extension Fuzzilli_Protobuf_CallComputedMethod: SwiftProtobuf.Message, SwiftProt
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10108,11 +10699,19 @@ extension Fuzzilli_Protobuf_CallComputedMethod: SwiftProtobuf.Message, SwiftProt
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 1)
     }
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 2)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CallComputedMethod, rhs: Fuzzilli_Protobuf_CallComputedMethod) -> Bool {
     if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10120,7 +10719,7 @@ extension Fuzzilli_Protobuf_CallComputedMethod: SwiftProtobuf.Message, SwiftProt
 
 extension Fuzzilli_Protobuf_CallComputedMethodWithSpread: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallComputedMethodWithSpread"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}spreads\0\u{1}isGuarded\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10130,6 +10729,8 @@ extension Fuzzilli_Protobuf_CallComputedMethodWithSpread: SwiftProtobuf.Message,
       switch fieldNumber {
       case 1: try { try decoder.decodeRepeatedBoolField(value: &self.spreads) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10142,12 +10743,20 @@ extension Fuzzilli_Protobuf_CallComputedMethodWithSpread: SwiftProtobuf.Message,
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
     }
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 3)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CallComputedMethodWithSpread, rhs: Fuzzilli_Protobuf_CallComputedMethodWithSpread) -> Bool {
     if lhs.spreads != rhs.spreads {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10492,7 +11101,7 @@ extension Fuzzilli_Protobuf_CallSuperConstructor: SwiftProtobuf.Message, SwiftPr
 
 extension Fuzzilli_Protobuf_CallSuperMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallSuperMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}isGuarded\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10501,6 +11110,8 @@ extension Fuzzilli_Protobuf_CallSuperMethod: SwiftProtobuf.Message, SwiftProtobu
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10510,11 +11121,19 @@ extension Fuzzilli_Protobuf_CallSuperMethod: SwiftProtobuf.Message, SwiftProtobu
     if !self.methodName.isEmpty {
       try visitor.visitSingularStringField(value: self.methodName, fieldNumber: 1)
     }
+    if self.isGuarded != false {
+      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CallSuperMethod, rhs: Fuzzilli_Protobuf_CallSuperMethod) -> Bool {
     if lhs.methodName != rhs.methodName {return false}
+    if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10522,7 +11141,7 @@ extension Fuzzilli_Protobuf_CallSuperMethod: SwiftProtobuf.Message, SwiftProtobu
 
 extension Fuzzilli_Protobuf_GetPrivateProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetPrivateProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isGuarded\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10531,6 +11150,8 @@ extension Fuzzilli_Protobuf_GetPrivateProperty: SwiftProtobuf.Message, SwiftProt
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
@@ -10540,11 +11161,19 @@ extension Fuzzilli_Protobuf_GetPrivateProperty: SwiftProtobuf.Message, SwiftProt
     if !self.propertyName.isEmpty {
       try visitor.visitSingularStringField(value: self.propertyName, fieldNumber: 1)
     }
+    if self.isGuarded != false {
+      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
+    }
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_GetPrivateProperty, rhs: Fuzzilli_Protobuf_GetPrivateProperty) -> Bool {
     if lhs.propertyName != rhs.propertyName {return false}
+    if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10552,7 +11181,7 @@ extension Fuzzilli_Protobuf_GetPrivateProperty: SwiftProtobuf.Message, SwiftProt
 
 extension Fuzzilli_Protobuf_SetPrivateProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SetPrivateProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isGuarded\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10561,6 +11190,7 @@ extension Fuzzilli_Protobuf_SetPrivateProperty: SwiftProtobuf.Message, SwiftProt
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
       default: break
       }
     }
@@ -10570,11 +11200,15 @@ extension Fuzzilli_Protobuf_SetPrivateProperty: SwiftProtobuf.Message, SwiftProt
     if !self.propertyName.isEmpty {
       try visitor.visitSingularStringField(value: self.propertyName, fieldNumber: 1)
     }
+    if self.isGuarded != false {
+      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_SetPrivateProperty, rhs: Fuzzilli_Protobuf_SetPrivateProperty) -> Bool {
     if lhs.propertyName != rhs.propertyName {return false}
+    if lhs.isGuarded != rhs.isGuarded {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10582,7 +11216,7 @@ extension Fuzzilli_Protobuf_SetPrivateProperty: SwiftProtobuf.Message, SwiftProt
 
 extension Fuzzilli_Protobuf_UpdatePrivateProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdatePrivateProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}op\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}op\0\u{1}isGuarded\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10592,6 +11226,7 @@ extension Fuzzilli_Protobuf_UpdatePrivateProperty: SwiftProtobuf.Message, SwiftP
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
       case 2: try { try decoder.decodeSingularEnumField(value: &self.op) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
       default: break
       }
     }
@@ -10604,12 +11239,16 @@ extension Fuzzilli_Protobuf_UpdatePrivateProperty: SwiftProtobuf.Message, SwiftP
     if self.op != .add {
       try visitor.visitSingularEnumField(value: self.op, fieldNumber: 2)
     }
+    if self.isGuarded != false {
+      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_UpdatePrivateProperty, rhs: Fuzzilli_Protobuf_UpdatePrivateProperty) -> Bool {
     if lhs.propertyName != rhs.propertyName {return false}
     if lhs.op != rhs.op {return false}
+    if lhs.isGuarded != rhs.isGuarded {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10617,7 +11256,7 @@ extension Fuzzilli_Protobuf_UpdatePrivateProperty: SwiftProtobuf.Message, SwiftP
 
 extension Fuzzilli_Protobuf_CallPrivateMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallPrivateMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10626,6 +11265,9 @@ extension Fuzzilli_Protobuf_CallPrivateMethod: SwiftProtobuf.Message, SwiftProto
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10635,11 +11277,73 @@ extension Fuzzilli_Protobuf_CallPrivateMethod: SwiftProtobuf.Message, SwiftProto
     if !self.methodName.isEmpty {
       try visitor.visitSingularStringField(value: self.methodName, fieldNumber: 1)
     }
+    if self.isGuarded != false {
+      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
+    }
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 3)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CallPrivateMethod, rhs: Fuzzilli_Protobuf_CallPrivateMethod) -> Bool {
     if lhs.methodName != rhs.methodName {return false}
+    if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_CallPrivateMethodWithSpread: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CallPrivateMethodWithSpread"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
+      case 2: try { try decoder.decodeRepeatedBoolField(value: &self.spreads) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.methodName.isEmpty {
+      try visitor.visitSingularStringField(value: self.methodName, fieldNumber: 1)
+    }
+    if !self.spreads.isEmpty {
+      try visitor.visitPackedBoolField(value: self.spreads, fieldNumber: 2)
+    }
+    if self.isGuarded != false {
+      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 3)
+    }
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 4)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_CallPrivateMethodWithSpread, rhs: Fuzzilli_Protobuf_CallPrivateMethodWithSpread) -> Bool {
+    if lhs.methodName != rhs.methodName {return false}
+    if lhs.spreads != rhs.spreads {return false}
+    if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -11754,18 +12458,29 @@ extension Fuzzilli_Protobuf_BeginWasmModule: SwiftProtobuf.Message, SwiftProtobu
 
 extension Fuzzilli_Protobuf_EndWasmModule: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".EndWasmModule"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}hasStartFunction\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    // Load everything into unknown fields
-    while try decoder.nextFieldNumber() != nil {}
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.hasStartFunction_p) }()
+      default: break
+      }
+    }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.hasStartFunction_p != false {
+      try visitor.visitSingularBoolField(value: self.hasStartFunction_p, fieldNumber: 1)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_EndWasmModule, rhs: Fuzzilli_Protobuf_EndWasmModule) -> Bool {
+    if lhs.hasStartFunction_p != rhs.hasStartFunction_p {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -13731,33 +14446,18 @@ extension Fuzzilli_Protobuf_WasmDefineMemory: SwiftProtobuf.Message, SwiftProtob
 
 extension Fuzzilli_Protobuf_WasmLoadGlobal: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WasmLoadGlobal"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{2}globalType\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 2: try { try decoder.decodeSingularMessageField(value: &self._globalType) }()
-      default: break
-      }
-    }
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._globalType {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_WasmLoadGlobal, rhs: Fuzzilli_Protobuf_WasmLoadGlobal) -> Bool {
-    if lhs._globalType != rhs._globalType {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -13765,33 +14465,18 @@ extension Fuzzilli_Protobuf_WasmLoadGlobal: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Fuzzilli_Protobuf_WasmStoreGlobal: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WasmStoreGlobal"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{2}globalType\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 2: try { try decoder.decodeSingularMessageField(value: &self._globalType) }()
-      default: break
-      }
-    }
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._globalType {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_WasmStoreGlobal, rhs: Fuzzilli_Protobuf_WasmStoreGlobal) -> Bool {
-    if lhs._globalType != rhs._globalType {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -15709,7 +16394,7 @@ extension Fuzzilli_Protobuf_WasmStructField: SwiftProtobuf.Message, SwiftProtobu
 
 extension Fuzzilli_Protobuf_WasmDefineStructType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WasmDefineStructType"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}fields\0\u{1}hasSuperType\0\u{1}isFinal\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}fields\0\u{1}hasSuperType\0\u{1}isFinal\0\u{1}hasDescribes\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -15720,6 +16405,7 @@ extension Fuzzilli_Protobuf_WasmDefineStructType: SwiftProtobuf.Message, SwiftPr
       case 1: try { try decoder.decodeRepeatedMessageField(value: &self.fields) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.hasSuperType_p) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.isFinal) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.hasDescribes_p) }()
       default: break
       }
     }
@@ -15735,6 +16421,9 @@ extension Fuzzilli_Protobuf_WasmDefineStructType: SwiftProtobuf.Message, SwiftPr
     if self.isFinal != false {
       try visitor.visitSingularBoolField(value: self.isFinal, fieldNumber: 3)
     }
+    if self.hasDescribes_p != false {
+      try visitor.visitSingularBoolField(value: self.hasDescribes_p, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -15742,6 +16431,7 @@ extension Fuzzilli_Protobuf_WasmDefineStructType: SwiftProtobuf.Message, SwiftPr
     if lhs.fields != rhs.fields {return false}
     if lhs.hasSuperType_p != rhs.hasSuperType_p {return false}
     if lhs.isFinal != rhs.isFinal {return false}
+    if lhs.hasDescribes_p != rhs.hasDescribes_p {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -15924,6 +16614,63 @@ extension Fuzzilli_Protobuf_WasmStructNew: SwiftProtobuf.Message, SwiftProtobuf.
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_WasmStructNew, rhs: Fuzzilli_Protobuf_WasmStructNew) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmStructNewDefaultDesc: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmStructNewDefaultDesc"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmStructNewDefaultDesc, rhs: Fuzzilli_Protobuf_WasmStructNewDefaultDesc) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmStructNewDesc: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmStructNewDesc"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmStructNewDesc, rhs: Fuzzilli_Protobuf_WasmStructNewDesc) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmRefGetDesc: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmRefGetDesc"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmRefGetDesc, rhs: Fuzzilli_Protobuf_WasmRefGetDesc) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -16153,6 +16900,40 @@ extension Fuzzilli_Protobuf_WasmRefCast: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
+extension Fuzzilli_Protobuf_WasmRefCastDescEq: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmRefCastDescEq"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}type\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._type) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._type {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmRefCastDescEq, rhs: Fuzzilli_Protobuf_WasmRefCastDescEq) -> Bool {
+    if lhs._type != rhs._type {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 extension Fuzzilli_Protobuf_WasmBranchOnNull: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WasmBranchOnNull"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
@@ -16200,6 +16981,74 @@ extension Fuzzilli_Protobuf_WasmBranchOnCast: SwiftProtobuf.Message, SwiftProtob
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_WasmBranchOnCast, rhs: Fuzzilli_Protobuf_WasmBranchOnCast) -> Bool {
+    if lhs._type != rhs._type {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmBranchOnCastDescEq: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmBranchOnCastDescEq"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}type\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._type) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._type {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmBranchOnCastDescEq, rhs: Fuzzilli_Protobuf_WasmBranchOnCastDescEq) -> Bool {
+    if lhs._type != rhs._type {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmBranchOnCastDescEqFail: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmBranchOnCastDescEqFail"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}type\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._type) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._type {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmBranchOnCastDescEqFail, rhs: Fuzzilli_Protobuf_WasmBranchOnCastDescEqFail) -> Bool {
     if lhs._type != rhs._type {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -16691,6 +17540,63 @@ extension Fuzzilli_Protobuf_WasmTableCopy: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
+extension Fuzzilli_Protobuf_WasmTableFill: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmTableFill"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmTableFill, rhs: Fuzzilli_Protobuf_WasmTableFill) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmArrayNewData: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmArrayNewData"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmArrayNewData, rhs: Fuzzilli_Protobuf_WasmArrayNewData) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmArrayNewElem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmArrayNewElem"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmArrayNewElem, rhs: Fuzzilli_Protobuf_WasmArrayNewElem) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 extension Fuzzilli_Protobuf_BeginBundleScript: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginBundleScript"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
@@ -17112,38 +18018,18 @@ extension Fuzzilli_Protobuf_EndBundleModuleEntryPoint: SwiftProtobuf.Message, Sw
 
 extension Fuzzilli_Protobuf_CreateMap: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateMap"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}keyGroupName\0\u{1}valueGroupName\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self._keyGroupName) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self._valueGroupName) }()
-      default: break
-      }
-    }
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._keyGroupName {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
-    } }()
-    try { if let v = self._valueGroupName {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CreateMap, rhs: Fuzzilli_Protobuf_CreateMap) -> Bool {
-    if lhs._keyGroupName != rhs._keyGroupName {return false}
-    if lhs._valueGroupName != rhs._valueGroupName {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -17308,7 +18194,7 @@ extension Fuzzilli_Protobuf_FuzzILDestructuringPattern.ObjectPattern: SwiftProto
 
 extension Fuzzilli_Protobuf_FuzzILDestructuringPattern.Target: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = Fuzzilli_Protobuf_FuzzILDestructuringPattern.protoMessageName + ".Target"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}flatBinding\0\u{1}pattern\0\u{1}property\0\u{1}element\0\u{1}computedProperty\0\u{1}superProperty\0\u{1}superElement\0\u{1}superComputedProperty\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}flatBinding\0\u{1}pattern\0\u{1}property\0\u{1}element\0\u{1}computedProperty\0\u{1}superProperty\0\u{1}superElement\0\u{1}superComputedProperty\0\u{1}privateProperty\0")
 
   fileprivate class _StorageClass {
     var _value: Fuzzilli_Protobuf_FuzzILDestructuringPattern.Target.OneOf_Value?
@@ -17425,6 +18311,14 @@ extension Fuzzilli_Protobuf_FuzzILDestructuringPattern.Target: SwiftProtobuf.Mes
             _storage._value = .superComputedProperty(v)
           }
         }()
+        case 9: try {
+          var v: String?
+          try decoder.decodeSingularStringField(value: &v)
+          if let v = v {
+            if _storage._value != nil {try decoder.handleConflictingOneOf()}
+            _storage._value = .privateProperty(v)
+          }
+        }()
         default: break
         }
       }
@@ -17469,6 +18363,10 @@ extension Fuzzilli_Protobuf_FuzzILDestructuringPattern.Target: SwiftProtobuf.Mes
       case .superComputedProperty?: try {
         guard case .superComputedProperty(let v)? = _storage._value else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+      }()
+      case .privateProperty?: try {
+        guard case .privateProperty(let v)? = _storage._value else { preconditionFailure() }
+        try visitor.visitSingularStringField(value: v, fieldNumber: 9)
       }()
       case nil: break
       }
@@ -17815,6 +18713,283 @@ extension Fuzzilli_Protobuf_EndPendingBundleModule: SwiftProtobuf.Message, Swift
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_EndPendingBundleModule, rhs: Fuzzilli_Protobuf_EndPendingBundleModule) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringLength: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringLength"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringLength, rhs: Fuzzilli_Protobuf_WasmJSStringLength) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringFromCharCodeArray: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringFromCharCodeArray"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringFromCharCodeArray, rhs: Fuzzilli_Protobuf_WasmJSStringFromCharCodeArray) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringFromCharCode: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringFromCharCode"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringFromCharCode, rhs: Fuzzilli_Protobuf_WasmJSStringFromCharCode) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringFromCodePoint: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringFromCodePoint"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringFromCodePoint, rhs: Fuzzilli_Protobuf_WasmJSStringFromCodePoint) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringCharCodeAt: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringCharCodeAt"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringCharCodeAt, rhs: Fuzzilli_Protobuf_WasmJSStringCharCodeAt) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringCodePointAt: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringCodePointAt"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringCodePointAt, rhs: Fuzzilli_Protobuf_WasmJSStringCodePointAt) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringIntoCharCodeArray: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringIntoCharCodeArray"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringIntoCharCodeArray, rhs: Fuzzilli_Protobuf_WasmJSStringIntoCharCodeArray) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringCast: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringCast"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringCast, rhs: Fuzzilli_Protobuf_WasmJSStringCast) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringTest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringTest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringTest, rhs: Fuzzilli_Protobuf_WasmJSStringTest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringConcat: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringConcat"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringConcat, rhs: Fuzzilli_Protobuf_WasmJSStringConcat) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringSubstring: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringSubstring"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringSubstring, rhs: Fuzzilli_Protobuf_WasmJSStringSubstring) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringEquals: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringEquals"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringEquals, rhs: Fuzzilli_Protobuf_WasmJSStringEquals) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringCompare: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringCompare"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringCompare, rhs: Fuzzilli_Protobuf_WasmJSStringCompare) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmStringConstant: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmStringConstant"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}value\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.value) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.value.isEmpty {
+      try visitor.visitSingularStringField(value: self.value, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmStringConstant, rhs: Fuzzilli_Protobuf_WasmStringConstant) -> Bool {
+    if lhs.value != rhs.value {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

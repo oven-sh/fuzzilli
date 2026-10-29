@@ -75,7 +75,9 @@ public class GeneratorStub: Contributor {
     public enum AdditionalConstraints {
         case None
         case IsWasmArray
+        case IsWasmPackedI16Array
         case IsWasmStruct
+        case IsWasmStructWithDescriptor
         case IsWasmFunction  // On a type definition this means "signature".
     }
 
@@ -98,23 +100,43 @@ public class GeneratorStub: Contributor {
             case .IsWasmArray:
                 if type.Is(.wasmTypeDef()) {
                     type.wasmTypeDefinition?.description is WasmArrayTypeDescription
-                } else if type.Is(.anyNonNullableIndexRef) {
+                } else if type.Is(.anyIndexRef) {
                     type.Is(.wasmArrayRef())
+                } else {
+                    false
+                }
+            case .IsWasmPackedI16Array:
+                if type.Is(.wasmTypeDef()) {
+                    if let desc = type.wasmTypeDefinition?.description as? WasmArrayTypeDescription
+                    {
+                        desc.isCanonicalWasmPackedI16Array
+                    } else {
+                        false
+                    }
                 } else {
                     false
                 }
             case .IsWasmStruct:
                 if type.Is(.wasmTypeDef()) {
                     type.wasmTypeDefinition?.description is WasmStructTypeDescription
-                } else if type.Is(.anyNonNullableIndexRef) {
+                } else if type.Is(.anyIndexRef) {
                     type.Is(.wasmStructRef())
+                } else {
+                    false
+                }
+            case .IsWasmStructWithDescriptor:
+                if type.Is(.wasmTypeDef()) {
+                    (type.wasmTypeDefinition?.description as? WasmStructTypeDescription)?
+                        .descriptor != nil
+                } else if case .Index(let desc, _) = type.wasmReferenceType?.kind {
+                    (desc.get() as? WasmStructTypeDescription)?.descriptor != nil
                 } else {
                     false
                 }
             case .IsWasmFunction:
                 if type.Is(.wasmTypeDef()) {
                     type.wasmTypeDefinition?.description is WasmSignatureTypeDescription
-                } else if type.Is(.anyNonNullableIndexRef) {
+                } else if type.Is(.anyIndexRef) {
                     type.Is(.wasmFuncRef())
                 } else {
                     false
@@ -123,8 +145,17 @@ public class GeneratorStub: Contributor {
         }
 
         public func fulfilled(by other: Constraint) -> Bool {
-            other.type.Is(self.type)
-                && (self.additional == .None || self.additional == other.additional)
+            guard other.type.Is(self.type) else { return false }
+            return switch (self.additional, other.additional) {
+            case (.None, _):
+                true
+            case (.IsWasmStruct, .IsWasmStructWithDescriptor):
+                true
+            case (.IsWasmArray, .IsWasmPackedI16Array):
+                true
+            default:
+                self.additional == other.additional
+            }
         }
     }
 

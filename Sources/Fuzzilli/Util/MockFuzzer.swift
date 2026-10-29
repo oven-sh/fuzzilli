@@ -101,7 +101,7 @@ func findWasmOptInPath() -> String? {
 /// Create a fuzzer instance usable for testing.
 public func makeMockFuzzer(
     config maybeConfiguration: Configuration? = nil, engine maybeEngine: FuzzEngine? = nil,
-    runner maybeRunner: ScriptRunner? = nil,
+    runner maybeRunner: ScriptRunner? = nil, referenceRunner: ScriptRunner? = nil,
     environment maybeEnvironment: JavaScriptEnvironment? = nil,
     evaluator maybeEvaluator: ProgramEvaluator? = nil, corpus maybeCorpus: Corpus? = nil,
     codeGenerators additionalCodeGenerators: [(CodeGenerator, Int)] = [],
@@ -123,6 +123,7 @@ public func makeMockFuzzer(
     let mutators = WeightedList<Mutator>([
         (CodeGenMutator(), 1),
         (OperationMutator(), 1),
+        (PropertyAccessorMutator(), 1),
         (InputMutator(typeAwareness: .loose), 1),
         (CombineMutator(), 1),
     ])
@@ -147,10 +148,14 @@ public func makeMockFuzzer(
     let minimizer = Minimizer()
 
     // Use all builtin CodeGenerators
+    let builtinCodeGenerators =
+        CodeGenerators
+        + wasmCodeGenerators(enableCustomDescriptors: configuration.enableCustomDescriptors)
+
     let codeGenerators =
         overwriteGenerators
         ?? WeightedList<CodeGenerator>(
-            (CodeGenerators + WasmCodeGenerators).map {
+            builtinCodeGenerators.map {
                 guard let weight = codeGeneratorWeights[$0.name] else {
                     fatalError(
                         "Missing weight for CodeGenerator \($0.name) in CodeGeneratorWeights.swift")
@@ -171,7 +176,7 @@ public func makeMockFuzzer(
     let fuzzer = Fuzzer(
         configuration: configuration,
         scriptRunner: runner,
-        referenceScriptRunner: nil,
+        referenceScriptRunner: referenceRunner,
         engine: engine,
         mutators: mutators,
         codeGenerators: codeGenerators,

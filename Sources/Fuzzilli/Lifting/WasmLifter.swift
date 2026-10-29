@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Foundation
+import OrderedCollections
 
 /// Represents the type identifiers for each code section according to the wasm
 /// spec.
@@ -304,6 +305,106 @@ public class WasmLifter {
     // The function index space
     private var functionIdxBase = 0
 
+    private struct JSStringBuiltin: Equatable, Hashable {
+        let field: String
+        let signature: WasmSignature
+        var index: Int?
+
+        static func == (lhs: JSStringBuiltin, rhs: JSStringBuiltin) -> Bool {
+            return lhs.field == rhs.field && lhs.signature == rhs.signature
+        }
+
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(field)
+            hasher.combine(signature)
+        }
+    }
+    private var jsStringBuiltins = OrderedSet<JSStringBuiltin>()
+
+    private func createJSStringBuiltinInfo(forInstr instr: Instruction) -> JSStringBuiltin {
+        switch instr.op.opcode {
+        case .wasmJSStringLength:
+            return JSStringBuiltin(
+                field: "length", signature: [.wasmJSStringRef()] => [.wasmi32], index: nil)
+        case .wasmJSStringFromCharCodeArray:
+            let arrayDesc = typer.getTypeDescription(of: instr.input(0))
+            let signatureArrayType = ILType.wasmIndexRef(arrayDesc, nullability: true)
+            return JSStringBuiltin(
+                field: "fromCharCodeArray",
+                signature: [signatureArrayType, .wasmi32, .wasmi32] => [.wasmRefJSString()],
+                index: nil)
+        case .wasmJSStringFromCharCode:
+            return JSStringBuiltin(
+                field: "fromCharCode",
+                signature: [.wasmi32] => [.wasmRefJSString()],
+                index: nil)
+        case .wasmJSStringFromCodePoint:
+            return JSStringBuiltin(
+                field: "fromCodePoint",
+                signature: [.wasmi32] => [.wasmRefJSString()],
+                index: nil)
+        case .wasmJSStringCharCodeAt:
+            return JSStringBuiltin(
+                field: "charCodeAt",
+                signature: [.wasmJSStringRef(), .wasmi32] => [.wasmi32],
+                index: nil)
+        case .wasmJSStringCodePointAt:
+            return JSStringBuiltin(
+                field: "codePointAt",
+                signature: [.wasmJSStringRef(), .wasmi32] => [.wasmi32],
+                index: nil)
+        case .wasmJSStringIntoCharCodeArray:
+            let arrayDesc = typer.getTypeDescription(of: instr.input(1))
+            let signatureArrayType = ILType.wasmIndexRef(arrayDesc, nullability: true)
+            return JSStringBuiltin(
+                field: "intoCharCodeArray",
+                signature: [.wasmJSStringRef(), signatureArrayType, .wasmi32] => [.wasmi32],
+                index: nil)
+        case .wasmJSStringCast:
+            return JSStringBuiltin(
+                field: "cast",
+                signature: [.wasmExternRef()] => [.wasmRefJSString()],
+                index: nil)
+        case .wasmJSStringTest:
+            return JSStringBuiltin(
+                field: "test",
+                signature: [.wasmExternRef()] => [.wasmi32],
+                index: nil)
+        case .wasmJSStringConcat:
+            return JSStringBuiltin(
+                field: "concat",
+                signature: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmRefJSString()],
+                index: nil)
+        case .wasmJSStringSubstring:
+            return JSStringBuiltin(
+                field: "substring",
+                signature: [.wasmJSStringRef(), .wasmi32, .wasmi32] => [.wasmRefJSString()],
+                index: nil)
+        case .wasmJSStringEquals:
+            return JSStringBuiltin(
+                field: "equals",
+                signature: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmi32],
+                index: nil)
+        case .wasmJSStringCompare:
+            return JSStringBuiltin(
+                field: "compare",
+                signature: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmi32],
+                index: nil)
+        default:
+            fatalError("Unsupported JS string builtin: \(instr.op.opcode)")
+        }
+    }
+
+    private func trackJSStringBuiltinUsage(forInstr instr: Instruction) {
+        let info = createJSStringBuiltinInfo(forInstr: instr)
+        jsStringBuiltins.append(info)
+    }
+
+    private func getJSStringBuiltin(forInstr instr: Instruction) -> JSStringBuiltin {
+        let info = createJSStringBuiltinInfo(forInstr: instr)
+        return jsStringBuiltins.first { $0 == info }!
+    }
+
     // The signature index space.
     private var signatures: [WasmSignature] = []
     private var signatureIndexMap: [WasmSignature: Int] = [:]
@@ -312,9 +413,13 @@ public class WasmLifter {
     private var globalOrder: [Variable] = []
     private var tagOrder: [Variable] = []
 
-    public init(withTyper typer: JSTyper, withWasmCode instrs: Code) {
+    private let startFunction: Variable?
+
+    public init(withTyper typer: JSTyper, withWasmCode instrs: Code, startFunction: Variable? = nil)
+    {
         self.typer = typer
         self.instructionBuffer = instrs
+        self.startFunction = startFunction
     }
 
     private class WasmExprWriter {
@@ -434,8 +539,12 @@ public class WasmLifter {
     }
 
     private var currentFunction: FunctionInfo? = nil
+    public private(set) var importedStringConstants: [String] = []
 
-    public func lift(binaryOutPath path: String? = nil) throws -> (Data, [Variable]) {
+    public func lift(binaryOutPath path: String? = nil) throws -> (
+        bytecode: Data, importRefs: [Variable], didUseJSStringBuiltins: Bool,
+        didImportStringConstants: Bool
+    ) {
         // Lifting currently happens in three stages.
         // 1. Collect all necessary information to build all sections later on.
         //    - For now this only the importAnalysis, which needs to know how many imported vs internally defined types exist.
@@ -504,6 +613,7 @@ public class WasmLifter {
         try self.buildExportedSection()
 
         // Build element segments for defined tables.
+        try self.buildStartSection()
         try self.buildElementSection()
 
         try self.buildDataCountSection()
@@ -523,7 +633,13 @@ public class WasmLifter {
         // Step 3 done
         //
 
-        return (bytecode, exports.compactMap { $0.getImport()?.variable })
+        let didUseJSStringBuiltins = !jsStringBuiltins.isEmpty
+        let didImportStringConstants = !importedStringConstants.isEmpty
+
+        return (
+            bytecode, exports.compactMap { $0.getImport()?.variable }, didUseJSStringBuiltins,
+            didImportStringConstants
+        )
     }
 
     private func buildHeader() {
@@ -542,6 +658,9 @@ public class WasmLifter {
         let opCode: UInt8 =
             switch heapTypeInfo.heapType {
             case .WasmExtern: 0x6F
+            // WasmJSString is a wrapper around WasmExtern that we use to keep track
+            // of JS strings in Fuzzilli. It is not a specified type.
+            case .WasmJSString: 0x6F
             case .WasmFunc: 0x70
             case .WasmAny: 0x6E
             case .WasmEq: 0x6D
@@ -577,8 +696,9 @@ public class WasmLifter {
 
     private func encodeHeapType(_ refKind: WasmReferenceType.Kind) throws -> Data {
         switch refKind {
-        case .Index(let description):
-            return try encodeWasmGCType(description.get())
+        case .Index(let description, let isExact):
+            let typeIndexData = try encodeWasmGCType(description.get())
+            return isExact ? Data([0x62]) + typeIndexData : typeIndexData
         case .Abstract(let heapTypeInfo):
             return encodeAbstractHeapType(heapTypeInfo)
         }
@@ -599,9 +719,21 @@ public class WasmLifter {
         switch refType.kind {
         case .Abstract(let heapTypeInfo):
             return encodeAbstractHeapType(heapTypeInfo)
-        case .Index(_):
-            return try encodeWasmGCType(typer.getTypeDescription(of: instr.input(typeInput)))
+        case .Index(_, let isExact):
+            let encodedTypeIndex = try encodeWasmGCType(
+                typer.getTypeDescription(of: instr.input(typeInput)))
+            return isExact ? Data([0x62]) + encodedTypeIndex : encodedTypeIndex
         }
+    }
+
+    private func encodeDescriptorReferenceType(
+        _ refType: WasmReferenceType, instr: Instruction, descriptorInput: Int
+    ) throws -> Data {
+        let descriptorDesc =
+            typer.getTypeDescription(of: instr.input(descriptorInput)) as! WasmStructTypeDescription
+        let targetDesc = descriptorDesc.describes!
+        let encodedTypeIndex = try encodeWasmGCType(targetDesc)
+        return refType.kind.isExact ? Data([0x62]) + encodedTypeIndex : encodedTypeIndex
     }
 
     private func buildTypeEntry(for desc: WasmTypeDescription, data: inout Data) throws {
@@ -618,6 +750,14 @@ public class WasmLifter {
             data += try encodeType(arrayDesc.elementType)
             data += [arrayDesc.mutability ? 1 : 0]
         } else if let structDesc = desc as? WasmStructTypeDescription {
+            if let describes = structDesc.describes {
+                data += [0x4C]
+                data += try encodeWasmGCType(describes)
+            }
+            if let descriptor = structDesc.descriptor {
+                data += [0x4D]
+                data += try encodeWasmGCType(descriptor)
+            }
             data += [0x5F]
             data += Leb128.unsignedEncode(structDesc.fields.count)
             for field in structDesc.fields {
@@ -644,6 +784,10 @@ public class WasmLifter {
         // See importAnalysis for more details.
         for signature in self.exports.compactMap({ $0.getImport()?.signature }) {
             registerSignature(signature)
+        }
+
+        for builtin in jsStringBuiltins {
+            registerSignature(builtin.signature)
         }
 
         let typeCount = self.signatures.count + typeGroups.count
@@ -712,7 +856,11 @@ public class WasmLifter {
     }
 
     private func buildImportSection() throws {
-        if self.exports.compactMap({ $0.getImport() }).isEmpty {
+        let importsCount = self.exports.count(where: { $0.getImport() != nil })
+        let staticImportsCount = jsStringBuiltins.count
+        let stringConstantsCount = importedStringConstants.count
+
+        if importsCount + staticImportsCount + stringConstantsCount == 0 {
             return
         }
 
@@ -720,7 +868,7 @@ public class WasmLifter {
 
         var temp = Data()
 
-        temp += Leb128.unsignedEncode(self.exports.count { $0.getImport() != nil })
+        temp += Leb128.unsignedEncode(importsCount + staticImportsCount + stringConstantsCount)
 
         // Build the import components of this vector that consist of mod:name, nm:name, and d:importdesc
         for (idx, (_, importVariable, signature, signatureDef)) in self.exports.compactMap({
@@ -802,6 +950,35 @@ public class WasmLifter {
             throw WasmLifter.CompileError.unknownImportType
         }
 
+        for i in 0..<jsStringBuiltins.count {
+            let moduleName = "wasm:js-string"
+            let fieldName = jsStringBuiltins[i].field
+            temp += Leb128.unsignedEncode(moduleName.count)
+            temp += moduleName.data(using: .utf8)!
+            temp += Leb128.unsignedEncode(fieldName.count)
+            temp += fieldName.data(using: .utf8)!
+
+            let sigIdx = getSignatureIndexStrict(jsStringBuiltins[i].signature)
+            temp += [0x0] + Leb128.unsignedEncode(sigIdx)
+
+            var builtin = jsStringBuiltins[i]
+            builtin.index = functionIdxBase
+            jsStringBuiltins.updateOrAppend(builtin)
+            functionIdxBase += 1
+        }
+
+        for stringConstant in importedStringConstants {
+            let moduleName = "\""
+            temp += Leb128.unsignedEncode(moduleName.count)
+            temp += moduleName.data(using: .utf8)!
+            temp += Leb128.unsignedEncode(stringConstant.count)
+            temp += stringConstant.data(using: .utf8)!
+
+            temp += [0x3]  // global import
+            temp += try encodeType(.wasmRefJSString())  // value type
+            temp += [0x0]  // immutable
+        }
+
         self.bytecode.append(Leb128.unsignedEncode(temp.count))
         self.bytecode.append(temp)
 
@@ -878,6 +1055,19 @@ public class WasmLifter {
                 print(String(format: "%02X ", byte))
             }
         }
+    }
+
+    private func buildStartSection() throws {
+        guard let startFunction = self.startFunction else { return }
+
+        self.bytecode += [WasmSection.start.rawValue]
+        var temp = Data()
+
+        let startIdx = try resolveIdx(ofType: .function, for: startFunction)
+        temp += Leb128.unsignedEncode(startIdx)
+
+        self.bytecode += Leb128.unsignedEncode(temp.count)
+        self.bytecode += temp
     }
 
     // Only supports:
@@ -1107,38 +1297,61 @@ public class WasmLifter {
 
         // TODO: in the future this should maybe be a context that allows instructions? Such that we can fuzz this expression as well?
         for case .global(let instruction) in self.exports {
-            let definition = instruction!.op as! WasmDefineGlobal
-            let global = definition.wasmGlobal
+            if let definition = instruction!.op as? WasmDefineGlobal {
+                let isExact: Bool? =
+                    switch definition.wasmGlobal {
+                    case .indexExactRef: true
+                    case .indexRef: false
+                    default: nil
+                    }
 
-            temp += try encodeType(global.toType())
-            temp += Data([definition.isMutable ? 0x1 : 0x0])
-            // This has to be a constant expression: https://webassembly.github.io/spec/core/valid/instructions.html#constant-expressions
-            var temporaryInstruction: Instruction? = nil
-            // Also create some temporary output variables that do not have a number, these are only to satisfy the instruction assertions, maybe this can be done more nicely somehow.
-            switch global {
-            case .wasmf32(let val):
-                temporaryInstruction = Instruction(Constf32(value: val), output: Variable())
-            case .wasmf64(let val):
-                temporaryInstruction = Instruction(Constf64(value: val), output: Variable())
-            case .wasmi32(let val):
-                temporaryInstruction = Instruction(Consti32(value: val), output: Variable())
-            case .wasmi64(let val):
-                temporaryInstruction = Instruction(Consti64(value: val), output: Variable())
-            case .externref:
-                temp += try! Data([0xD0]) + encodeHeapType(.wasmExternRef()) + Data([0x0B])
-                continue
-            case .exnref:
-                temp += try! Data([0xD0]) + encodeHeapType(.wasmExnRef()) + Data([0x0B])
-                continue
-            case .i31ref:
-                temp += try! Data([0xD0]) + encodeHeapType(.wasmI31Ref()) + Data([0x0B])
-                continue
-            case .refFunc(_),
-                .imported(_):
-                fatalError("unreachable")
+                if let isExact = isExact {
+                    let typeVar = instruction!.input(0)
+                    let typeDesc = typer.getTypeDescription(of: typeVar)
+                    let typeIndexData = try encodeWasmGCType(typeDesc)
+                    let exactByte = isExact ? Data([0x62]) : Data()
+
+                    // Type: (ref null [exact] $typeIndex). 0x63 is nullable ref, 0x62 is exact
+                    temp += Data([0x63]) + exactByte + typeIndexData
+                    temp += Data([definition.isMutable ? 0x1 : 0x0])
+
+                    // Init expr: ref.null [exact] $typeIndex, then end (0x0B)
+                    temp += Data([0xD0]) + exactByte + typeIndexData + Data([0x0B])
+                } else {
+                    let global = definition.wasmGlobal
+                    temp += try encodeType(global.toType())
+                    temp += Data([definition.isMutable ? 0x1 : 0x0])
+                    // This has to be a constant expression: https://webassembly.github.io/spec/core/valid/instructions.html#constant-expressions
+                    var temporaryInstruction: Instruction? = nil
+                    // Also create some temporary output variables that do not have a number, these are only to satisfy the instruction assertions, maybe this can be done more nicely somehow.
+                    switch global {
+                    case .wasmf32(let val):
+                        temporaryInstruction = Instruction(Constf32(value: val), output: Variable())
+                    case .wasmf64(let val):
+                        temporaryInstruction = Instruction(Constf64(value: val), output: Variable())
+                    case .wasmi32(let val):
+                        temporaryInstruction = Instruction(Consti32(value: val), output: Variable())
+                    case .wasmi64(let val):
+                        temporaryInstruction = Instruction(Consti64(value: val), output: Variable())
+                    case .externref:
+                        temp += try! Data([0xD0]) + encodeHeapType(.wasmExternRef()) + Data([0x0B])
+                        continue
+                    case .exnref:
+                        temp += try! Data([0xD0]) + encodeHeapType(.wasmExnRef()) + Data([0x0B])
+                        continue
+                    case .i31ref:
+                        temp += try! Data([0xD0]) + encodeHeapType(.wasmI31Ref()) + Data([0x0B])
+                        continue
+                    case .refFunc(_),
+                        .imported(_),
+                        .indexRef,
+                        .indexExactRef:
+                        fatalError("unreachable")
+                    }
+                    temp += try lift(temporaryInstruction!)
+                    temp += Data([0x0B])
+                }
             }
-            temp += try lift(temporaryInstruction!)
-            temp += Data([0x0B])
         }
 
         // Append the length of the section and the section contents itself.
@@ -1240,7 +1453,7 @@ public class WasmLifter {
         }
 
         // The predicate is used to filter for only a specific type of import.
-        let reexportAndExport: ((Export) -> Bool) -> Void = { predicate in
+        func reexportAndExport(builtinOffset: Int = 0, predicate: (Export) -> Bool) {
             let imported = self.exports.filter({
                 $0.getImport() != nil && predicate($0.getImport()!.type)
             })
@@ -1254,25 +1467,16 @@ public class WasmLifter {
             let defined = self.exports.filter { predicate($0) }
 
             for (idx, exp) in defined.enumerated() {
-                writeExportData(exp, idx, offset: imported.count)
+                writeExportData(exp, idx, offset: imported.count + builtinOffset)
             }
         }
 
-        reexportAndExport {
-            $0.isFunction
-        }
-        reexportAndExport {
-            $0.isGlobal
-        }
-        reexportAndExport {
-            $0.isTable
-        }
-        reexportAndExport {
-            $0.isMemory
-        }
-        reexportAndExport {
-            $0.isTag
-        }
+        // Do not export JS string builtins
+        reexportAndExport(builtinOffset: jsStringBuiltins.count) { $0.isFunction }
+        reexportAndExport { $0.isGlobal }
+        reexportAndExport { $0.isTable }
+        reexportAndExport { $0.isMemory }
+        reexportAndExport { $0.isTag }
 
         // Append the length of the section and the section contents itself.
         self.bytecode.append(Leb128.unsignedEncode(temp.count))
@@ -1525,20 +1729,47 @@ public class WasmLifter {
     // TODO: check if this is still accurate as we now only have defined imports.
     // Also, we export the globals in the order we "see" them, which might mismatch the order in which they are laid out in the binary at the end, which is why we track the order of the globals separately.
     private func importAnalysis() throws {
+        func registerTypeDependencies(for typeDesc: WasmTypeDescription) throws {
+            guard typeDesc.typeGroupIndex != -1 else {
+                throw CompileError.fatalError("Missing type group index for \(typeDesc)")
+            }
+            // Add typegroups and their dependencies.
+            if typeGroups.insert(typeDesc.typeGroupIndex).inserted {
+                typeGroups.formUnion(
+                    typer.getTypeGroupDependencies(typeGroupIndex: typeDesc.typeGroupIndex))
+            }
+        }
+
         for instr in self.instructionBuffer {
+            // If a variable is error typed, we cannot safely lift the module, and stop instead.
+            // This can happen, for example, because data flow is not tracked for Wasm globals
+            // across the Wasm <-> JS boundary.
+            if instr.inouts.contains(where: { typer.type(of: $0) == .error }) {
+                throw CompileError.missingTypeInformation
+            }
+
+            if let loadStringOp = instr.op as? WasmStringConstant {
+                if !importedStringConstants.contains(loadStringOp.value) {
+                    importedStringConstants.append(loadStringOp.value)
+                }
+            }
+
             for (idx, input) in instr.inputs.enumerated() {
                 let inputType = typer.type(of: input)
 
                 if inputType.Is(.wasmTypeDef()) || inputType.Is(.anyIndexRef) {
+                    // TODO(bettscheider): Remove this branch when debugging has concluded
+                    if case .Index(let desc, _) = inputType.wasmReferenceType?.kind,
+                        desc.get() == nil
+                    {
+                        print("Failed program:")
+                        print(FuzzILLifter().lift(self.instructionBuffer))
+                        fatalError(
+                            "Failed to get WasmTypeDescription for \(input) with ILType \(inputType)."
+                        )
+                    }
                     let typeDesc = typer.getTypeDescription(of: input)
-                    guard typeDesc.typeGroupIndex != -1 else {
-                        throw CompileError.fatalError("Missing type group index for \(input)")
-                    }
-                    // Add typegroups and their dependencies.
-                    if typeGroups.insert(typeDesc.typeGroupIndex).inserted {
-                        typeGroups.formUnion(
-                            typer.getTypeGroupDependencies(typeGroupIndex: typeDesc.typeGroupIndex))
-                    }
+                    try registerTypeDependencies(for: typeDesc)
                 }
 
                 for importType in [Export.table(nil), Export.memory(nil), Export.global(nil)] {
@@ -1547,6 +1778,19 @@ public class WasmLifter {
                             .import(
                                 type: importType, variable: input, signature: nil, signatureDef: nil
                             ))
+
+                        // If the imported object uses a custom index type, ensure it's registered.
+                        var valueType: ILType? = nil
+                        if let globalType = inputType.wasmGlobalType {
+                            valueType = globalType.valueType
+                        } else if let tableType = inputType.wasmTableType {
+                            valueType = tableType.elementType
+                        }
+
+                        if let valueType = valueType, valueType.Is(.anyIndexRef) {
+                            let typeDesc = typer.getTypeDescription(of: valueType)
+                            try registerTypeDependencies(for: typeDesc)
+                        }
                     }
                 }
 
@@ -1617,6 +1861,13 @@ public class WasmLifter {
                 self.exports.append(.memory(instr))
             case .wasmDefineTag(_):
                 self.exports.append(.tag(instr))
+            case .wasmJSStringLength(_), .wasmJSStringFromCharCodeArray(_),
+                .wasmJSStringFromCharCode(_), .wasmJSStringFromCodePoint(_),
+                .wasmJSStringCharCodeAt(_), .wasmJSStringCodePointAt(_),
+                .wasmJSStringIntoCharCodeArray(_), .wasmJSStringCast(_), .wasmJSStringTest(_),
+                .wasmJSStringConcat(_), .wasmJSStringSubstring(_), .wasmJSStringEquals(_),
+                .wasmJSStringCompare(_):
+                self.trackJSStringBuiltinUsage(forInstr: instr)
 
             default:
                 continue
@@ -1627,6 +1878,7 @@ public class WasmLifter {
         // building the type section as the instructions get lowered before we emit the type
         // section.)
         var currentTypeIndex = 0
+
         for typeGroupIndex in typeGroups.sorted() {
             for typeDef in typer.getTypeGroup(typeGroupIndex) {
                 let typeDesc = typer.getTypeDescription(of: typeDef)
@@ -1635,6 +1887,20 @@ public class WasmLifter {
             }
         }
         userDefinedTypesCount = currentTypeIndex
+
+        // Find out how many "normal" imported functions we have
+        let baseBuiltinIndex = self.exports
+            .compactMap { $0.getImport() }
+            .filter { IndexType.function.matches($0.type) }
+            .count
+
+        // Assign builtin imports to the next available indices, and
+        // store their indices for emission later.
+        for i in 0..<jsStringBuiltins.count {
+            var builtin = jsStringBuiltins[i]
+            builtin.index = baseBuiltinIndex + i
+            jsStringBuiltins.updateOrAppend(builtin)
+        }
     }
 
     /// Describes the types of indexes in the different index spaces in the Wasm binary format.
@@ -1690,7 +1956,9 @@ public class WasmLifter {
         })
 
         if let idx = idx {
-            return imports.count + idx
+            let offsetFunc = importType == .function ? jsStringBuiltins.count : 0
+            let offsetGlobal = importType == .global ? importedStringConstants.count : 0
+            return imports.count + offsetFunc + offsetGlobal + idx
         }
 
         throw WasmLifter.CompileError.failedIndexLookUp
@@ -1726,7 +1994,7 @@ public class WasmLifter {
             flags |= 0x40
         }
         if ordering != .sequentiallyConsistent {
-            flags |= 0x20
+            flags |= 0x10
         }
 
         var result = Data([flags])
@@ -1750,6 +2018,45 @@ public class WasmLifter {
             throw CompileError.fatalError("No branch depth information for label \(label)")
         }
         return self.currentFunction!.variableAnalyzer.wasmBranchDepth - labelDepth - 1
+    }
+
+    private func liftBranchOnCast(
+        _ instr: Instruction,
+        parameterCount: Int,
+        targetType: ILType,
+        gcOpcode: UInt8,
+        isDescriptor: Bool = false
+    ) throws -> Data {
+        let branchDepth = try branchDepthFor(label: instr.input(0))
+        let refInputIndex = 1 + parameterCount
+        let targetTypeInputIndex = refInputIndex + 1
+
+        let actualSourceType = typer.type(of: instr.input(refInputIndex)).wasmReferenceType!
+        let targetRefType = targetType.wasmReferenceType!
+
+        // When custom descriptors are disabled, br_on_cast* requires target <= source (both nullability
+        // and heap type), so we widen the source type immediate to the (nullable) top type of the
+        // hierarchy, e.g., anyref.
+        // Custom descriptors relaxes this to only require the same type hierarchy, allowing us to
+        // use the actual input type as the source type immediate.
+        var flags: UInt8 = 0
+        if !typer.enableCustomDescriptors || actualSourceType.nullability { flags |= 0x01 }
+        if targetRefType.nullability { flags |= 0x02 }
+
+        // When custom descriptors are disabled, we use the top type of the hierarchy as the source type,
+        // in order to ensure br_on_cast* validation succeeds (target <= source).
+        let sourceData =
+            try typer.enableCustomDescriptors
+            ? encodeHeapType(actualSourceType.kind)
+            : encodeHeapType(actualSourceType.kind.topType())
+        let targetData =
+            isDescriptor
+            ? try encodeDescriptorReferenceType(
+                targetRefType, instr: instr, descriptorInput: targetTypeInputIndex)
+            : try encodeReferenceType(
+                targetRefType, instr: instr, typeInput: targetTypeInputIndex)
+        return Data([Prefix.GC.rawValue, gcOpcode, flags]) + Leb128.unsignedEncode(branchDepth)
+            + sourceData + targetData
     }
 
     /// Returns the Bytes that correspond to this instruction.
@@ -1923,6 +2230,12 @@ public class WasmLifter {
             // The first input has to be in the global or imports arrays.
             let input = wasmInstruction.input(0)
             return Data([0x23]) + Leb128.unsignedEncode(try resolveIdx(ofType: .global, for: input))
+        case .wasmStringConstant(let op):
+            let importsCount = self.exports.compactMap { $0.getImport() }.filter {
+                IndexType.global.matches($0.type)
+            }.count
+            let stringIdx = importedStringConstants.firstIndex(of: op.value)!
+            return Data([0x23]) + Leb128.unsignedEncode(importsCount + stringIdx)
         case .wasmStoreGlobal(_):
 
             // Get the index for the global and emit it here magically.
@@ -2050,6 +2363,9 @@ public class WasmLifter {
             let srcTableIdx = try resolveIdx(ofType: .table, for: wasmInstruction.input(1))
             return Data([0xFC, 0x0e]) + Leb128.unsignedEncode(dstTableIdx)
                 + Leb128.unsignedEncode(srcTableIdx)
+        case .wasmTableFill(_):
+            let tableIdx = try resolveIdx(ofType: .table, for: wasmInstruction.input(0))
+            return Data([0xFC, 0x11]) + Leb128.unsignedEncode(tableIdx)
         case .wasmJsCall(_):
             // We filter first, such that we get the index of functions only.
             let wasmSignature = typer.type(of: wasmInstruction.input(0))
@@ -2150,49 +2466,21 @@ public class WasmLifter {
             let branchDepth = try branchDepthFor(label: wasmInstruction.input(0))
             return Data([0xD5]) + Leb128.unsignedEncode(branchDepth)
         case .wasmBranchOnCast(let op):
-            let branchDepth = try branchDepthFor(label: wasmInstruction.input(0))
-            let refInputIndex = 1 + op.parameterCount
-            let targetTypeInputIndex = refInputIndex + 1
-
-            let actualSourceType = typer.type(
-                of: wasmInstruction.input(refInputIndex)
-            )
-            .wasmReferenceType!
-            let targetRefType = op.targetType.wasmReferenceType!
-
-            // actualSourceType and targetRefType may be nullable or non-nullable independently of each other.
-            // For br_on_cast to be valid: targetRefType.nullability => actualSourceType.nullability
-            var flags: UInt8 = 0
-            if actualSourceType.nullability || targetRefType.nullability { flags |= 0x01 }
-            if targetRefType.nullability { flags |= 0x02 }
-
-            // To ensure br_on_cast validation succeeds (target <= source), we use the top type of the hierarchy as the source type.
-            let sourceData = try encodeHeapType(actualSourceType.kind.topType())
-            let targetData = try encodeReferenceType(
-                targetRefType, instr: wasmInstruction, typeInput: targetTypeInputIndex)
-            return Data([Prefix.GC.rawValue, 0x18, flags]) + Leb128.unsignedEncode(branchDepth)
-                + sourceData + targetData
+            return try liftBranchOnCast(
+                wasmInstruction, parameterCount: op.parameterCount, targetType: op.targetType,
+                gcOpcode: 0x18)
         case .wasmBranchOnCastFail(let op):
-            let branchDepth = try branchDepthFor(label: wasmInstruction.input(0))
-            let refInputIndex = 1 + op.parameterCount
-            let targetTypeInputIndex = refInputIndex + 1
-
-            let actualSourceType = typer.type(of: wasmInstruction.input(refInputIndex))
-                .wasmReferenceType!
-            let targetRefType = op.targetType.wasmReferenceType!
-
-            // actualSourceType and targetRefType may be nullable or non-nullable independently of each other.
-            // For br_on_cast_fail to be valid: targetRefType.nullability => actualSourceType.nullability
-            var flags: UInt8 = 0
-            if actualSourceType.nullability || targetRefType.nullability { flags |= 0x01 }
-            if targetRefType.nullability { flags |= 0x02 }
-
-            // To ensure br_on_cast_fail validation succeeds (target <= source), we use the top type of the hierarchy as the source type.
-            let sourceData = try encodeHeapType(actualSourceType.kind.topType())
-            let targetData = try encodeReferenceType(
-                targetRefType, instr: wasmInstruction, typeInput: targetTypeInputIndex)
-            return Data([Prefix.GC.rawValue, 0x19, flags]) + Leb128.unsignedEncode(branchDepth)
-                + sourceData + targetData
+            return try liftBranchOnCast(
+                wasmInstruction, parameterCount: op.parameterCount, targetType: op.targetType,
+                gcOpcode: 0x19)
+        case .wasmBranchOnCastDescEq(let op):
+            return try liftBranchOnCast(
+                wasmInstruction, parameterCount: op.parameterCount, targetType: op.targetType,
+                gcOpcode: 0x25, isDescriptor: true)
+        case .wasmBranchOnCastDescEqFail(let op):
+            return try liftBranchOnCast(
+                wasmInstruction, parameterCount: op.parameterCount, targetType: op.targetType,
+                gcOpcode: 0x26, isDescriptor: true)
         case .wasmBranchOnNonNull(_):
             let branchDepth = try branchDepthFor(label: wasmInstruction.input(0))
             return Data([0xD6]) + Leb128.unsignedEncode(branchDepth)
@@ -2250,7 +2538,7 @@ public class WasmLifter {
         case .wasmUnreachable(_):
             return Data([0x00])
         case .wasmSelect(_):
-            return try Data([0x1c, 0x01]) + encodeType(typer.type(of: wasmInstruction.input(0)))
+            return try Data([0x1c, 0x01]) + encodeType(typer.type(of: wasmInstruction.output))
         case .constSimd128(let op):
             return Data([Prefix.Simd.rawValue]) + Leb128.unsignedEncode(12) + Data(op.value)
         case .wasmSimd128IntegerUnOp(let op):
@@ -2435,6 +2723,18 @@ public class WasmLifter {
             let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
             let arrayIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
             return Data([Prefix.GC.rawValue, 0x07]) + arrayIndex
+        case .wasmArrayNewData(_):
+            let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            let arrayIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
+            let dataSegmentIdx = resolveDataSegmentIdx(for: wasmInstruction.input(1))
+            return Data([Prefix.GC.rawValue, 0x09]) + arrayIndex
+                + Leb128.unsignedEncode(dataSegmentIdx)
+        case .wasmArrayNewElem(_):
+            let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            let arrayIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
+            let elementSegmentIdx = resolveElementSegmentIdx(for: wasmInstruction.input(1))
+            return Data([Prefix.GC.rawValue, 0x0A]) + arrayIndex
+                + Leb128.unsignedEncode(elementSegmentIdx)
         case .wasmArrayLen(_):
             return Data([Prefix.GC.rawValue, 0x0F])
         case .wasmArrayGet(let op):
@@ -2455,6 +2755,18 @@ public class WasmLifter {
             let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
             let structIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
             return Data([Prefix.GC.rawValue, 0x01]) + structIndex
+        case .wasmStructNewDesc(_):
+            let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            let structIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
+            return Data([Prefix.GC.rawValue, 0x20]) + structIndex
+        case .wasmStructNewDefaultDesc(_):
+            let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            let structIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
+            return Data([Prefix.GC.rawValue, 0x21]) + structIndex
+        case .wasmRefGetDesc(_):
+            let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            let structIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
+            return Data([Prefix.GC.rawValue, 0x22]) + structIndex
         case .wasmStructGet(let op):
             let typeDesc =
                 typer.getTypeDescription(of: wasmInstruction.input(0)) as! WasmStructTypeDescription
@@ -2499,10 +2811,25 @@ public class WasmLifter {
             let opCode: UInt8 = refType.nullability ? 0x17 : 0x16
             let typeData = try encodeReferenceType(refType, instr: wasmInstruction, typeInput: 1)
             return Data([Prefix.GC.rawValue, opCode]) + typeData
+        case .wasmRefCastDescEq(let op):
+            let refType = op.type.wasmReferenceType!
+            let opCode: UInt8 = refType.nullability ? 0x24 : 0x23
+            let typeData = try encodeDescriptorReferenceType(
+                refType, instr: wasmInstruction, descriptorInput: 1)
+            return Data([Prefix.GC.rawValue, opCode]) + typeData
         case .wasmDefineAdHocSignatureType(_):
             // Nothing to do here, types are defined inside the typegroups, not inside a wasm
             // function.
             return Data()
+
+        // Wasm JS String Builtins
+        case .wasmJSStringLength(_), .wasmJSStringFromCharCodeArray(_),
+            .wasmJSStringFromCharCode(_), .wasmJSStringFromCodePoint(_), .wasmJSStringCharCodeAt(_),
+            .wasmJSStringCodePointAt(_), .wasmJSStringIntoCharCodeArray(_), .wasmJSStringCast(_),
+            .wasmJSStringTest(_), .wasmJSStringConcat(_), .wasmJSStringSubstring(_),
+            .wasmJSStringEquals(_), .wasmJSStringCompare(_):
+            let builtin = self.getJSStringBuiltin(forInstr: wasmInstruction)
+            return Data([0x10]) + Leb128.unsignedEncode(builtin.index!)
 
         default:
             fatalError("unreachable")

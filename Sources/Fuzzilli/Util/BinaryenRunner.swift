@@ -13,13 +13,13 @@
 // limitations under the License.
 
 import Foundation
+import Synchronization
 
 public struct BinaryenRunner {
     /// List of experimental Wasm GC and other feature flags passed to wasm-opt
     public static let featureArguments = [
         "--enable-gc",
         "--enable-reference-types",
-        "--enable-typed-function-references",
         "--enable-sign-ext",
         "--enable-threads",
         "--enable-mutable-globals",
@@ -36,12 +36,14 @@ public struct BinaryenRunner {
         "--enable-multimemory",
         "--enable-custom-descriptors",
         "--enable-multibyte",
-        "--enable-relaxed-atomics",
+        "--enable-acquire-release-atomics",
     ]
 
     struct BinaryenError: Error, CustomStringConvertible {
         let description: String
     }
+
+    private static let logger = Logger(withLabel: "BinaryenRunner")
 
     /// Internal process executor for wasm-opt (restored from BinaryenWasmGenerator)
     private static func runWasmOpt(wasmOptPath: String, arguments: [String]) -> Result<
@@ -63,11 +65,14 @@ public struct BinaryenRunner {
         setupConcurrentRead(from: stdoutPipe, into: stdoutDataBuffer, group: readGroup)
         setupConcurrentRead(from: stderrPipe, into: stderrDataBuffer, group: readGroup)
 
-        let timeout: TimeInterval = 1.0
+        let timedOut = Atomic<Bool>(false)
+        let timeout: TimeInterval = 2 * Seconds
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
         timer.schedule(deadline: .now() + timeout)
         timer.setEventHandler {
             if process.isRunning {
+                logger.warning("wasm-opt still running after \(timeout)s, sending SIGKILL")
+                timedOut.store(true, ordering: .sequentiallyConsistent)
                 kill(process.processIdentifier, SIGKILL)
             }
         }
@@ -88,12 +93,14 @@ public struct BinaryenRunner {
             return .failure(BinaryenError(description: "stdout not a valid utf8 string"))
         }
 
-        if process.terminationStatus != 0 {
+        let didTimeOut = timedOut.load(ordering: .sequentiallyConsistent)
+        if didTimeOut || process.terminationStatus != 0 {
             let stderrStr = String(data: stderrDataBuffer.currentData, encoding: .utf8) ?? ""
+            let outcome = didTimeOut ? "timed out" : "failed"
             return .failure(
                 BinaryenError(
                     description:
-                        "wasm-opt failed with status \(process.terminationStatus). Stderr:\n\(stderrStr)\nStdout:\n\(stdoutStr)"
+                        "wasm-opt \(outcome) with status \(process.terminationStatus). Stderr:\n\(stderrStr)\nStdout:\n\(stdoutStr)"
                 ))
         }
 
@@ -137,7 +144,10 @@ public struct BinaryenRunner {
         let seedBytes = (0..<seedSize).map { _ in UInt8.random(in: 0...255) }
         try! Data(seedBytes).write(to: URL(fileURLWithPath: seedFile))
 
-        var arguments = ["-ttf", seedFile, "-o", outputFile, "--fuzz-against-js", "-g"]
+        var arguments = [
+            "-ttf", seedFile, "-o", outputFile, "--fuzz-against-js", "-g",
+            "--fuzz-hang-limit=0", "--fuzz-no-invokes",
+        ]
 
         // Write input file if mutating
         if let input = inputBytes {

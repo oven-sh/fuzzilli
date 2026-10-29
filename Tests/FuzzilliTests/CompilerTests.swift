@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import Foundation
-import XCTest
+import Testing
 
 @testable import Fuzzilli
 
@@ -26,104 +26,78 @@ import XCTest
 ///  - The resulting FuzzIL program is lifted back to JavaScript
 ///  - The new JavaScript code is again executed inside the same engine and the output again recorded
 ///  - The test passes if there are no errors along the way and if the output of both executions is identical
-class CompilerTests: XCTestCase {
-    var nodejs: JavaScriptExecutor!
-    var parser: JavaScriptParser!
-    var compiler: JavaScriptCompiler!
+@Suite(.enabled(if: shouldRunCompilerTests()))
+struct CompilerTests {
+    let testcases: CompilerTestcases
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        guard
-            let executor = JavaScriptExecutor(
-                type: .nodejs, withArguments: ["--allow-natives-syntax"])
-        else {
-            throw XCTSkip(
-                "Could not find NodeJS executable. See Sources/Fuzzilli/Compiler/Parser/README.md for details on how to set up the parser."
-            )
-        }
-        self.nodejs = executor
-
-        guard let parser = JavaScriptParser(executor: executor) else {
-            throw XCTSkip(
-                "The JavaScript parser does not appear to be working. See Sources/Fuzzilli/Compiler/Parser/README.md for details on how to set up the parser."
-            )
-        }
-        self.parser = parser
-        self.compiler = JavaScriptCompiler()
+    init() throws {
+        self.testcases = try CompilerTestcases()
     }
 
-    func testFuzzILCompiler() throws {
-        let lifter = JavaScriptLifter(ecmaVersion: .es6, environment: JavaScriptEnvironment())
-
-        for testcasePath in enumerateAllTestcases() {
+    @Test func testFuzzILCompiler() throws {
+        for testcasePath in testcases.paths {
             let testName = URL(fileURLWithPath: testcasePath).lastPathComponent
 
             // Execute the original code and record the output.
-            let result1 = try nodejs.executeScript(at: URL(fileURLWithPath: testcasePath))
+            let result1 = try testcases.nodejs.executeScript(at: URL(fileURLWithPath: testcasePath))
             guard result1.isSuccess else {
-                XCTFail("TestCase \(testName) failed to execute. Output:\n\(result1.output)")
+                Issue.record("TestCase \(testName) failed to execute. Output:\n\(result1.output)")
                 continue
             }
 
             // Compile the JavaScript code to FuzzIL...
-            guard let ast = try? parser.parse(testcasePath) else {
-                XCTFail("Could not parse \(testName)")
-                continue
-            }
-            guard let program = try? compiler.compile(ast) else {
-                XCTFail("Could not compile \(testName)")
-                continue
-            }
+            guard let program = testcases.compile(testcaseAt: testcasePath) else { continue }
 
             // ... then lift it back to JavaScript and execute it again.
-            let script = lifter.lift(program)
-            let result2 = try nodejs.executeScript(script)
-            guard result2.isSuccess else {
-                XCTFail(
-                    "TestCase \(testName) failed to execute after compiling and lifting. Output:\n\(result2.output)\nScript:\n\(script)"
-                )
-                continue
-            }
+            guard
+                let output = try testcases.execute(
+                    testcases.lifter.lift(program),
+                    describedAs: "TestCase \(testName) after compiling and lifting")
+            else { continue }
 
             // The output of both executions must be identical.
-            if result1.output != result2.output {
-                XCTFail(
-                    "Testcase \(testName) failed.\nExpected output:\n\(result1.output)\nActual output:\n\(result2.output)"
-                )
-            }
+            #expect(
+                result1.output == output,
+                "Testcase \(testName) failed.\nExpected output:\n\(result1.output)\nActual output:\n\(output)"
+            )
         }
     }
 
-    func testInvalidDestructuredUsing() throws {
+    @Test func testInvalidDestructuredUsing() throws {
         // 1. Object destructuring with using: for (using {x} of y)
         let script1 = "for (using {x} of [{}]) {}"
-        XCTAssertThrowsError(try compile(script: script1)) {
-            error in
-            guard let parserError = error as? JavaScriptParser.ParserError else {
-                return XCTFail("Expected JavaScriptParser.ParserError, got \(error)")
-            }
-            guard case .parsingFailed(let message) = parserError else {
-                return XCTFail("Expected parsingFailed, got \(parserError)")
-            }
-            XCTAssertTrue(message.contains("SyntaxError") || message.contains("Assertion failed"))
+        let error1 = try #require(throws: JavaScriptParser.ParserError.self) {
+            try compile(script: script1)
         }
+        guard case .parsingFailed(let message1) = error1 else {
+            Issue.record("Expected parsingFailed, got \(error1)")
+            return
+        }
+        #expect(message1.contains("SyntaxError") || message1.contains("Assertion failed"))
 
         // 2. Destructuring with using is forbidden in ECMAScript: { using {x} = {}; }
-        // Note: `for (using [x] of [[]])` is structurally valid JavaScript because using is not e reserved keyword!
-        // Hence, `using [x]` is simply parsed as the index 'x' of the array 'using'.
-        // (reassignment of using[x]) but `using {x}` inside a block is a true SyntaxError
         let script2 = "{ using {x} = {}; }"
-        XCTAssertThrowsError(try compile(script: script2)) {
-            error in
-            guard let parserError = error as? JavaScriptParser.ParserError else {
-                return XCTFail("Expected JavaScriptParser.ParserError, got \(error)")
-            }
-            guard case .parsingFailed(let message) = parserError else {
-                return XCTFail("Expected parsingFailed, got \(parserError)")
-            }
-            XCTAssertTrue(message.contains("SyntaxError"))
+        let error2 = try #require(throws: JavaScriptParser.ParserError.self) {
+            try compile(script: script2)
         }
+        guard case .parsingFailed(let message2) = error2 else {
+            Issue.record("Expected parsingFailed, got \(error2)")
+            return
+        }
+        #expect(message2.contains("SyntaxError"))
+    }
 
+    @Test func testArrayExceedingMaxElementsThrows() throws {
+        // Array literals with more elements than can fit in FuzzIL (> UInt16.max)
+        // must throw CompilerError rather than crashing with a runtime integer overflow.
+        // Store the element in a JS variable so each array element reuses the same
+        // FuzzIL variable instead of emitting a LoadInteger instruction per element.
+        let script =
+            "const v = 0; const a = [" + Array(repeating: "v", count: 65536).joined(separator: ", ")
+            + "];"
+        #expect(throws: JavaScriptCompiler.CompilerError.self) {
+            try compile(script: script)
+        }
     }
 
     private func compile(script: String) throws -> Program {
@@ -132,13 +106,8 @@ class CompilerTests: XCTestCase {
         try script.write(to: tempFile, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tempFile) }
 
-        let ast = try parser.parse(tempFile.path)
-        return try compiler.compile(ast)
-    }
-
-    /// Returns the absolute paths of all .js compiler testcases.
-    private func enumerateAllTestcases() -> [String] {
-        return Bundle.module.paths(forResourcesOfType: "js", inDirectory: "CompilerTests")
+        let ast = try testcases.parser.parse(tempFile.path)
+        return try testcases.compiler.compile(ast)
     }
 
     public enum TestError: Error {

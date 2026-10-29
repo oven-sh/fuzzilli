@@ -381,6 +381,34 @@ message Instruction {
         DeclarePendingBundleModule declarePendingBundleModule = 355;
         BeginPendingBundleModule beginPendingBundleModule = 356;
         EndPendingBundleModule endPendingBundleModule = 357;
+        BeginClassPrivateGetter beginClassPrivateGetter = 358;
+        EndClassPrivateGetter endClassPrivateGetter = 359;
+        BeginClassPrivateSetter beginClassPrivateSetter = 360;
+        EndClassPrivateSetter endClassPrivateSetter = 361;
+        CallPrivateMethodWithSpread callPrivateMethodWithSpread = 362;
+        WasmJSStringLength wasmJSStringLength = 363;
+        WasmJSStringFromCharCodeArray wasmJSStringFromCharCodeArray = 364;
+        WasmJSStringFromCharCode wasmJSStringFromCharCode = 365;
+        WasmJSStringFromCodePoint wasmJSStringFromCodePoint = 366;
+        WasmJSStringCharCodeAt wasmJSStringCharCodeAt = 367;
+        WasmJSStringCodePointAt wasmJSStringCodePointAt = 368;
+        WasmJSStringIntoCharCodeArray wasmJSStringIntoCharCodeArray = 369;
+        WasmJSStringCast wasmJSStringCast = 370;
+        WasmJSStringTest wasmJSStringTest = 371;
+        WasmJSStringConcat wasmJSStringConcat = 372;
+        WasmJSStringSubstring wasmJSStringSubstring = 373;
+        WasmJSStringEquals wasmJSStringEquals = 374;
+        WasmJSStringCompare wasmJSStringCompare = 375;
+        WasmStringConstant wasmStringConstant = 376;
+        WasmStructNewDefaultDesc wasmStructNewDefaultDesc = 377;
+        WasmStructNewDesc wasmStructNewDesc = 378;
+        WasmRefGetDesc wasmRefGetDesc = 379;
+        WasmRefCastDescEq wasmRefCastDescEq = 380;
+        WasmBranchOnCastDescEq wasmBranchOnCastDescEq = 381;
+        WasmBranchOnCastDescEqFail wasmBranchOnCastDescEqFail = 382;
+        WasmTableFill wasmTableFill = 383;
+        WasmArrayNewData wasmArrayNewData = 384;
+        WasmArrayNewElem wasmArrayNewElem = 385;
     }
 }
 

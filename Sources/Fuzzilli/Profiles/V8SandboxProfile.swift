@@ -554,7 +554,10 @@ let v8SandboxProfile = Profile(
         (ForceTurboFanCompilationGenerator, 5),
         (ForceMaglevCompilationGenerator, 5),
         (ForceOsrGenerator, 5),
+        (NeverOptimizeFunctionGenerator, 5),
         (V8GcGenerator, 10),
+        (V8DispatchTableGCIntervalGenerator, 5),
+        (V8SimulateNewspaceFullGenerator, 5),
         (WasmStructGenerator, 5),
         (WasmArrayGenerator, 5),
         (SharedObjectGenerator, 5),
@@ -562,6 +565,9 @@ let v8SandboxProfile = Profile(
         (HoleNanGenerator, 5),
         (UndefinedNanGenerator, 5),
         (StringShapeGenerator, 5),
+        (V8InterceptorObjectGenerator, 5),
+        (V8AccessCheckedObjectGenerator, 5),
+        (V8SetAccessPolicyGenerator, 5),
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([
@@ -573,15 +579,23 @@ let v8SandboxProfile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise)),
-        "d8": .object(),
-        "Worker": .constructor(
-            [.jsAnything, .object()] => .object(withMethods: ["postMessage", "getMessage"])),
+        "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise())),
+        "d8": .jsD8,
+        "Worker": .jsWorkerConstructor,
+        // via --expose-externalize-string:
+        "externalizeString": .function([.plain(.jsString)] => .jsString),
+        "isOneByteString": .function([.plain(.jsString)] => .boolean),
+        "createExternalizableString": .function([.plain(.jsString)] => .jsString),
+        "createExternalizableTwoByteString": .function([.plain(.jsString)] => .jsString),
     ],
 
-    additionalObjectGroups: [jsD8, jsD8Test, jsD8FastCAPI, gcOptions],
+    additionalObjectGroups: [
+        jsD8, jsD8Test, jsD8FastCAPI, gcOptions,
+        jsD8AccessCheckedObject, .jsWorkers, .jsWorkerPrototype,
+        .jsWorkerConstructors,
+    ],
 
-    additionalEnumerations: [.gcTypeEnum, .gcExecutionEnum],
+    additionalEnumerations: [.gcTypeEnum, .gcExecutionEnum, .jsD8AccessPolicyEnum],
 
     additionalOptionsBags: [],
 

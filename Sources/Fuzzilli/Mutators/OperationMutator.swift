@@ -63,14 +63,20 @@ public class OperationMutator: BaseInstructionMutator {
         var inouts = instr.inouts
         switch instr.op.opcode {
         case .loadInteger(let op):
-            // Half the time we want to just hit the regular path
-            if Bool.random(),
-                let customName = op.customName,
-                let type = b.fuzzer.environment.getEnum(ofName: customName)
-            {
-                let value = Int64(chooseUniform(from: type.enumValues))!
-                newOp = LoadInteger(value: value, customName: customName)
-                break
+            if let customName = op.customName {
+                // Half the time we want to just hit the regular path
+                if Bool.random() {
+                    if let type = b.fuzzer.environment.getEnum(ofName: customName) {
+                        let value = Int64(chooseUniform(from: type.enumValues))!
+                        newOp = LoadInteger(value: value, customName: customName)
+                        break
+                    } else if let gen = b.fuzzer.environment.getNamedIntegerGenerator(
+                        ofName: customName)
+                    {
+                        newOp = LoadInteger(value: gen(), customName: customName)
+                        break
+                    }
+                }
             }
             newOp = LoadInteger(value: b.randomInt())
         case .loadBigInt(_):
@@ -93,51 +99,14 @@ public class OperationMutator: BaseInstructionMutator {
                     }
                 }
             }
-            let charSetAlNum = Array(
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-            // TODO(mliedtke): Should we also use some more esoteric characters in initial string
-            // creation, e.g. ProgramBuilder.randomString?
-            let charSetExtended =
-                charSetAlNum + Array("-_.,!?<>()[]{}`´^\\/|+#*=;:'~^²\t°ß¿ 🤯🙌🏿\u{202D}")
-            let randomIndex = { (s: String) in
-                s.index(s.startIndex, offsetBy: Int.random(in: 0..<s.count))
-            }
-            let randomCharacter = {
-                // Add an overweight to the alpha-numeric characters.
-                (Bool.random() ? charSetAlNum : charSetExtended).randomElement()!
-            }
-            // With a 50% chance create a new string, otherwise perform a modification on the
-            // existing string. Modifying the string can be especially interesting for
-            // decoders for RegEx, base64, hex, ...
-            let newString =
-                op.value.isEmpty || Bool.random()
-                ? b.randomString()
-                : withEqualProbability(
-                    {
-                        // Replace a single character.
-                        var result = op.value
-                        let index = randomIndex(result)
-                        result.replaceSubrange(
-                            index..<result.index(index, offsetBy: 1),
-                            with: String(randomCharacter()))
-                        return result
-                    },
-                    {
-                        // Insert a single character.
-                        var result = op.value
-                        result.insert(randomCharacter(), at: randomIndex(result))
-                        return result
-                    },
-                    {
-                        // Remove a single character.
-                        var result = op.value
-                        result.remove(at: randomIndex(result))
-                        return result
-                    }
-                )
+
+            let newString = mutateString(op.value, b)
             // Note: This explicitly discards customName since we may have created a string that no longer
             // matches the original schema.
             newOp = LoadString(value: newString)
+        case .wasmStringConstant(let op):
+            let newString = mutateString(op.value, b)
+            newOp = WasmStringConstant(value: newString)
         case .loadRegExp(let op):
             newOp = withEqualProbability(
                 {
@@ -165,7 +134,8 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = ObjectLiteralAddElement(index: b.randomIndex())
         case .beginObjectLiteralMethod(let op):
             newOp = BeginObjectLiteralMethod(
-                methodName: b.randomMethodName(), parameters: op.parameters)
+                methodName: b.randomMethodName(), parameters: op.parameters,
+                isGenerator: op.isGenerator, isAsync: op.isAsync)
         case .beginObjectLiteralGetter:
             newOp = BeginObjectLiteralGetter(propertyName: b.randomPropertyName())
         case .beginObjectLiteralSetter:
@@ -178,7 +148,8 @@ public class OperationMutator: BaseInstructionMutator {
                 index: b.randomIndex(), hasValue: op.hasValue, isStatic: op.isStatic)
         case .beginClassMethod(let op):
             newOp = BeginClassMethod(
-                methodName: b.randomMethodName(), parameters: op.parameters, isStatic: op.isStatic)
+                methodName: b.randomMethodName(), parameters: op.parameters, isStatic: op.isStatic,
+                isGenerator: op.isGenerator, isAsync: op.isAsync)
         case .beginClassGetter(let op):
             newOp = BeginClassGetter(propertyName: b.randomPropertyName(), isStatic: op.isStatic)
         case .beginClassSetter(let op):
@@ -202,15 +173,51 @@ public class OperationMutator: BaseInstructionMutator {
             spreads[idx] = !spreads[idx]
             newOp = CreateArrayWithSpread(spreads: spreads)
         case .getProperty(let op):
-            newOp = GetProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
+            newOp = GetProperty(
+                propertyName: b.randomPropertyName(), isReceiverOptional: op.isReceiverOptional)
         case .setProperty(let op):
             newOp = SetProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
-        case .updateProperty(_):
+        case .updateProperty(let op):
             newOp = UpdateProperty(
                 propertyName: b.randomPropertyName(),
-                operator: chooseUniform(from: BinaryOperator.allCases))
+                operator: chooseUniform(from: BinaryOperator.allCases),
+                isGuarded: op.isGuarded)
+        case .getPrivateProperty(let op):
+            if probability(0.25) || !b.hasVisibleClassDefinition {
+                newOp = GetProperty(
+                    propertyName: b.randomPropertyName(), isReceiverOptional: op.isReceiverOptional)
+            } else {
+                let prop = selectAvailablePrivateProperty(
+                    in: b, fallback: op.propertyName)
+                newOp = GetPrivateProperty(
+                    propertyName: prop, isGuarded: op.isGuarded,
+                    isReceiverOptional: op.isReceiverOptional)
+            }
+        case .setPrivateProperty(let op):
+            if probability(0.25) || !b.hasVisibleClassDefinition {
+                newOp = SetProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
+            } else {
+                let prop = selectAvailablePrivateProperty(
+                    in: b, fallback: op.propertyName)
+                newOp = SetPrivateProperty(propertyName: prop, isGuarded: op.isGuarded)
+            }
+        case .updatePrivateProperty(let op):
+            if probability(0.25) || !b.hasVisibleClassDefinition {
+                newOp = UpdateProperty(
+                    propertyName: b.randomPropertyName(),
+                    operator: chooseUniform(from: BinaryOperator.allCases),
+                    isGuarded: op.isGuarded)
+            } else {
+                let prop = selectAvailablePrivateProperty(
+                    in: b, fallback: op.propertyName)
+                newOp = UpdatePrivateProperty(
+                    propertyName: prop,
+                    operator: chooseUniform(from: BinaryOperator.allCases),
+                    isGuarded: op.isGuarded)
+            }
         case .deleteProperty(let op):
-            newOp = DeleteProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
+            newOp = DeleteProperty(
+                propertyName: b.randomPropertyName(), isReceiverOptional: op.isReceiverOptional)
         case .configureProperty(let op):
             // Change the flags or the property name, but don't change the type as that would require changing the inputs as well.
             if probability(0.5) {
@@ -221,16 +228,19 @@ public class OperationMutator: BaseInstructionMutator {
                     propertyName: op.propertyName, flags: PropertyFlags.random(), type: op.type)
             }
         case .getElement(let op):
-            newOp = GetElement(index: b.randomIndex(), isGuarded: op.isGuarded)
-        case .setElement(_):
-            newOp = SetElement(index: b.randomIndex())
-        case .updateElement(_):
+            newOp = GetElement(index: b.randomIndex(), isReceiverOptional: op.isReceiverOptional)
+        case .setElement(let op):
+            newOp = SetElement(index: b.randomIndex(), isGuarded: op.isGuarded)
+        case .updateElement(let op):
             newOp = UpdateElement(
-                index: b.randomIndex(), operator: chooseUniform(from: BinaryOperator.allCases))
-        case .updateComputedProperty(_):
-            newOp = UpdateComputedProperty(operator: chooseUniform(from: BinaryOperator.allCases))
+                index: b.randomIndex(), operator: chooseUniform(from: BinaryOperator.allCases),
+                isGuarded: op.isGuarded)
+        case .updateComputedProperty(let op):
+            newOp = UpdateComputedProperty(
+                operator: chooseUniform(from: BinaryOperator.allCases),
+                isGuarded: op.isGuarded)
         case .deleteElement(let op):
-            newOp = DeleteElement(index: b.randomIndex(), isGuarded: op.isGuarded)
+            newOp = DeleteElement(index: b.randomIndex(), isReceiverOptional: op.isReceiverOptional)
         case .configureElement(let op):
             // Change the flags or the element index, but don't change the type as that would require changing the inputs as well.
             if probability(0.5) {
@@ -247,7 +257,8 @@ public class OperationMutator: BaseInstructionMutator {
             let idx = Int.random(in: 0..<spreads.count)
             spreads[idx] = !spreads[idx]
             newOp = CallFunctionWithSpread(
-                numArguments: op.numArguments, spreads: spreads, isGuarded: op.isGuarded)
+                numArguments: op.numArguments, spreads: spreads, isGuarded: op.isGuarded,
+                isCallOptional: op.isCallOptional)
         case .constructWithSpread(let op):
             var spreads = op.spreads
             assert(!spreads.isEmpty)
@@ -259,7 +270,21 @@ public class OperationMutator: BaseInstructionMutator {
             // Selecting a random method has a high chance of causing a runtime exception, so try to select an existing one.
             let methodName = b.type(of: instr.input(0)).randomMethod() ?? b.randomMethodName()
             newOp = CallMethod(
-                methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded)
+                methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded,
+                isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
+        case .callPrivateMethod(let op):
+            if probability(0.25) || !b.hasVisibleClassDefinition {
+                let methodName = b.type(of: instr.input(0)).randomMethod() ?? b.randomMethodName()
+                newOp = CallMethod(
+                    methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded,
+                    isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
+            } else {
+                let method = selectAvailablePrivateMethod(
+                    in: b, fallback: op.methodName)
+                newOp = CallPrivateMethod(
+                    methodName: method, numArguments: op.numArguments, isGuarded: op.isGuarded,
+                    isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
+            }
         case .callMethodWithSpread(let op):
             // Selecting a random method has a high chance of causing a runtime exception, so try to select an existing one.
             let methodName = b.type(of: instr.input(0)).randomMethod() ?? b.randomMethodName()
@@ -269,14 +294,28 @@ public class OperationMutator: BaseInstructionMutator {
             spreads[idx] = !spreads[idx]
             newOp = CallMethodWithSpread(
                 methodName: methodName, numArguments: op.numArguments, spreads: spreads,
-                isGuarded: op.isGuarded)
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
+        // TODO(rherouart): Unify normal and spread calls (e.g. CallMethod vs CallMethodWithSpread) into a single opcode with an optional/empty spread array.
+        // This would allow more mutations, such as easily turning a non-spread call into a spread call.
+        // Do the same for callMethod/construct/callFunction
+        case .callPrivateMethodWithSpread(let op):
+            var spreads = op.spreads
+            assert(!spreads.isEmpty)
+            let idx = Int.random(in: 0..<spreads.count)
+            spreads[idx] = !spreads[idx]
+            newOp = CallPrivateMethodWithSpread(
+                methodName: op.methodName, numArguments: op.numArguments, spreads: spreads,
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
         case .callComputedMethodWithSpread(let op):
             var spreads = op.spreads
             assert(!spreads.isEmpty)
             let idx = Int.random(in: 0..<spreads.count)
             spreads[idx] = !spreads[idx]
             newOp = CallComputedMethodWithSpread(
-                numArguments: op.numArguments, spreads: spreads, isGuarded: op.isGuarded)
+                numArguments: op.numArguments, spreads: spreads, isGuarded: op.isGuarded,
+                isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
         case .unaryOperation(_):
             newOp = UnaryOperation(chooseUniform(from: UnaryOperator.allCases))
         case .binaryOperation(_):
@@ -292,7 +331,9 @@ public class OperationMutator: BaseInstructionMutator {
                 b.randomIdentifierName(), declarationMode: op.declarationMode)
         case .callSuperMethod(let op):
             let methodName = b.currentSuperType().randomMethod() ?? b.randomMethodName()
-            newOp = CallSuperMethod(methodName: methodName, numArguments: op.numArguments)
+            newOp = CallSuperMethod(
+                methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded,
+                isCallOptional: op.isCallOptional)
         case .getSuperProperty(_):
             newOp = GetSuperProperty(propertyName: b.randomPropertyName())
         case .setSuperProperty(_):
@@ -324,6 +365,9 @@ public class OperationMutator: BaseInstructionMutator {
                 .imported:
                 // TODO(cffsmith): Support these enum values or drop them from the WasmGlobal.
                 fatalError("unimplemented")
+            case .indexRef,
+                .indexExactRef:
+                fatalError("JS globals cannot have Wasm index types")
             }
             newOp = CreateWasmGlobal(value: wasmGlobal, isMutable: probability(0.5))
         case .createWasmMemory(let op):
@@ -345,6 +389,18 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = CreateWasmTable(
                 elementType: op.tableType.elementType,
                 limits: Limits(min: newMinSize, max: newMaxSize), isTable64: op.tableType.isTable64)
+        case .endWasmModule(let op):
+            if op.hasStartFunction {
+                newOp = EndWasmModule(hasStartFunction: false)
+                inouts.removeFirst()
+            } else {
+                if let startFunc = b.randomWasmStartFunction() {
+                    newOp = EndWasmModule(hasStartFunction: true)
+                    inouts = ArraySlice([startFunc] + instr.outputs)
+                } else {
+                    newOp = op
+                }
+            }
         // Wasm Operations
         case .consti32(_):
             newOp = Consti32(value: Int32(truncatingIfNeeded: b.randomInt()))
@@ -392,51 +448,57 @@ public class OperationMutator: BaseInstructionMutator {
             let otherCases = WasmWideMulOpKind.allCases.filter { $0 != op.mulOpKind }
             newOp = Wasmi64WideMulOp(mulOpKind: chooseUniform(from: otherCases))
 
-        case .wasmTruncatef32Toi32(_):
-            newOp = WasmTruncatef32Toi32(isSigned: probability(0.5))
-        case .wasmTruncatef64Toi32(_):
-            newOp = WasmTruncatef64Toi32(isSigned: probability(0.5))
-        case .wasmExtendi32Toi64(_):
-            newOp = WasmExtendi32Toi64(isSigned: probability(0.5))
-        case .wasmTruncatef32Toi64(_):
-            newOp = WasmTruncatef32Toi64(isSigned: probability(0.5))
-        case .wasmTruncatef64Toi64(_):
-            newOp = WasmTruncatef64Toi64(isSigned: probability(0.5))
-        case .wasmConverti32Tof32(_):
-            newOp = WasmConverti32Tof32(isSigned: probability(0.5))
-        case .wasmConverti64Tof32(_):
-            newOp = WasmConverti64Tof32(isSigned: probability(0.5))
-        case .wasmConverti32Tof64(_):
-            newOp = WasmConverti32Tof64(isSigned: probability(0.5))
-        case .wasmConverti64Tof64(_):
-            newOp = WasmConverti64Tof64(isSigned: probability(0.5))
-        case .wasmTruncateSatf32Toi32(_):
-            newOp = WasmTruncateSatf32Toi32(isSigned: probability(0.5))
-        case .wasmTruncateSatf64Toi32(_):
-            newOp = WasmTruncateSatf64Toi32(isSigned: probability(0.5))
-        case .wasmTruncateSatf32Toi64(_):
-            newOp = WasmTruncateSatf32Toi64(isSigned: probability(0.5))
-        case .wasmTruncateSatf64Toi64(_):
-            newOp = WasmTruncateSatf64Toi64(isSigned: probability(0.5))
+        case .wasmTruncatef32Toi32(let op):
+            newOp = WasmTruncatef32Toi32(isSigned: !op.isSigned)
+        case .wasmTruncatef64Toi32(let op):
+            newOp = WasmTruncatef64Toi32(isSigned: !op.isSigned)
+        case .wasmExtendi32Toi64(let op):
+            newOp = WasmExtendi32Toi64(isSigned: !op.isSigned)
+        case .wasmTruncatef32Toi64(let op):
+            newOp = WasmTruncatef32Toi64(isSigned: !op.isSigned)
+        case .wasmTruncatef64Toi64(let op):
+            newOp = WasmTruncatef64Toi64(isSigned: !op.isSigned)
+        case .wasmConverti32Tof32(let op):
+            newOp = WasmConverti32Tof32(isSigned: !op.isSigned)
+        case .wasmConverti64Tof32(let op):
+            newOp = WasmConverti64Tof32(isSigned: !op.isSigned)
+        case .wasmConverti32Tof64(let op):
+            newOp = WasmConverti32Tof64(isSigned: !op.isSigned)
+        case .wasmConverti64Tof64(let op):
+            newOp = WasmConverti64Tof64(isSigned: !op.isSigned)
+        case .wasmTruncateSatf32Toi32(let op):
+            newOp = WasmTruncateSatf32Toi32(isSigned: !op.isSigned)
+        case .wasmTruncateSatf64Toi32(let op):
+            newOp = WasmTruncateSatf64Toi32(isSigned: !op.isSigned)
+        case .wasmTruncateSatf32Toi64(let op):
+            newOp = WasmTruncateSatf32Toi64(isSigned: !op.isSigned)
+        case .wasmTruncateSatf64Toi64(let op):
+            newOp = WasmTruncateSatf64Toi64(isSigned: !op.isSigned)
 
         case .wasmDefineGlobal(let op):
             // We never change the type of the global, only the value as changing the type will break the following code pretty much instantly.
-            let wasmGlobal: WasmGlobal =
-                switch op.wasmGlobal.toType() {
-                case .wasmf32:
-                    .wasmf32(Float32(b.randomFloat()))
-                case .wasmf64:
-                    .wasmf64(b.randomFloat())
-                case .wasmi32:
-                    .wasmi32(Int32(truncatingIfNeeded: b.randomInt()))
-                case .wasmi64:
-                    .wasmi64(b.randomInt())
-                case ILType.wasmExternRef(), ILType.wasmExnRef(), ILType.wasmI31Ref():
-                    op.wasmGlobal
-                default:
-                    fatalError("unexpected/unimplemented Value Type!")
-                }
-            newOp = WasmDefineGlobal(wasmGlobal: wasmGlobal, isMutable: probability(0.5))
+            switch op.wasmGlobal {
+            case .indexRef, .indexExactRef:
+                newOp = WasmDefineGlobal(wasmGlobal: op.wasmGlobal, isMutable: probability(0.5))
+            default:
+                let oldWasmGlobal = op.wasmGlobal
+                let wasmGlobal: WasmGlobal =
+                    switch oldWasmGlobal.toType() {
+                    case .wasmf32:
+                        .wasmf32(Float32(b.randomFloat()))
+                    case .wasmf64:
+                        .wasmf64(b.randomFloat())
+                    case .wasmi32:
+                        .wasmi32(Int32(truncatingIfNeeded: b.randomInt()))
+                    case .wasmi64:
+                        .wasmi64(b.randomInt())
+                    case ILType.wasmExternRef(), ILType.wasmExnRef(), ILType.wasmI31Ref():
+                        oldWasmGlobal
+                    default:
+                        fatalError("unexpected/unimplemented Value Type!")
+                    }
+                newOp = WasmDefineGlobal(wasmGlobal: wasmGlobal, isMutable: probability(0.5))
+            }
         case .wasmDefineTable(let op):
             // TODO: change table size?
             newOp = op
@@ -509,11 +571,13 @@ public class OperationMutator: BaseInstructionMutator {
         case .constSimd128(_):
             newOp = ConstSimd128(
                 value: (0..<16).map { _ in UInt8.random(in: UInt8.min...UInt8.max) })
-        case .wasmSimd128IntegerUnOp(_):
+        case .wasmSimd128IntegerUnOp(let op):
             let shape = chooseUniform(from: WasmSimd128Shape.allCases.filter { !$0.isFloat() })
+            // We can't convert between i32-producing operations (all_true, bitmask) and
+            // v128-producing operations.
             let unOpKind = chooseUniform(
                 from: WasmSimd128IntegerUnOpKind.allCases.filter {
-                    $0.isValidForShape(shape: shape)
+                    $0.isValidForShape(shape: shape) && $0.outputType() == op.unOpKind.outputType()
                 })
             newOp = WasmSimd128IntegerUnOp(shape: shape, unOpKind: unOpKind)
         case .wasmSimd128IntegerBinOp(let op):
@@ -564,7 +628,7 @@ public class OperationMutator: BaseInstructionMutator {
         case .wasmSimdReplaceLane(let op):
             newOp = WasmSimdReplaceLane(
                 kind: op.kind, lane: Int.random(in: 0..<op.kind.laneCount()))
-        case .wasmSimdStoreLane(let op):
+        case .wasmSimdStoreLane(_):
             let kind = chooseUniform(from: WasmSimdStoreLane.Kind.allCases)
             let staticOffset =
                 probability(0.8)
@@ -572,8 +636,8 @@ public class OperationMutator: BaseInstructionMutator {
                 : Int64.random(in: Int64.min...Int64.max)  // most likely out of bounds
             newOp = WasmSimdStoreLane(
                 kind: kind, staticOffset: staticOffset,
-                lane: Int.random(in: 0..<op.kind.laneCount()))
-        case .wasmSimdLoadLane(let op):
+                lane: Int.random(in: 0..<kind.laneCount()))
+        case .wasmSimdLoadLane(_):
             let kind = chooseUniform(from: WasmSimdLoadLane.Kind.allCases)
             let staticOffset =
                 probability(0.8)
@@ -581,7 +645,7 @@ public class OperationMutator: BaseInstructionMutator {
                 : Int64.random(in: Int64.min...Int64.max)  // most likely out of bounds
             newOp = WasmSimdLoadLane(
                 kind: kind, staticOffset: staticOffset,
-                lane: Int.random(in: 0..<op.kind.laneCount()))
+                lane: Int.random(in: 0..<kind.laneCount()))
         case .wasmSimdLoad(_):
             let kind = chooseUniform(from: WasmSimdLoad.Kind.allCases)
             let staticOffset =
@@ -616,20 +680,22 @@ public class OperationMutator: BaseInstructionMutator {
                 )
                 newType = ILType.wasmRef(
                     .Abstract(HeapTypeInfo(chosenType, shared: false)), nullability: Bool.random())
-            case .Index(_):
+            case .Index(_, let isExact):
                 let nullable = op.type.wasmReferenceType!.nullability
-                newType = ILType.wasmRef(.Index(), nullability: !nullable)
+                newType = ILType.wasmRef(.Index(isExact: isExact), nullability: !nullable)
             }
             newOp = WasmRefTest(refType: newType)
         case .importVariables(let op):
+            // Replace a random import name with another valid import name.
             var names = op.importNames
             let module = instr.inputs[0]
             assert(b.type(of: module).Is(.jsModule()))
             let exports = b.type(of: module).exports.keys
-            assert(!exports.isEmpty)
-            names.append(exports.randomElement()!)
+            if !names.isEmpty && !exports.isEmpty {
+                let ix = Int.random(in: names.indices)
+                names[ix] = exports.randomElement()!
+            }
             newOp = ImportVariables(importNames: names)
-            inouts.append(b.nextVariable())
         case .importNamespace(let op):
             newOp = ImportNamespace(isDeferred: !op.isDeferred)
         case .dynamicImport(let op):
@@ -638,7 +704,11 @@ public class OperationMutator: BaseInstructionMutator {
             if let newPattern = mutateDestructuringPattern(
                 op.pattern, b, &inouts, isReassign: false)
             {
-                newOp = Destruct(pattern: newPattern, numInputs: 1, numOutputs: inouts.count - 1)
+                newOp = Destruct(
+                    pattern: newPattern,
+                    numInputs: 1 + newPattern.numExtraInputs,
+                    numOutputs: newPattern.numBindings
+                )
             } else {
                 return instr
             }
@@ -687,6 +757,8 @@ public class OperationMutator: BaseInstructionMutator {
             .classAddPrivateProperty(_),
             .beginClassPrivateMethod(_),
             .endClassPrivateMethod(_),
+            .endClassPrivateGetter(_),
+            .endClassPrivateSetter(_),
             .endClassDefinition(_),
             .createArray(_),
             .getComputedProperty(_),
@@ -727,10 +799,6 @@ public class OperationMutator: BaseInstructionMutator {
             .beginWith(_),
             .endWith(_),
             .callSuperConstructor(_),
-            .getPrivateProperty(_),
-            .setPrivateProperty(_),
-            .updatePrivateProperty(_),
-            .callPrivateMethod(_),
             .beginElse(_),
             .endIf(_),
             .beginWhileLoopHeader(_),
@@ -780,6 +848,8 @@ public class OperationMutator: BaseInstructionMutator {
             .wrapSuspending(_),
             .bindMethod(_),
             .bindFunction(_),
+            .beginClassPrivateGetter(_),
+            .beginClassPrivateSetter(_),
             .beginBundleScript(_),
             .endBundleScript(_),
             .beginBundleModule(_),
@@ -793,7 +863,6 @@ public class OperationMutator: BaseInstructionMutator {
             .createMap(_),
             // Wasm instructions
             .beginWasmModule(_),
-            .endWasmModule(_),
             .wasmReturn(_),
             .wasmJsCall(_),
             .wasmReassign(_),
@@ -810,6 +879,19 @@ public class OperationMutator: BaseInstructionMutator {
             .wasmi32EqualZero(_),
             .wasmi64EqualZero(_),
             .wasmWrapi64Toi32(_),
+            .wasmJSStringLength(_),
+            .wasmJSStringFromCharCodeArray(_),
+            .wasmJSStringFromCharCode(_),
+            .wasmJSStringFromCodePoint(_),
+            .wasmJSStringCharCodeAt(_),
+            .wasmJSStringCodePointAt(_),
+            .wasmJSStringIntoCharCodeArray(_),
+            .wasmJSStringCast(_),
+            .wasmJSStringTest(_),
+            .wasmJSStringConcat(_),
+            .wasmJSStringSubstring(_),
+            .wasmJSStringEquals(_),
+            .wasmJSStringCompare(_),
             .wasmDemotef64Tof32(_),
             .wasmPromotef32Tof64(_),
             .wasmReinterpretf32Asi32(_),
@@ -847,6 +929,8 @@ public class OperationMutator: BaseInstructionMutator {
             .wasmBranchOnNull(_),
             .wasmBranchOnNonNull(_),
             .wasmBranchOnCast(_),
+            .wasmBranchOnCastDescEq(_),
+            .wasmBranchOnCastDescEqFail(_),
             .wasmBranchOnCastFail(_),
             .wasmBranchTable(_),
             .wasmBeginElse(_),
@@ -872,9 +956,14 @@ public class OperationMutator: BaseInstructionMutator {
             .wasmResolveForwardReference(_),
             .wasmArrayNewFixed(_),
             .wasmArrayNewDefault(_),
+            .wasmArrayNewData(_),
+            .wasmArrayNewElem(_),
             .wasmArrayLen(_),
             .wasmArraySet(_),
             .wasmStructNewDefault(_),
+            .wasmStructNewDefaultDesc(_),
+            .wasmStructNewDesc(_),
+            .wasmRefGetDesc(_),
             .wasmStructSet(_),
             .wasmRefNull(_),
             .wasmRefIsNull(_),
@@ -887,18 +976,25 @@ public class OperationMutator: BaseInstructionMutator {
             .wasmDropElementSegment(_),
             .wasmTableInit(_),
             .wasmTableCopy(_),
+            .wasmTableFill(_),
             .wasmStructNew(_),
             .wasmRefEq(_),
             .wasmRefCast(_),
+            .wasmRefCastDescEq(_),
             .rawWasmModule(_):
             let mutability = instr.isOperationMutable ? "mutable" : "immutable"
             fatalError("Unexpected operation \(instr.op.opcode), marked as \(mutability)")
         }
 
-        // This assert is here to prevent subtle bugs if we ever decide to add flags that are "alive" during program building / mutation.
-        // If we add flags, remove this assert and change the code below.
-        assert(instr.flags == .empty)
-        return Instruction(newOp, inouts: inouts)
+        var modifiedOp = newOp
+        if let optionalOp = modifiedOp as? ReceiverOptionalOperation, probability(0.1) {
+            modifiedOp = optionalOp.withReceiverOptionalState(!optionalOp.isReceiverOptional)
+        }
+        if let optionalOp = modifiedOp as? CallOptionalOperation, probability(0.1) {
+            modifiedOp = optionalOp.withCallOptionalState(!optionalOp.isCallOptional)
+        }
+
+        return Instruction(modifiedOp, inouts: inouts)
     }
 
     private func extendVariadicOperation(_ instr: Instruction, _ b: ProgramBuilder) -> Instruction {
@@ -913,34 +1009,52 @@ public class OperationMutator: BaseInstructionMutator {
     private func extendVariadicOperationByOneInput(_ instr: Instruction, _ b: ProgramBuilder)
         -> Instruction
     {
-        // Without visible variables, we can't add a new input to this instruction.
-        // This should happen rarely, so just skip this mutation.
-        guard b.hasVisibleJsVariables else { return instr }
+        // Without visible JS variables, we can't add a new input to JavaScript variadic operations.
+        // Wasm variadic operations don't depend on visible JS variables.
+        guard instr.op is WasmOperation || b.hasVisibleJsVariables else { return instr }
 
         let newOp: Operation
         var inputs = instr.inputs
 
         switch instr.op.opcode {
         case .createArray(let op):
-            newOp = CreateArray(
-                numInitialValues: op.numInitialValues + 1, elementGroupName: op.elementGroupName)
-            let elementType = op.elementGroupName.map {
-                b.fuzzer.environment.type(ofGroup: $0)
-            }
-            inputs.append(
-                elementType.map { b.randomVariable(forUseAs: $0) } ?? b.randomJsVariable())
+            newOp = CreateArray(numInitialValues: op.numInitialValues + 1)
+            let elementType =
+                instr.inputs.isEmpty
+                ? .jsAnything
+                : instr.inputs.reduce(ILType.nothing) {
+                    $0 | b.type(of: $1)
+                }
+            inputs.append(b.randomVariable(forUseAs: elementType))
         case .createArrayWithSpread(let op):
-            let spreads = op.spreads + [Bool.random()]
-            inputs.append(b.randomJsVariable())
+            let elementType =
+                instr.inputs.isEmpty
+                ? .jsAnything
+                : zip(instr.inputs, op.spreads).reduce(ILType.nothing) {
+                    result, entry in
+                    let (input, isSpread) = entry
+                    let inputType = b.type(of: input)
+                    let resolvedElementType =
+                        isSpread ? (inputType.iterableElementType ?? .jsAnything) : inputType
+                    return result | resolvedElementType
+                }
+            let isSpread = Bool.random()
+            inputs.append(
+                b.randomVariable(
+                    forUseAs: isSpread ? .iterable(ofElementType: elementType) : elementType))
+            let spreads = op.spreads + [isSpread]
             newOp = CreateArrayWithSpread(spreads: spreads)
         case .callFunction(let op):
             inputs.append(b.randomJsVariable())
-            newOp = CallFunction(numArguments: op.numArguments + 1, isGuarded: op.isGuarded)
+            newOp = CallFunction(
+                numArguments: op.numArguments + 1, isGuarded: op.isGuarded,
+                isCallOptional: op.isCallOptional)
         case .callFunctionWithSpread(let op):
             let spreads = op.spreads + [Bool.random()]
             inputs.append(b.randomJsVariable())
             newOp = CallFunctionWithSpread(
-                numArguments: op.numArguments + 1, spreads: spreads, isGuarded: op.isGuarded)
+                numArguments: op.numArguments + 1, spreads: spreads, isGuarded: op.isGuarded,
+                isCallOptional: op.isCallOptional)
         case .construct(let op):
             inputs.append(b.randomJsVariable())
             newOp = Construct(numArguments: op.numArguments + 1, isGuarded: op.isGuarded)
@@ -953,30 +1067,48 @@ public class OperationMutator: BaseInstructionMutator {
             inputs.append(b.randomJsVariable())
             newOp = CallMethod(
                 methodName: op.methodName, numArguments: op.numArguments + 1,
-                isGuarded: op.isGuarded)
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
         case .callMethodWithSpread(let op):
             let spreads = op.spreads + [Bool.random()]
             inputs.append(b.randomJsVariable())
             newOp = CallMethodWithSpread(
                 methodName: op.methodName, numArguments: op.numArguments + 1, spreads: spreads,
-                isGuarded: op.isGuarded)
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
         case .callComputedMethod(let op):
             inputs.append(b.randomJsVariable())
-            newOp = CallComputedMethod(numArguments: op.numArguments + 1, isGuarded: op.isGuarded)
+            newOp = CallComputedMethod(
+                numArguments: op.numArguments + 1, isGuarded: op.isGuarded,
+                isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
         case .callComputedMethodWithSpread(let op):
             let spreads = op.spreads + [Bool.random()]
             inputs.append(b.randomJsVariable())
             newOp = CallComputedMethodWithSpread(
-                numArguments: op.numArguments + 1, spreads: spreads, isGuarded: op.isGuarded)
+                numArguments: op.numArguments + 1, spreads: spreads, isGuarded: op.isGuarded,
+                isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
+        case .callPrivateMethodWithSpread(let op):
+            let spreads = op.spreads + [Bool.random()]
+            inputs.append(b.randomJsVariable())
+            newOp = CallPrivateMethodWithSpread(
+                methodName: op.methodName, numArguments: op.numArguments + 1, spreads: spreads,
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
         case .callSuperConstructor(let op):
             inputs.append(b.randomJsVariable())
             newOp = CallSuperConstructor(numArguments: op.numArguments + 1)
         case .callPrivateMethod(let op):
             inputs.append(b.randomJsVariable())
-            newOp = CallPrivateMethod(methodName: op.methodName, numArguments: op.numArguments + 1)
+            newOp = CallPrivateMethod(
+                methodName: op.methodName, numArguments: op.numArguments + 1,
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
+
         case .callSuperMethod(let op):
             inputs.append(b.randomJsVariable())
-            newOp = CallSuperMethod(methodName: op.methodName, numArguments: op.numArguments + 1)
+            newOp = CallSuperMethod(
+                methodName: op.methodName, numArguments: op.numArguments + 1,
+                isGuarded: op.isGuarded, isCallOptional: op.isCallOptional)
         case .bindFunction(_):
             inputs.append(b.randomJsVariable())
             newOp = BindFunction(numInputs: inputs.count)
@@ -996,16 +1128,14 @@ public class OperationMutator: BaseInstructionMutator {
             inputs.append(b.randomJsVariable())
             newOp = ExportVariables(exportNames: names)
         case .createMap(let op):
-            newOp = CreateMap(
-                numInitialValues: op.numInitialValues + 1, keyGroupName: op.keyGroupName,
-                valueGroupName: op.valueGroupName)
-            var elementType = ILType.jsArray
-            if let keyGroup = op.keyGroupName, let valueGroup = op.valueGroupName {
-                let keyType = b.fuzzer.environment.type(ofGroup: keyGroup)
-                let valueType = b.fuzzer.environment.type(ofGroup: valueGroup)
-                elementType = ILType.createJsArrayType(ofElementType: keyType | valueType)
-            }
-            inputs.append(b.randomVariable(forUseAs: elementType))
+            newOp = CreateMap(numInitialValues: op.numInitialValues + 1)
+            let entryType =
+                instr.inputs.isEmpty
+                ? .jsArray
+                : instr.inputs.reduce(ILType.nothing) {
+                    $0 | b.type(of: $1)
+                }
+            inputs.append(b.randomVariable(forUseAs: entryType))
 
         case .wasmArrayNewFixed(let op):
             let arrayType = b.type(of: instr.input(0))
@@ -1030,9 +1160,6 @@ public class OperationMutator: BaseInstructionMutator {
         assert(inputs.count != instr.inputs.count)
         let inouts = inputs + instr.outputs + instr.innerOutputs
 
-        // This assert is here to prevent subtle bugs if we ever decide to add flags that are "alive" during program building / mutation.
-        // If we add flags, remove this assert and change the code below.
-        assert(instr.flags == .empty)
         return Instruction(newOp, inouts: inouts)
     }
 
@@ -1063,10 +1190,9 @@ extension OperationMutator {
     ) -> DestructuringPattern? {
         switch pattern {
         case .array(let arr):
-            // Check flat
-            // TODO(rherouart): Support mutating indices when default values are present.
+            // Non-flat patterns (nested patterns or complex targets) require recursive traversal to correctly adjust variable mapping in `inouts`.
+            // Bail out here to avoid corrupting variable indices.
             for elem in arr.elements {
-                if elem.hasDefaultValue { return nil }
                 switch elem.target {
                 case .flatBinding?, nil: break
                 default: return nil
@@ -1077,40 +1203,86 @@ extension OperationMutator {
             default: return nil
             }
 
-            // TODO(rherouart): Simplify this by directly adding or removing random elisions instead of mapping to and from indices.
-            var indices: [Int64] = []
-            for (idx, elem) in arr.elements.enumerated() {
-                if case .flatBinding = elem.target { indices.append(Int64(idx)) }
-            }
-            if case .flatBinding = arr.restTarget {
-                indices.append((indices.last ?? -1) + 1)
-            }
+            var newElements = arr.elements
 
-            guard let indexToReplace = indices.indices.randomElement() else { return nil }
-            let newValue = Int64.random(in: 0..<10)
-            guard !indices.contains(newValue) else { return nil }
-            indices[indexToReplace] = newValue
+            if !newElements.isEmpty {
+                let mutateIdx = Int.random(in: 0..<newElements.count)
+                let elem = newElements[mutateIdx]
 
-            let sortedIndices = indices.sorted()
-            // TODO(rherouart): Toggle this behind some probability.
-            let lastIsRest = (arr.restTarget == nil)  // Toggle it
+                if isReassign {
+                    // Compute the index in `inouts` corresponding to `mutateIdx`.
+                    // inouts[0] is the source object (input(0)). Each preceding element consumes 1 input if it has a target
+                    // plus 1 input if it has a default value.
+                    var inoutIdx = 1
+                    for i in 0..<mutateIdx {
+                        let e = newElements[i]
+                        if e.target != nil { inoutIdx += 1 }
+                        if e.hasDefaultValue { inoutIdx += 1 }
+                    }
 
-            var elements: [DestructuringPattern.ArrayElement] = []
-            var currentIndex: Int64 = 0
-            for idx in sortedIndices {
-                while currentIndex < idx {
-                    elements.append(.init(target: nil))
-                    currentIndex += 1
+                    if elem.target == nil {
+                        // There is an elision: we replace it with a value
+                        newElements[mutateIdx] = .init(target: .flatBinding)
+                        inouts.insert(b.randomJsVariable(), at: inoutIdx)
+                    } else {
+                        // There is a value: toggle default with 50% chance, OR replace with elision with 50% chance
+                        if probability(0.5) {
+                            // Toggle default value
+                            let currentDefault = elem.hasDefaultValue
+                            newElements[mutateIdx] = .init(
+                                target: elem.target, hasDefaultValue: !currentDefault)
+                            // A default value consumes an extra input variable in the AST, right after targetVariable.
+                            if currentDefault {
+                                inouts.remove(at: inoutIdx + 1)
+                            } else {
+                                inouts.insert(b.randomJsVariable(), at: inoutIdx + 1)
+                            }
+                        } else {
+                            // Replace with elision
+                            newElements[mutateIdx] = .init(target: nil)
+                            inouts.remove(at: inoutIdx)
+                            // If it had a default value, that was mapped to a second variable at the same shifted index.
+                            if elem.hasDefaultValue {
+                                inouts.remove(at: inoutIdx)
+                            }
+                        }
+                    }
+                } else {
+                    // We can ONLY safely shuffle elements around or swap the rest element,
+                    // we cannot change target counts or input counts.
+                    if probability(0.5) && newElements.count > 1 {
+                        var swapIdx = Int.random(in: 0..<newElements.count)
+                        if swapIdx == mutateIdx {
+                            swapIdx = (swapIdx + 1) % newElements.count
+                        }
+                        newElements.swapAt(mutateIdx, swapIdx)
+                    }
                 }
-                if lastIsRest && idx == sortedIndices.last! { break }
-                elements.append(.init(target: .flatBinding))
-                currentIndex += 1
             }
-            assert(!sortedIndices.isEmpty)
-            let restTarget: DestructuringPattern.Target? =
-                lastIsRest ? .flatBinding : .none
 
-            return .array(.init(elements: elements, restTarget: restTarget))
+            // Toggle the rest element with 50% probability
+            var newRestTarget: DestructuringPattern.Target? = arr.restTarget
+            if probability(0.5) {
+                if newRestTarget != nil {
+                    // Toggling OFF: Promote the rest element back into a normal trailing flat binding.
+                    newElements.append(.init(target: newRestTarget))
+                    newRestTarget = nil
+                } else {
+                    // Toggling ON: Promote the very last flat binding in the array to become a rest parameter.
+                    // Trim trailing elisions on a temporary copy and promote the last binding if it has no default value.
+                    var tempElements = newElements
+                    while let last = tempElements.last, last.target == nil {
+                        tempElements.removeLast()
+                    }
+                    if let lastElem = tempElements.last, !lastElem.hasDefaultValue {
+                        newRestTarget = lastElem.target
+                        tempElements.removeLast()
+                        newElements = tempElements
+                    }
+                }
+            }
+
+            return .array(.init(elements: newElements, restTarget: newRestTarget))
 
         case .object(let obj):
             for prop in obj.properties {
@@ -1129,14 +1301,17 @@ extension OperationMutator {
             guard !properties.contains(newValue) else { return nil }
             properties[indexToReplace] = newValue
 
-            // TODO(rherouart): Toggle this behind some probability.
+            // Toggle the rest element with 50% probability.
             // We can only add/remove bindings if we are reassigning, because changing
             // the number of outputs of an existing instruction breaks contiguous variables.
-            let hasRest = isReassign ? !obj.hasRestElement : obj.hasRestElement
-            if hasRest && !obj.hasRestElement {
-                inouts.append(b.randomJsVariable())
-            } else if !hasRest && obj.hasRestElement {
-                inouts.removeLast()
+            var hasRest = obj.hasRestElement
+            if isReassign && probability(0.5) {
+                hasRest.toggle()
+                if hasRest {
+                    inouts.append(b.randomJsVariable())
+                } else {
+                    inouts.removeLast()
+                }
             }
 
             let newProps = properties.sorted().map {
@@ -1144,5 +1319,65 @@ extension OperationMutator {
             }
             return .object(.init(properties: newProps, hasRestElement: hasRest))
         }
+    }
+
+    private func mutateString(_ value: String, _ b: ProgramBuilder) -> String {
+        let charSetAlNum = Array(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        // TODO(mliedtke): Should we also use some more esoteric characters in initial string
+        // creation, e.g. ProgramBuilder.randomString?
+        let charSetExtended =
+            charSetAlNum + Array("-_.,!?<>()[]{}`´^\\/|+#*=;:'~^²\t°ß¿ 🤯🙌🏿\u{202D}")
+        let randomIndex = { (s: String) in
+            s.index(s.startIndex, offsetBy: Int.random(in: 0..<s.count))
+        }
+        let randomCharacter = {
+            // Add an overweight to the alpha-numeric characters.
+            (Bool.random() ? charSetAlNum : charSetExtended).randomElement()!
+        }
+        // With a 50% chance create a new string, otherwise perform a modification on the
+        // existing string. Modifying the string can be especially interesting for
+        // decoders for RegEx, base64, hex, ...
+        let newString =
+            value.isEmpty || Bool.random()
+            ? b.randomString()
+            : withEqualProbability(
+                {
+                    // Replace a single character.
+                    var result = value
+                    let index = randomIndex(result)
+                    result.replaceSubrange(
+                        index..<result.index(index, offsetBy: 1),
+                        with: String(randomCharacter()))
+                    return result
+                },
+                {
+                    // Insert a single character.
+                    var result = value
+                    result.insert(randomCharacter(), at: randomIndex(result))
+                    return result
+                },
+                {
+                    // Remove a single character.
+                    var result = value
+                    result.remove(at: randomIndex(result))
+                    return result
+                }
+            )
+        return newString
+    }
+
+    private func selectAvailablePrivateProperty(
+        in b: ProgramBuilder, fallback: String
+    ) -> String {
+        guard b.hasVisibleClassDefinition else { return fallback }
+        return b.currentClassDefinition.privateProperties.randomElement() ?? fallback
+    }
+
+    private func selectAvailablePrivateMethod(
+        in b: ProgramBuilder, fallback: String
+    ) -> String {
+        guard b.hasVisibleClassDefinition else { return fallback }
+        return b.currentClassDefinition.privateMethods.randomElement() ?? fallback
     }
 }

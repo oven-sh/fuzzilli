@@ -1,5 +1,7 @@
+bettscheider@chromium.org
 cffsmith@google.com
 machenbach@google.com
+marja@google.com
 mdanylo@google.com
 mliedtke@google.com
 pawkra@google.com
@@ -7,3 +9,4 @@ saelo@google.com
 tacet@google.com
 
 per-file WHITESPACE=*
+per-file binaryen_commit.txt=chromium-internal-autoroll@skia-corp.google.com.iam.gserviceaccount.com

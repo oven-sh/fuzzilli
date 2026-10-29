@@ -68,6 +68,9 @@ public class Events {
     /// Signals that a new interesting program has been found, after the program has been minimized.
     public let InterestingProgramFound = Event<(program: Program, origin: ProgramOrigin)>()
 
+    /// Signals that the aspect intersection of an evaluated program was nil.
+    public let AspectIntersectionNil = Event<Void>()
+
     /// Signals a diagnostics event
     public let DiagnosticsEvent = Event<(name: String, content: Data)>()
 
@@ -93,6 +96,11 @@ public class Events {
 
     /// Signals that a corpus import is complete.
     public let CorpusImportComplete = Event<()>()
+
+    /// Signals that a program was evaluated for import.
+    public let ProgramImported = Event<
+        (program: Program, origin: ProgramOrigin, wasImported: Bool)
+    >()
 }
 
 /// Crash behavior of a program.

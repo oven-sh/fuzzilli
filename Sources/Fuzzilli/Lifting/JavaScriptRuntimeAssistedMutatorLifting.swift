@@ -373,6 +373,7 @@ struct JavaScriptRuntimeAssistedMutatorLifting {
             const OP_CONSTRUCT_METHOD = 'CONSTRUCT_METHOD';
             const OP_GET_PROPERTY = 'GET_PROPERTY';
             const OP_SET_PROPERTY = 'SET_PROPERTY';
+            const OP_UPDATE_PROPERTY = 'UPDATE_PROPERTY';
             const OP_DELETE_PROPERTY = 'DELETE_PROPERTY';
 
             const OP_ADD = 'ADD';
@@ -495,9 +496,30 @@ struct JavaScriptRuntimeAssistedMutatorLifting {
               [OP_CALL_FUNCTION]: (inputs, currentThis) => { let f = shift(inputs); return apply(f, currentThis, inputs); },
               [OP_CONSTRUCT]: (inputs) => { let c = shift(inputs); return construct(c, inputs); },
               [OP_CALL_METHOD]: (inputs) => { let o = shift(inputs); let m = shift(inputs); return apply(o[m], o, inputs); },
-              [OP_CONSTRUCT_METHOD]: (v, inputs) => { let o = shift(inputs); let m = shift(inputs); return construct(o[m], inputs); },
+              [OP_CONSTRUCT_METHOD]: (inputs) => { let o = shift(inputs); let m = shift(inputs); return construct(o[m], inputs); },
               [OP_GET_PROPERTY]: (inputs) => { let o = inputs[0]; let p = inputs[1]; return o[p]; },
               [OP_SET_PROPERTY]: (inputs) => { let o = inputs[0]; let p = inputs[1]; let v = inputs[2]; o[p] = v; },
+              [OP_UPDATE_PROPERTY]: (inputs) => {
+                let [o, p, v, op] = inputs;
+                switch (op) {
+                  case '+': o[p] += v; break;
+                  case '-': o[p] -= v; break;
+                  case '*': o[p] *= v; break;
+                  case '/': o[p] /= v; break;
+                  case '%': o[p] %= v; break;
+                  case '&': o[p] &= v; break;
+                  case '|': o[p] |= v; break;
+                  case '&&': o[p] &&= v; break;
+                  case '||': o[p] ||= v; break;
+                  case '^': o[p] ^= v; break;
+                  case '<<': o[p] <<= v; break;
+                  case '>>': o[p] >>= v; break;
+                  case '**': o[p] **= v; break;
+                  case '>>>': o[p] >>>= v; break;
+                  case '??': o[p] ??= v; break;
+                  default: throw "Unknown binary operator " + op;
+                }
+              },
               [OP_DELETE_PROPERTY]: (inputs) => { let o = inputs[0]; let p = inputs[1]; return delete o[p]; },
               [OP_ADD]: (inputs) => inputs[0] + inputs[1],
               [OP_SUB]: (inputs) => inputs[0] - inputs[1],

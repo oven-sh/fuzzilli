@@ -58,7 +58,9 @@ struct MinimizationPostProcessor {
                     let args = b.randomArguments(forCalling: instr.input(0))
                     guard args.count > 0 else { break }
                     replacementInstruction = Instruction(
-                        CallFunction(numArguments: args.count, isGuarded: op.isGuarded),
+                        CallFunction(
+                            numArguments: args.count, isGuarded: op.isGuarded,
+                            isCallOptional: op.isCallOptional),
                         output: instr.output, inputs: [instr.input(0)] + args)
                 case .callMethod(let op):
                     // (Sometimes) insert random arguments, but only if there are none currently.
@@ -71,7 +73,8 @@ struct MinimizationPostProcessor {
                     replacementInstruction = Instruction(
                         CallMethod(
                             methodName: op.methodName, numArguments: args.count,
-                            isGuarded: op.isGuarded), output: instr.output,
+                            isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                            isCallOptional: op.isCallOptional), output: instr.output,
                         inputs: [instr.input(0)] + args)
                 case .construct(let op):
                     // (Sometimes) insert random arguments, but only if there are none currently.
@@ -83,40 +86,27 @@ struct MinimizationPostProcessor {
                     replacementInstruction = Instruction(
                         Construct(numArguments: args.count, isGuarded: op.isGuarded),
                         output: instr.output, inputs: [instr.input(0)] + args)
-                case .createArray(let op):
+                case .createArray:
                     // Add initial values, but only if there are none currently.
                     if instr.hasAnyVariadicInputs || !b.hasVisibleJsVariables { break }
 
-                    let elementType = op.elementGroupName.map {
-                        b.fuzzer.environment.type(ofGroup: $0)
+                    let initialValues = (0..<Int.random(in: 1...5)).map { _ in
+                        b.randomJsVariable()
                     }
-                    let initialValues = [Variable](
-                        repeating: elementType.map { b.randomVariable(forUseAs: $0) }
-                            ?? b.randomJsVariable(),
-                        count: Int.random(in: 1...5))
                     replacementInstruction = Instruction(
-                        CreateArray(
-                            numInitialValues: initialValues.count,
-                            elementGroupName: op.elementGroupName), output: instr.output,
+                        CreateArray(numInitialValues: initialValues.count),
+                        output: instr.output,
                         inputs: initialValues)
-                case .createMap(let op):
+                case .createMap:
                     // Add initial values, but only if there are none currently.
                     if instr.hasAnyVariadicInputs || !b.hasVisibleJsVariables { break }
 
-                    var elementType = ILType.jsArray
-                    if let keyGroup = op.keyGroupName, let valueGroup = op.valueGroupName {
-                        let keyType = b.fuzzer.environment.type(ofGroup: keyGroup)
-                        let valueType = b.fuzzer.environment.type(ofGroup: valueGroup)
-                        elementType = ILType.createJsArrayType(ofElementType: keyType | valueType)
+                    // Prefer arrays, as map elements should be 2-element arrays.
+                    let initialValues = (0..<Int.random(in: 1...5)).map { _ in
+                        b.randomVariable(forUseAs: .jsArray)
                     }
-                    let initialValues = [Variable](
-                        repeating: b.randomVariable(forUseAs: elementType),
-                        count: Int.random(in: 1...5))
                     replacementInstruction = Instruction(
-                        CreateMap(
-                            numInitialValues: initialValues.count,
-                            keyGroupName: op.keyGroupName,
-                            valueGroupName: op.valueGroupName),
+                        CreateMap(numInitialValues: initialValues.count),
                         output: instr.output,
                         inputs: initialValues)
                 default:

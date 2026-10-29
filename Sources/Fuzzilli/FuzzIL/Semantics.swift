@@ -46,7 +46,8 @@ extension Operation {
     func reassigns(input inputIdx: Int) -> Bool {
         switch opcode {
         case .reassign,
-            .update:
+            .update,
+            .wasmReassign:
             return inputIdx == 0
         case .unaryOperation(let op):
             return op.op.reassignsInput
@@ -162,6 +163,10 @@ extension Operation {
             return endOp is EndClassStaticInitializer
         case .beginClassPrivateMethod:
             return endOp is EndClassPrivateMethod
+        case .beginClassPrivateGetter:
+            return endOp is EndClassPrivateGetter
+        case .beginClassPrivateSetter:
+            return endOp is EndClassPrivateSetter
         case .beginPlainFunction:
             return endOp is EndPlainFunction
         case .beginWorkerFunction:

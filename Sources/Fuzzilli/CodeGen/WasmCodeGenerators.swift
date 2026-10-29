@@ -18,6 +18,84 @@
 // These Generators all relate to Wasm and either use the WebAssembly object or
 // insert one or more instructions into a wasm module.
 //
+private func generateBranchOnCast(
+    b: ProgramBuilder,
+    sourceVar: Variable,
+    targetRefType: ILType,
+    typeDef: Variable?,
+    to label: Variable,
+    args: [Variable],
+    branchOnCastFail: Bool
+) {
+    let function = b.currentWasmModule.currentWasmFunction
+
+    let unlinkedTargetRefType: ILType
+    if typeDef != nil && !targetRefType.wasmReferenceType!.isAbstract() {
+        let isExact = targetRefType.wasmReferenceType!.kind.isExact
+        unlinkedTargetRefType = ILType.wasmRef(
+            .Index(isExact: isExact),
+            nullability: targetRefType.wasmReferenceType!.nullability)
+    } else {
+        unlinkedTargetRefType = targetRefType
+    }
+
+    if branchOnCastFail {
+        function.wasmBranchOnCastFail(
+            sourceVar, targetRefType: unlinkedTargetRefType, to: label, args: args, typeDef: typeDef
+        )
+    } else {
+        function.wasmBranchOnCast(
+            sourceVar, targetRefType: unlinkedTargetRefType, to: label, args: args, typeDef: typeDef
+        )
+    }
+}
+
+public func wasmCodeGenerators(enableCustomDescriptors: Bool) -> [CodeGenerator] {
+    return WasmCodeGenerators
+        + [wasmTypeGroupWithAllTypesGenerator(withCustomDescriptors: enableCustomDescriptors)]
+        + (enableCustomDescriptors ? wasmCustomDescriptorsCodeGenerators : [])
+}
+
+private func wasmTypeGroupWithAllTypesGenerator(withCustomDescriptors: Bool) -> CodeGenerator {
+    let typeDefinitionGenerators: [GeneratorStub] =
+        [
+            wasmArrayTypeGenerator(),
+            wasmStructTypeGenerator(),
+            wasmSignatureTypeGenerator(),
+        ] + (withCustomDescriptors ? [wasmCustomDescriptorsStructTypesGenerator()] : [])
+
+    let producedTypes: [GeneratorStub.Constraint] =
+        [
+            .init(.wasmTypeDef(), .IsWasmArray),
+            .init(.wasmTypeDef(), .IsWasmStruct),
+            .init(.wasmTypeDef(), .IsWasmFunction),
+        ]
+        + (withCustomDescriptors
+            ? [
+                .init(.wasmTypeDef(), .IsWasmStructWithDescriptor),  // The described struct
+                .init(.wasmTypeDef(), .IsWasmStruct),  // The descriptor struct
+            ] : [])
+
+    return CodeGenerator(
+        "WasmTypeGroupWithAllTypesGenerator",
+        [
+            GeneratorStub(
+                "WasmTypeGroupBeginGenerator",
+                provides: [.wasmTypeGroup]
+            ) { b in
+                b.emit(WasmBeginTypeGroup())
+            }
+        ] + typeDefinitionGenerators + [
+            GeneratorStub(
+                "WasmTypeGroupEndGenerator",
+                inContext: .single(.wasmTypeGroup),
+                producesComplex: producedTypes
+            ) { b in
+                b.wasmEndTypeGroup()
+            }
+        ])
+}
+
 public let WasmCodeGenerators: [CodeGenerator] = [
 
     /// Wasm related generators in JavaScript
@@ -92,7 +170,14 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 inContext: .single(.wasm)
             ) { b in
                 let module = b.currentWasmModule
-                b.emit(EndWasmModule())
+                let startFunction = Bool.random() ? nil : b.randomWasmStartFunction()
+
+                if let startFunction {
+                    b.emit(EndWasmModule(hasStartFunction: true), withInputs: [startFunction])
+                } else {
+                    b.emit(EndWasmModule(hasStartFunction: false))
+                }
+
                 module.loadExports()
             },
         ]),
@@ -114,34 +199,9 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             },
         ]),
 
-    CodeGenerator(
-        "WasmTypeGroupWithAllTypesGenerator",
-        [
-            GeneratorStub(
-                "WasmTypeGroupBeginGenerator",
-                provides: [.wasmTypeGroup]
-            ) { b in
-                b.emit(WasmBeginTypeGroup())
-            },
-            wasmArrayTypeGenerator,
-            wasmStructTypeGenerator,
-            wasmSignatureTypeGenerator,
-            GeneratorStub(
-                "WasmTypeGroupEndGenerator",
-                inContext: .single(.wasmTypeGroup),
-                producesComplex: [
-                    .init(.wasmTypeDef(), .IsWasmArray),
-                    .init(.wasmTypeDef(), .IsWasmStruct),
-                    .init(.wasmTypeDef(), .IsWasmFunction),
-                ]
-            ) { b in
-                b.wasmEndTypeGroup()
-            },
-        ]),
-
-    CodeGenerator("WasmArrayTypeGenerator", [wasmArrayTypeGenerator]),
-    CodeGenerator("WasmStructTypeGenerator", [wasmStructTypeGenerator]),
-    CodeGenerator("WasmSignatureTypeGenerator", [wasmSignatureTypeGenerator]),
+    CodeGenerator("WasmArrayTypeGenerator", [wasmArrayTypeGenerator()]),
+    CodeGenerator("WasmStructTypeGenerator", [wasmStructTypeGenerator()]),
+    CodeGenerator("WasmSignatureTypeGenerator", [wasmSignatureTypeGenerator()]),
 
     CodeGenerator(
         "WasmSelfReferenceGenerator", inContext: .single(.wasmTypeGroup),
@@ -184,6 +244,72 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         }
     },
 
+    CodeGenerator(
+        "WasmArrayNewDataGenerator",
+        inContext: .single(.wasmFunction),
+        inputs: .requiredComplex(.init(.wasmTypeDef(), .IsWasmArray), .init(.wasmDataSegment()))
+    ) { b, _, dataSegment in
+        let dataSegmentTypeInfo = b.type(of: dataSegment).wasmDataSegmentType!
+        if dataSegmentTypeInfo.isDropped {
+            return
+        }
+
+        // array.new_data requires an array type with non-reference elements.
+        let maybeArrayType = b.findVariable { v in
+            let typeDesc =
+                b.type(of: v).wasmTypeDefinition?.description as? WasmArrayTypeDescription
+            return typeDesc?.elementType.isWasmReferenceType == false
+        }
+        guard let arrayType = maybeArrayType else { return }
+
+        let typeDesc =
+            b.type(of: arrayType).wasmTypeDefinition!.description as! WasmArrayTypeDescription
+        let elementByteSize = typeDesc.elementType.wasmByteSize!
+        let function = b.currentWasmModule.currentWasmFunction
+
+        let segmentLength = Int64(dataSegmentTypeInfo.segmentLength)
+        let offsetValue = b.randomNonNegativeIndex(upTo: segmentLength)
+        let offset = function.consti32(Int32(offsetValue))
+
+        let maxElements = max(0, (segmentLength - offsetValue) / Int64(elementByteSize))
+        let size = function.consti32(Int32(b.randomSize(upTo: min(maxElements, 0x1000))))
+
+        function.wasmArrayNewData(
+            arrayType: arrayType, dataSegment: dataSegment, offset: offset, size: size)
+    },
+
+    CodeGenerator(
+        "WasmArrayNewElemGenerator",
+        inContext: .single(.wasmFunction),
+        inputs: .requiredComplex(.init(.wasmTypeDef(), .IsWasmArray), .init(.wasmElementSegment()))
+    ) { b, _, elementSegment in
+        let elementSegmentTypeInfo = b.type(of: elementSegment).wasmElementSegmentType!
+        if elementSegmentTypeInfo.isDropped {
+            return
+        }
+
+        // Element segments currently only hold funcrefs, so the array's element type must also be funcref.
+        // TODO(bettscheider): Support non-funcref element segments and arrays in array.new_elem.
+        let maybeArrayType = b.findVariable { v in
+            let typeDesc =
+                b.type(of: v).wasmTypeDefinition?.description as? WasmArrayTypeDescription
+            return typeDesc?.elementType == .wasmFuncRef()
+        }
+        guard let arrayType = maybeArrayType else { return }
+
+        let function = b.currentWasmModule.currentWasmFunction
+
+        let segmentLength = Int64(elementSegmentTypeInfo.segmentLength)
+        let offsetValue = b.randomNonNegativeIndex(upTo: segmentLength)
+        let offset = function.consti32(Int32(offsetValue))
+
+        let maxElements = segmentLength - offsetValue
+        let size = function.consti32(Int32(b.randomSize(upTo: min(maxElements, 0x1000))))
+
+        function.wasmArrayNewElem(
+            arrayType: arrayType, elementSegment: elementSegment, offset: offset, size: size)
+    },
+
     // We use false nullability so we do not invoke null traps.
     // TODO(manoskouk): Express that only array types are .required (same with all relevant array and struct generators below).
     // TODO: make this produce an .wasmi32?
@@ -191,7 +317,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmArrayLengthGenerator", inContext: .single(.wasmFunction),
         inputs: .requiredComplex(.init(.anyNonNullableIndexRef, .IsWasmArray))
     ) { b, array in
-        guard case .Index(let desc) = b.type(of: array).wasmReferenceType!.kind
+        guard case .Index(let desc, _) = b.type(of: array).wasmReferenceType!.kind
         else {
             fatalError("unreachable: array.len input not an Index")
         }
@@ -205,7 +331,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmArrayGetGenerator", inContext: .single(.wasmFunction),
         inputs: .requiredComplex(.init(.anyNonNullableIndexRef, .IsWasmArray))
     ) { b, array in
-        guard case .Index(let desc) = b.type(of: array).wasmReferenceType!.kind
+        guard case .Index(let desc, _) = b.type(of: array).wasmReferenceType!.kind
         else {
             fatalError("unreachable: array.get input not an Index")
         }
@@ -223,7 +349,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmArraySetGenerator", inContext: .single(.wasmFunction),
         inputs: .requiredComplex(.init(.anyNonNullableIndexRef, .IsWasmArray))
     ) { b, array in
-        guard case .Index(let desc) = b.type(of: array).wasmReferenceType!.kind
+        guard case .Index(let desc, _) = b.type(of: array).wasmReferenceType!.kind
         else {
             fatalError("unreachable: array.set input not an Index")
         }
@@ -260,7 +386,17 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             let fieldValue = function.findOrGenerateWasmVar(ofType: fieldType)
             initial_fields.append(fieldValue)
         }
-        function.wasmStructNew(structType: structType, fields: initial_fields)
+
+        if let descriptorDesc = typeDesc.descriptor {
+            let descriptorType = ILType.wasmIndexRef(
+                descriptorDesc, nullability: false, isExact: true)
+            let descriptorVar = function.findOrGenerateWasmVar(ofType: descriptorType)
+
+            function.wasmStructNewDesc(
+                structType: structType, descriptor: descriptorVar, fields: initial_fields)
+        } else {
+            function.wasmStructNew(structType: structType, fields: initial_fields)
+        }
     },
 
     CodeGenerator(
@@ -278,7 +414,16 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         guard typeDesc.isDefaultable() else {
             fatalError("Non-defaultable type in Wasm struct fields \(typeDesc)")
         }
-        function.wasmStructNewDefault(structType: structType)
+
+        if let descriptorDesc = typeDesc.descriptor {
+            let descriptorType = ILType.wasmIndexRef(
+                descriptorDesc, nullability: false, isExact: true)
+            let descriptorVar = function.findOrGenerateWasmVar(ofType: descriptorType)
+
+            function.wasmStructNewDefaultDesc(structType: structType, descriptor: descriptorVar)
+        } else {
+            function.wasmStructNewDefault(structType: structType)
+        }
     },
 
     CodeGenerator(
@@ -286,27 +431,26 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         inContext: .single(.wasmFunction),
         inputs: .requiredComplex(.init(.anyNonNullableIndexRef, .IsWasmStruct))
     ) { b, theStruct in
-        guard case .Index(let desc) = b.type(of: theStruct).wasmReferenceType!.kind
+        guard case .Index(let desc, _) = b.type(of: theStruct).wasmReferenceType!.kind
         else {
             fatalError("unreachable: struct.get input not an Index")
         }
         guard let structType = desc.get()! as? WasmStructTypeDescription else {
             fatalError("input is not a struct type but \(b.type(of: theStruct))")
         }
-        guard let fieldIndex = (0..<structType.fields.count).randomElement()
-        else { return }
         let function = b.currentWasmModule.currentWasmFunction
-        function.wasmStructGet(
-            theStruct: theStruct, fieldIndex: fieldIndex, isSigned: Bool.random())
+
+        if let fieldIndex = (0..<structType.fields.count).randomElement() {
+            function.wasmStructGet(
+                theStruct: theStruct, fieldIndex: fieldIndex, isSigned: Bool.random())
+        }
     },
 
     CodeGenerator(
         "WasmStructSetGenerator", inContext: .single(.wasmFunction),
         inputs: .requiredComplex(.init(.anyNonNullableIndexRef, .IsWasmStruct)),
     ) { b, theStruct in
-        guard
-            case .Index(let desc) = b.type(of: theStruct).wasmReferenceType!
-                .kind
+        guard case .Index(let desc, _) = b.type(of: theStruct).wasmReferenceType!.kind
         else {
             fatalError("unreachable: struct.set input not an Index")
         }
@@ -426,7 +570,8 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             default:
                 fatalError("The type \(abstractType) shouldn't have a definition")
             }
-        let refType = ILType.wasmRef(.Index(), nullability: Bool.random())
+        let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
+        let refType = ILType.wasmRef(.Index(isExact: isExact), nullability: Bool.random())
         function.wasmRefTest(variable, refType: refType, typeDef: typeDef)
     },
 
@@ -440,7 +585,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             switch b.type(of: ref).wasmReferenceType!.kind {
             case .Abstract(let heapTypeInfo):
                 heapTypeInfo.heapType
-            case .Index(let desc):
+            case .Index(let desc, _):
                 desc.get()!.abstractHeapSupertype!.heapType
             }
         let sameHierarchy = WasmAbstractHeapType.allCases.filter {
@@ -477,7 +622,9 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             default:
                 fatalError("The type \(abstractType) shouldn't have a definition")
             }
-        let refType = ILType.wasmRef(.Index(), nullability: Bool.random())
+
+        let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
+        let refType = ILType.wasmRef(.Index(isExact: isExact), nullability: probability(0.5))
         function.wasmRefCast(variable, refType: refType, typeDef: typeDef)
     },
 
@@ -491,7 +638,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             switch b.type(of: ref).wasmReferenceType!.kind {
             case .Abstract(let heapTypeInfo):
                 heapTypeInfo.heapType
-            case .Index(let desc):
+            case .Index(let desc, _):
                 desc.get()!.abstractHeapSupertype!.heapType
             }
         let incompatible: [WasmAbstractHeapType] = [.WasmStruct, .WasmArray, .WasmI31]
@@ -598,7 +745,9 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             minPages: minPages, maxPages: maxPages, isShared: isShared, isMemory64: isMemory64)
     },
 
-    CodeGenerator("WasmDefineDataSegmentGenerator", inContext: .single(.wasm)) { b in
+    CodeGenerator(
+        "WasmDefineDataSegmentGenerator", inContext: .single(.wasm), produces: [.wasmDataSegment()]
+    ) { b in
         let dataSegment = b.randomBytes()
         b.currentWasmModule.addDataSegment(segment: dataSegment)
     },
@@ -752,7 +901,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             return type.Is(.object(ofGroup: "WasmMemory"))
                 && type.wasmMemoryType!.isMemory64 == srcMemoryTypeInfo.isMemory64
         }!
-        let dstMemoryTypeInfo = b.type(of: srcMemory).wasmMemoryType!
+        let dstMemoryTypeInfo = b.type(of: dstMemory).wasmMemoryType!
         let memArg = { v in function.memoryArgument(v, dstMemoryTypeInfo) }
 
         let srcMemSize = srcMemoryTypeInfo.limits.min * WasmConstants.specWasmMemPageSize
@@ -785,12 +934,12 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         let offsetValue = b.randomNonNegativeIndex(upTo: memSize)
         let offset = function.memoryArgument(offsetValue, memoryTypeInfo)
         let byteToSet = function.consti32(Int32.random(in: 0...255))
-        let nrOfBytesToUpdate = function.memoryArgument(
+        let byteCount = function.memoryArgument(
             Int64.random(in: 0...(memSize - offsetValue)) + 1, memoryTypeInfo)
 
         function.wasmMemoryFill(
             memory: memory, offset: offset, byteToSet: byteToSet,
-            nrOfBytesToUpdate: nrOfBytesToUpdate)
+            byteCount: byteCount)
     },
 
     CodeGenerator(
@@ -814,14 +963,14 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             upTo: Int64(dataSegmentTypeInfo.segmentLength))
         let dataSegmentOffset = function.consti32(Int32(dataSegmentOffsetValue))
 
-        let maxNrOfBytesToUpdate = min(
+        let maxByteCount = min(
             memSize - memoryOffsetValue,
             Int64(dataSegmentTypeInfo.segmentLength) - dataSegmentOffsetValue)
-        let nrOfBytesToUpdate = function.consti32(Int32(b.randomSize(upTo: maxNrOfBytesToUpdate)))
+        let byteCount = function.consti32(Int32(b.randomSize(upTo: maxByteCount)))
 
         function.wasmMemoryInit(
             dataSegment: dataSegment, memory: memory, memoryOffset: memoryOffset,
-            dataSegmentOffset: dataSegmentOffset, nrOfBytesToUpdate: nrOfBytesToUpdate)
+            dataSegmentOffset: dataSegmentOffset, byteCount: byteCount)
     },
 
     CodeGenerator(
@@ -841,6 +990,17 @@ public let WasmCodeGenerators: [CodeGenerator] = [
 
         let wasmGlobal: WasmGlobal = b.randomWasmGlobal(forContext: .wasm)
         module.addGlobal(wasmGlobal: wasmGlobal, isMutable: probability(0.5))
+    },
+
+    CodeGenerator(
+        "WasmDefineIndexTypedGlobalGenerator", inContext: .single(.wasm),
+        inputs: .required(.wasmTypeDef()),
+        produces: [.object(ofGroup: "WasmGlobal")]
+    ) { b, type in
+        let module = b.currentWasmModule
+        let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
+        let wasmGlobal: WasmGlobal = isExact ? .indexExactRef : .indexRef
+        module.addGlobal(wasmGlobal: wasmGlobal, isMutable: probability(0.5), typeDef: type)
     },
 
     CodeGenerator(
@@ -877,8 +1037,9 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                     let actualEntryType = b.type(of: value)
                     let signature: Variable
                     if actualEntryType.Is(.wasmFunctionDef()) {
-                        signature = b.randomVariable(
-                            ofType: actualEntryType.wasmFunctionDef!.signatureType!)!
+                        // Use the function's signature, not a sub type's: call_indirect would trap.
+                        signature = b.getWasmTypeDef(
+                            for: actualEntryType.wasmFunctionDef!.signatureType!)
                     } else if let cachedSignature = cachedSignatures[
                         actualEntryType.signature ?? Signature.forUnknownFunction]
                     {
@@ -907,15 +1068,13 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             definedSignatures: inputs, isTable64: probability(0.5))
     },
 
-    CodeGenerator("WasmDefineElementSegmentGenerator", inContext: .single(.wasm)) { b in
-        let expectedEntryType = b.currentWasmModule.getEntryTypeForTable(
-            elementType: .wasmFuncRef())
-        if b.randomVariable(ofType: expectedEntryType) == nil {
-            return
-        }
-
-        var elements: [Variable] = (0...Int.random(in: 0...8)).map { _ in
-            b.randomVariable(ofType: expectedEntryType)!
+    CodeGenerator(
+        "WasmDefineElementSegmentGenerator", inContext: .single(.wasm),
+        inputs: .required(.wasmFunctionDef()),
+        produces: [.wasmElementSegment()]
+    ) { b, _ in
+        let elements: [Variable] = (0...Int.random(in: 0...8)).map { _ in
+            b.findVariable { b.type(of: $0).Is(.wasmFunctionDef()) }!
         }
         b.currentWasmModule.addElementSegment(elements: elements)
     },
@@ -984,6 +1143,109 @@ public let WasmCodeGenerators: [CodeGenerator] = [
     },
 
     CodeGenerator(
+        "WasmTableInitGenerator", inContext: .single(.wasmFunction),
+        inputs: .required(.object(ofGroup: "WasmTable"), .wasmElementSegment())
+    ) { b, _, elementSegment in
+        let elementSegmentTypeInfo = b.type(of: elementSegment).wasmElementSegmentType!
+        if elementSegmentTypeInfo.isDropped {
+            return
+        }
+        // Element segments currently only hold funcrefs, so the destination table must also be a funcref table.
+        // TODO(bettscheider): Support non-funcref element segments and tables in table.init.
+        let maybeTable = b.findVariable { v in
+            let type = b.type(of: v)
+            return type.Is(.object(ofGroup: "WasmTable"))
+                && type.wasmTableType!.elementType == .wasmFuncRef()
+        }
+        guard let table = maybeTable else { return }
+
+        let function = b.currentWasmModule.currentWasmFunction
+
+        let tableTypeInfo = b.type(of: table).wasmTableType!
+        let tableSize = Int64(tableTypeInfo.limits.min)
+        let tableOffsetValue = b.randomNonNegativeIndex(upTo: tableSize)
+        let tableOffset =
+            tableTypeInfo.isTable64
+            ? function.consti64(tableOffsetValue)
+            : function.consti32(Int32(tableOffsetValue))
+
+        let elementSegmentOffsetValue = b.randomNonNegativeIndex(
+            upTo: Int64(elementSegmentTypeInfo.segmentLength))
+        let elementSegmentOffset = function.consti32(Int32(elementSegmentOffsetValue))
+
+        let maxElementCount = min(
+            tableSize - tableOffsetValue,
+            Int64(elementSegmentTypeInfo.segmentLength) - elementSegmentOffsetValue)
+        let elementCount = function.consti32(
+            Int32(b.randomSize(upTo: maxElementCount)))
+
+        function.wasmTableInit(
+            elementSegment: elementSegment, table: table, tableOffset: tableOffset,
+            elementSegmentOffset: elementSegmentOffset, elementCount: elementCount)
+    },
+
+    CodeGenerator(
+        "WasmTableCopyGenerator", inContext: .single(.wasmFunction),
+        inputs: .required(.object(ofGroup: "WasmTable"))
+    ) { b, srcTable in
+        let function = b.currentWasmModule.currentWasmFunction
+        let srcTableTypeInfo = b.type(of: srcTable).wasmTableType!
+        let dstTable = b.findVariable { v in
+            let type = b.type(of: v)
+            return type.Is(.object(ofGroup: "WasmTable"))
+                && type.wasmTableType!.isTable64 == srcTableTypeInfo.isTable64
+                && srcTableTypeInfo.elementType.Is(type.wasmTableType!.elementType)
+        }!
+        let dstTableTypeInfo = b.type(of: dstTable).wasmTableType!
+        let tableArg = { (v: Int64) in
+            dstTableTypeInfo.isTable64
+                ? function.consti64(v)
+                : function.consti32(Int32(v))
+        }
+
+        let srcTableSize = Int64(srcTableTypeInfo.limits.min)
+        let dstTableSize = Int64(dstTableTypeInfo.limits.min)
+        let srcOffsetValue = b.randomNonNegativeIndex(upTo: srcTableSize)
+        let srcOffset = tableArg(srcOffsetValue)
+        let dstOffsetValue = b.randomNonNegativeIndex(upTo: dstTableSize)
+        let dstOffset = tableArg(dstOffsetValue)
+
+        let maxCopySize = min(srcTableSize - srcOffsetValue, dstTableSize - dstOffsetValue)
+        let copySizeValue = b.randomSize(upTo: maxCopySize)
+        let copySize = tableArg(copySizeValue)
+
+        function.wasmTableCopy(
+            dstTable: dstTable, srcTable: srcTable, dstOffset: dstOffset, srcOffset: srcOffset,
+            count: copySize)
+    },
+
+    CodeGenerator(
+        "WasmTableFillGenerator", inContext: .single(.wasmFunction),
+        inputs: .required(.object(ofGroup: "WasmTable"))
+    ) { b, table in
+        let function = b.currentWasmModule.currentWasmFunction
+        let tableTypeInfo = b.type(of: table).wasmTableType!
+        let value = function.findOrGenerateWasmVar(ofType: tableTypeInfo.elementType)
+
+        let tableArg = { (v: Int64) in
+            tableTypeInfo.isTable64
+                ? function.consti64(v)
+                : function.consti32(Int32(v))
+        }
+
+        let tableSize = Int64(tableTypeInfo.limits.min)
+        let offsetValue = b.randomNonNegativeIndex(upTo: tableSize)
+        let offset = tableArg(offsetValue)
+
+        let elementCountValue = b.randomSize(upTo: tableSize - offsetValue)
+        let elementCount = tableArg(elementCountValue)
+
+        function.wasmTableFill(
+            table: table, offset: offset, value: value,
+            elementCount: elementCount)
+    },
+
+    CodeGenerator(
         "WasmCallIndirectGenerator", inContext: .single(.wasmFunction),
         inputs: .required(.object(ofGroup: "WasmTable"))
     ) { b, table in
@@ -998,10 +1260,17 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             ? function.consti64(Int64(tableIndex))
             : function.consti32(Int32(tableIndex))
         let signatureDefType = tableType.knownEntrySignatures[tableIndex]
-        let signatureDef = b.getWasmTypeDef(for: signatureDefType)
-        let wasmSignature = signatureDefType.wasmFunctionSignatureDefSignature
+        var signatureDef = b.getWasmTypeDef(for: signatureDefType)
+        // The signature check of call_indirect is a sub type check, so we can also call the
+        // function through a super type of its signature.
+        if probability(0.5), let superDef = b.randomWasmSupertypeDef(of: signatureDef) {
+            signatureDef = superDef
+        }
+        let wasmSignature = b.type(of: signatureDef).wasmFunctionSignatureDefSignature
 
-        guard let functionArgs = b.randomWasmArguments(forWasmSignature: wasmSignature)
+        guard
+            let functionArgs = b.randomWasmArguments(
+                forWasmSignature: wasmSignature, generate: true)
         else { return }
 
         function.wasmCallIndirect(
@@ -1030,7 +1299,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             b.findVariable {
                 let varType = b.type(of: $0)
                 return varType.Is(.wasmFuncRef())
-                    && varType.Is(.wasmRef(.Index(), nullability: false))
+                    && varType.Is(.anyNonNullableIndexRef)
             } ?? function.wasmRefFunc(functionVar)
 
         let signatureDef = b.getWasmTypeDef(for: b.type(of: functionRef))
@@ -1048,12 +1317,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 (b.findVariable { v in
                     let type = b.type(of: v)
                     return type.Is(.wasmFunctionDef())
-                        && type.wasmFunctionDefSignature!.outputTypes.count
-                            == function.signature.outputTypes.count
-                        && zip(
-                            function.signature.outputTypes,
-                            type.wasmFunctionDefSignature!.outputTypes
-                        ).allSatisfy { $0.subsumes($1) }
+                        && function.canReturnCall(type.wasmFunctionDefSignature!)
                 })
         else { return }
 
@@ -1078,12 +1342,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 (b.findVariable { v in
                     let type = b.type(of: v)
                     return type.Is(.wasmFunctionDef())
-                        && function.signature.outputTypes.count
-                            == type.wasmFunctionDefSignature!.outputTypes.count
-                        && zip(
-                            function.signature.outputTypes,
-                            type.wasmFunctionDefSignature!.outputTypes
-                        ).allSatisfy { $0.subsumes($1) }
+                        && function.canReturnCall(type.wasmFunctionDefSignature!)
                 })
         else { return }
         let signature = b.type(of: functionVar).wasmFunctionDefSignature!
@@ -1102,18 +1361,25 @@ public let WasmCodeGenerators: [CodeGenerator] = [
 
         let matchingIndices = tableType.knownEntrySignatures.enumerated().compactMap {
             (index, signatureDef) -> Int? in
-            let wasmSignature = signatureDef.wasmFunctionSignatureDefSignature
-            return
-                (function.signature.outputTypes.count == wasmSignature.outputTypes.count
-                && zip(function.signature.outputTypes, wasmSignature.outputTypes).allSatisfy {
-                    $0.subsumes($1)
-                }) ? index : nil
+            function.canReturnCall(signatureDef.wasmFunctionSignatureDefSignature) ? index : nil
         }
 
         guard let tableIndex = matchingIndices.randomElement() else { return }
         let signatureDefType = tableType.knownEntrySignatures[tableIndex]
-        let signatureDef = b.getWasmTypeDef(for: signatureDefType)
-        let wasmSignature = signatureDefType.wasmFunctionSignatureDefSignature
+        var signatureDef = b.getWasmTypeDef(for: signatureDefType)
+        // Similar to the WasmCallIndirectGenerator, sometimes call the function through a super
+        // type of its signature. The results of the super type signature need to be compatible
+        // with the results of the current function.
+        if probability(0.5),
+            let superDef = b.randomWasmSupertypeDef(
+                of: signatureDef,
+                satisfying: {
+                    function.canReturnCall(b.type(of: $0).wasmFunctionSignatureDefSignature)
+                })
+        {
+            signatureDef = superDef
+        }
+        let wasmSignature = b.type(of: signatureDef).wasmFunctionSignatureDefSignature
 
         let indexVar =
             tableType.isTable64
@@ -1121,7 +1387,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             : function.consti32(Int32(tableIndex))
         guard
             let functionArgs = b.randomWasmArguments(
-                forWasmSignature: wasmSignature)
+                forWasmSignature: wasmSignature, generate: true)
         else { return }
         function.wasmReturnCallIndirect(
             signatureDef: signatureDef, table: table,
@@ -1526,11 +1792,20 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 provides: [.wasmFunction]
             ) { b in
                 let module = b.currentWasmModule
-                // TODO(mliedtke): If we want to allow non-nullable types, we'll need to ensure that
-                // we are able to also generate them in all cases and contexts.
-                let (signature, indexTypes) = b.randomWasmGcSignature(allowNonNullable: false)
-                let signatureDef = b.wasmDefineAdHocSignatureType(
-                    signature: signature, indexTypes: indexTypes)
+                let signatureDef: Variable
+                if probability(0.9), let typeGroupSignature = b.randomWasmFunctionSignatureTypeDef()
+                {
+                    // Unlike ad hoc signatures, signature types defined in type groups can have
+                    // super and sub types.
+                    signatureDef = typeGroupSignature
+                } else {
+                    // TODO(mliedtke): If we want to allow non-nullable types, we'll need to ensure
+                    // that we are able to also generate them in all cases and contexts.
+                    let (signature, indexTypes) = b.randomWasmGcSignature(allowNonNullable: false)
+                    signatureDef = b.wasmDefineAdHocSignatureType(
+                        signature: signature, indexTypes: indexTypes)
+                }
+                let signature = b.type(of: signatureDef).wasmFunctionSignatureDefSignature
                 b.emit(
                     BeginWasmFunction(parameterCount: signature.parameterTypes.count),
                     withInputs: [signatureDef])
@@ -1567,6 +1842,120 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 function: callable, withArgs: arguments,
                 withWasmSignature: wasmSignature)
         }
+    },
+
+    CodeGenerator(
+        "WasmJSStringConstantGenerator", inContext: .single(.wasmFunction),
+        produces: [.wasmRefJSString()]
+    ) { b in
+        let module = b.currentWasmModule
+        let function = module.currentWasmFunction
+
+        function.wasmStringConstant(b.randomString())
+    },
+
+    CodeGenerator(
+        "WasmJSStringBuiltinGenerator", inContext: .single(.wasmFunction)
+    ) { b in
+        let module = b.currentWasmModule
+        let function = module.currentWasmFunction
+
+        withEqualProbability(
+            {
+                let str = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                function.wasmJSStringLength(str)
+            },
+            {
+                let str1 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let str2 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                function.wasmJSStringConcat(str1, str2)
+            },
+            {
+                let str = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let start = function.findOrGenerateWasmVar(ofType: .wasmi32)
+                let end = function.findOrGenerateWasmVar(ofType: .wasmi32)
+                function.wasmJSStringSubstring(str, start, end)
+            },
+            {
+                let str1 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let str2 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                function.wasmJSStringEquals(str1, str2)
+            },
+            {
+                let str1 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let str2 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                function.wasmJSStringCompare(str1, str2)
+            },
+            {
+                let externRef = function.findOrGenerateWasmVar(ofType: .wasmRefExtern())
+                function.wasmJSStringCast(externRef)
+            },
+            {
+                let externRef = function.findOrGenerateWasmVar(ofType: .wasmRefExtern())
+                function.wasmJSStringTest(externRef)
+            },
+            {
+                let code = function.consti32(Int32(truncatingIfNeeded: Int.random(in: 0...0xFFFF)))
+                function.wasmJSStringFromCharCode(code)
+            },
+            {
+                let codePoint = function.consti32(
+                    Int32(truncatingIfNeeded: Int.random(in: 0...0x10FFFF)))
+                function.wasmJSStringFromCodePoint(codePoint)
+            },
+            {
+                let str = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let index = function.findOrGenerateWasmVar(ofType: .wasmi32)
+                function.wasmJSStringCharCodeAt(str, index)
+            },
+            {
+                let str = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let index = function.findOrGenerateWasmVar(ofType: .wasmi32)
+                function.wasmJSStringCodePointAt(str, index)
+            })
+    },
+
+    CodeGenerator(
+        "WasmPackedI16ArrayTypeDefGenerator",
+        producesComplex: [.init(.wasmTypeDef(), .IsWasmPackedI16Array)]
+    ) { b in
+        b.wasmDefineTypeGroup {
+            [b.wasmDefineArrayType(elementType: .wasmPackedI16, mutability: true, isFinal: true)]
+        }
+    },
+
+    CodeGenerator(
+        "WasmJSStringFromCharCodeArrayGenerator", inContext: .single(.wasmFunction),
+        inputs: .requiredComplex(.init(.wasmTypeDef(), .IsWasmPackedI16Array))
+    ) { b, arrayTypeDef in
+        let desc =
+            b.type(of: arrayTypeDef).wasmTypeDefinition!.description as! WasmArrayTypeDescription
+
+        let module = b.currentWasmModule
+        let function = module.currentWasmFunction
+
+        let arrayType = ILType.wasmIndexRef(desc, nullability: true)
+        let array = function.findOrGenerateWasmVar(ofType: arrayType)
+        let startVar = function.findOrGenerateWasmVar(ofType: .wasmi32)
+        let endVar = function.findOrGenerateWasmVar(ofType: .wasmi32)
+        function.wasmJSStringFromCharCodeArray(array, startVar, endVar)
+    },
+
+    CodeGenerator(
+        "WasmJSStringIntoCharCodeArrayGenerator", inContext: .single(.wasmFunction),
+        inputs: .requiredComplex(.init(.wasmTypeDef(), .IsWasmPackedI16Array))
+    ) { b, arrayTypeDef in
+        let desc =
+            b.type(of: arrayTypeDef).wasmTypeDefinition!.description as! WasmArrayTypeDescription
+
+        let module = b.currentWasmModule
+        let function = module.currentWasmFunction
+
+        let arrayType = ILType.wasmIndexRef(desc, nullability: true)
+        let str = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+        let array = function.findOrGenerateWasmVar(ofType: arrayType)
+        let start = function.findOrGenerateWasmVar(ofType: .wasmi32)
+        function.wasmJSStringIntoCharCodeArray(str, array, start)
     },
 
     // We cannot store to funcRefs or externRefs if they are not in a slot.
@@ -1618,10 +2007,12 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 let parameters = args.map(b.type)
 
                 let outputTypes = b.randomWasmBlockOutputTypes(upTo: 5)
-                let signature = b.wasmDefineAdHocSignatureType(signature: parameters => outputTypes)
-                b.runtimeData.push("blockSignature", signature)
+                let signatureDef = b.wasmDefineAdHocSignatureType(
+                    signature: parameters => outputTypes)
+                b.runtimeData.push("blockSignature", signatureDef)
                 b.emit(
-                    WasmBeginBlock(parameterCount: parameters.count), withInputs: [signature] + args
+                    WasmBeginBlock(parameterCount: parameters.count),
+                    withInputs: [signatureDef] + args
                 )
             },
             GeneratorStub("WasmEndBlockGenerator", inContext: .single(.wasmFunction)) { b in
@@ -1681,16 +2072,16 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 let randomArgTypes = randomArgs.map { b.type(of: $0) }
                 let args = [function.consti32(0)] + randomArgs
                 let parameters = args.map(b.type)
-                // TODO(mliedtke): Also allow index types in the output types.
                 let outputTypes = b.randomWasmBlockOutputTypes(upTo: 5)
-                let signature = b.wasmDefineAdHocSignatureType(signature: parameters => outputTypes)
+                let signatureDef = b.wasmDefineAdHocSignatureType(
+                    signature: parameters => outputTypes)
                 let loopBegin = b.emit(
                     WasmBeginLoop(parameterCount: parameters.count),
-                    withInputs: [signature] + args)
+                    withInputs: [signatureDef] + args)
                 let loopCounter = loopBegin.innerOutput(1)
                 assert(b.type(of: loopCounter).Is(.wasmi32))
                 b.runtimeData.push("loopCounter", loopCounter)
-                b.runtimeData.push("loopSignature", signature)
+                b.runtimeData.push("loopSignature", signatureDef)
                 b.runtimeData.push("loopLabel", loopBegin.innerOutput(0))
             },
             GeneratorStub(
@@ -1813,13 +2204,14 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 let args = b.randomWasmBlockArguments(upTo: 5)
                 let parameters = args.map(b.type)
                 let outputTypes = b.randomWasmBlockOutputTypes(upTo: 5)
-                let signature = b.wasmDefineAdHocSignatureType(signature: parameters => outputTypes)
-                b.runtimeData.push("ifSignature", signature)
+                let signatureDef = b.wasmDefineAdHocSignatureType(
+                    signature: parameters => outputTypes)
+                b.runtimeData.push("ifSignature", signatureDef)
                 b.emit(
                     WasmBeginIf(
                         parameterCount: parameters.count,
                         hint: b.randomWasmBranchHint()),
-                    withInputs: [signature] + args + [condition])
+                    withInputs: [signatureDef] + args + [condition])
             },
             GeneratorStub(
                 "WasmBeginElseGenerator",
@@ -2018,7 +2410,6 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             }
         }
     },
-
     CodeGenerator(
         "WasmBranchOnCastGenerator", inContext: .single(.wasmFunction)
     ) { b in
@@ -2036,37 +2427,29 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             let sourceType = lastParamType.wasmReferenceType!.kind.topType()
             let v = function.findOrGenerateWasmVar(ofType: sourceType)
             let args = labelType.parameters.dropLast().map(function.findOrGenerateWasmVar)
-            let isIndexType = !lastParamType.wasmReferenceType!.isAbstract()
-            if isIndexType {
-                let typeDef = b.getWasmTypeDef(for: lastParamType)
-                let unlinkedLastParamType = ILType.wasmRef(
-                    .Index(), nullability: lastParamType.wasmReferenceType!.nullability)
-                function.wasmBranchOnCast(
-                    v, targetRefType: unlinkedLastParamType, to: label, args: args, typeDef: typeDef
-                )
-            } else {
-                function.wasmBranchOnCast(v, targetRefType: lastParamType, to: label, args: args)
-            }
+            let typeDef =
+                !lastParamType.wasmReferenceType!.isAbstract()
+                ? b.getWasmTypeDef(for: lastParamType) : nil
+
+            generateBranchOnCast(
+                b: b, sourceVar: v, targetRefType: lastParamType, typeDef: typeDef,
+                to: label, args: args, branchOnCastFail: false)
         } else {
             let topType = ILType.wasmRefHierarchyTopTypes.randomElement()!
-            let (targetRefType, typeDef) = function.randomWasmReferenceType(
+            let (targetRefType, typeDef) = b.randomWasmReferenceType(
                 withAbstractSuperType: topType)
-            var blockOutputTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [targetRefType]
-            let signatureDef = b.wasmDefineAdHocSignatureType(
-                signature: [] => blockOutputTypes,
-                indexTypes: typeDef != nil ? [typeDef!] : nil)
 
-            let signature = b.type(of: signatureDef).wasmFunctionSignatureDefSignature
+            let linkedTargetRefType = b.wasmLinkIndexTypes(
+                [targetRefType], with: typeDef != nil ? [typeDef!] : [])[0]
+            let allOutputTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [linkedTargetRefType]
 
-            function.wasmBuildBlockWithResults(with: signatureDef, args: []) {
+            function.wasmBuildBlockWithResults(with: [] => allOutputTypes, args: []) {
                 blockLabel, _ in
                 let sourceVar = function.findOrGenerateWasmVar(ofType: topType)
-                let args = signature.outputTypes.map(function.findOrGenerateWasmVar)
-
-                function.wasmBranchOnCast(
-                    sourceVar, targetRefType: targetRefType, to: blockLabel, args: args.dropLast(),
-                    typeDef: typeDef)
-
+                let args = allOutputTypes.map(function.findOrGenerateWasmVar)
+                generateBranchOnCast(
+                    b: b, sourceVar: sourceVar, targetRefType: targetRefType, typeDef: typeDef,
+                    to: blockLabel, args: args.dropLast(), branchOnCastFail: false)
                 return args
             }
         }
@@ -2089,27 +2472,27 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             let lastParamType = labelType.parameters.last!
 
             let sourceVar = function.findOrGenerateWasmVar(ofType: lastParamType)
-            let (targetRefType, typeDef) = function.randomWasmReferenceType(
+            let (targetRefType, typeDef) = b.randomWasmReferenceType(
                 withAbstractSuperType: lastParamType)
-
             let args = labelType.parameters.dropLast().map(function.findOrGenerateWasmVar)
-            function.wasmBranchOnCastFail(
-                sourceVar, targetRefType: targetRefType, to: label, args: args, typeDef: typeDef)
+
+            generateBranchOnCast(
+                b: b, sourceVar: sourceVar, targetRefType: targetRefType, typeDef: typeDef,
+                to: label, args: args, branchOnCastFail: true)
         } else {
             let topType = ILType.wasmRefHierarchyTopTypes.randomElement()!
-            let blockParamTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [topType]
+            let outputTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [topType]
 
-            function.wasmBuildBlockWithResults(with: [] => blockParamTypes, args: []) {
+            function.wasmBuildBlockWithResults(with: [] => outputTypes, args: []) {
                 blockLabel, _ in
                 let sourceVar = function.findOrGenerateWasmVar(ofType: topType)
-                let (targetRefType, typeDef) = function.randomWasmReferenceType(
+                let (targetRefType, typeDef) = b.randomWasmReferenceType(
                     withAbstractSuperType: topType)
-                let args = blockParamTypes.map(function.findOrGenerateWasmVar)
+                let args = outputTypes.map(function.findOrGenerateWasmVar)
 
-                function.wasmBranchOnCastFail(
-                    sourceVar, targetRefType: targetRefType, to: blockLabel, args: args.dropLast(),
-                    typeDef: typeDef)
-
+                generateBranchOnCast(
+                    b: b, sourceVar: sourceVar, targetRefType: targetRefType, typeDef: typeDef,
+                    to: blockLabel, args: args.dropLast(), branchOnCastFail: true)
                 return args
             }
         }
@@ -2121,14 +2504,12 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         inputs: .required(.wasmi32)
     ) { b, value in
         let function = b.currentWasmModule.currentWasmFunction
-        // Choose parameter types for the br_table. If we can find an existing label, just use that
-        // label types as it allows use to reuse existing (and therefore more interesting) blocks.
-        let parameterTypes =
-            if let label = b.randomVariable(ofType: .anyWasmLabel) {
-                b.type(of: label).wasmLabelType!.parameters
-            } else {
-                b.randomWasmBlockOutputTypes(upTo: 3)
-            }
+        let parameterTypes: [ILType]
+        if let label = b.randomVariable(ofType: .anyWasmLabel) {
+            parameterTypes = b.type(of: label).wasmLabelType!.parameters
+        } else {
+            parameterTypes = b.randomWasmBlockOutputTypes(upTo: 3)
+        }
         let extraBlockCount = Int.random(in: 1...5)
         let valueCount = Int.random(in: 0...20)
         let signature = [] => parameterTypes
@@ -2209,6 +2590,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 tryArgs += zip(tags, labels).map { tag, label in
                     tag == nil ? [label] : [tag!, label]
                 }.joined()
+
                 function.wasmBuildTryTable(
                     with: tryParameters => tryOutputTypes, args: tryArgs,
                     catches: catches
@@ -2469,131 +2851,315 @@ public let WasmCodeGenerators: [CodeGenerator] = [
     },
 ]
 
-private let wasmArrayTypeGenerator = GeneratorStub(
-    "WasmArrayTypeGenerator",
-    inContext: .single(.wasmTypeGroup),
-    producesComplex: [.init(.wasmTypeDef(), .IsWasmArray)]
-) { b in
-    let isFinal = probability(0.25)
-    // Define array type with super type (currently: super type and sub type have the same element type)
-    if probability(0.25),
-        // We avoid using super types with self-references to ensure programs are valid.
-        // To support this in the future, we need to replace the self-reference in the
-        // sub type with a reference to the super type.
-        let superType = b.findVariable(satisfying: {
-            if let desc = b.type(of: $0).wasmTypeDefinition?.description
-                as? WasmArrayTypeDescription
-            {
-                return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
-            }
-            return false
-        })
-    {
-        b.generateSubtype(for: superType, isFinal: isFinal)
-        return
-    }
+private let wasmArrayTypeGenerator = {
+    GeneratorStub(
+        "WasmArrayTypeGenerator",
+        inContext: .single(.wasmTypeGroup),
+        producesComplex: [.init(.wasmTypeDef(), .IsWasmArray)]
+    ) { b in
+        let isFinal = probability(0.25)
+        // Define array type with super type (currently: super type and sub type have the same element type)
+        if probability(0.25),
+            // We avoid using super types with self-references to ensure programs are valid.
+            // To support this in the future, we need to replace the self-reference in the
+            // sub type with a reference to the super type.
+            let superType = b.findVariable(satisfying: {
+                if let desc = b.type(of: $0).wasmTypeDefinition?.description
+                    as? WasmArrayTypeDescription
+                {
+                    return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
+                }
+                return false
+            })
+        {
+            b.generateSubtype(for: superType, isFinal: isFinal)
+            return
+        }
 
-    // Define array type without super type
-    let mutability = probability(0.75)
-    if let elementType = b.randomWasmTypeDef(),
-        probability(0.25)
-    {
-        // Excluding non-nullable references from referring to a self-reference ensures we do not end up with cycles of non-nullable references.
-        let nullability =
-            b.type(of: elementType).wasmTypeDefinition!.description
-            == .selfReference || probability(0.5)
-        b.wasmDefineArrayType(
-            elementType: .wasmRef(.Index(), nullability: nullability),
-            mutability: mutability, indexType: elementType, isFinal: isFinal)
-    } else {
-        b.wasmDefineArrayType(
-            elementType: chooseUniform(
-                from: [
-                    .wasmPackedI8, .wasmPackedI16, .wasmi32, .wasmi64, .wasmf32, .wasmf64,
-                    .wasmSimd128,
-                ]
-                    + WasmAbstractHeapType.allCases.map {
-                        ILType.wasmRef($0, nullability: Bool.random())
-                    }),
-            mutability: mutability, isFinal: isFinal)
-    }
-}
-
-private let wasmStructTypeGenerator = GeneratorStub(
-    "WasmStructTypeGenerator",
-    inContext: .single(.wasmTypeGroup),
-    producesComplex: [.init(.wasmTypeDef(), .IsWasmStruct)]
-) { b in
-    let isFinal = probability(0.25)
-    // Define struct type with super type (currently: super type and sub type have the same fields)
-    if probability(0.25),
-        // We avoid using super types with self-references to ensure programs are valid.
-        // To support this in the future, we need to replace the self-reference in the
-        // sub type with a reference to the super type.
-        // In the case of forward references, this requires more thought.
-        let superType = b.findVariable(satisfying: {
-            if let desc = b.type(of: $0).wasmTypeDefinition?.description
-                as? WasmStructTypeDescription
-            {
-                return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
-            }
-            return false
-        })
-    {
-        b.generateSubtype(for: superType, isFinal: isFinal)
-        return
-    }
-
-    // Define struct type without super type
-    let (fields, indexTypes) = b.generateRandomWasmStructFields()
-
-    b.wasmDefineStructType(fields: fields, indexTypes: indexTypes, isFinal: isFinal)
-}
-
-private let wasmSignatureTypeGenerator = GeneratorStub(
-    "WasmSignatureTypeGenerator",
-    inContext: .single(.wasmTypeGroup),
-    producesComplex: [.init(.wasmTypeDef(), .IsWasmFunction)]
-) { b in
-    let isFinal = probability(0.25)
-    // Define signature type with super type (currently: super type and sub type have the same signature)
-    if probability(0.25),
-        // We avoid using super types with self-references to ensure programs are valid.
-        let superType = b.findVariable(satisfying: {
-            if let desc = b.type(of: $0).wasmTypeDefinition?.description
-                as? WasmSignatureTypeDescription
-            {
-                return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
-            }
-            return false
-        })
-    {
-        b.generateSubtype(for: superType, isFinal: isFinal)
-        return
-    }
-
-    // Define signature type without super type
-    let typeCount = Int.random(in: 0...10)
-    let returnCount = Int.random(in: 0...typeCount)
-    let parameterCount = typeCount - returnCount
-
-    var indexTypes: [Variable] = []
-    let chooseType = {
+        // Define array type without super type
+        let mutability = probability(0.75)
         if let elementType = b.randomWasmTypeDef(),
             probability(0.25)
         {
+            // Excluding non-nullable references from referring to a self-reference ensures we do not end up with cycles of non-nullable references.
             let nullability =
                 b.type(of: elementType).wasmTypeDefinition!.description
                 == .selfReference || probability(0.5)
-            indexTypes.append(elementType)
-            return ILType.wasmRef(.Index(), nullability: nullability)
+            let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
+            b.wasmDefineArrayType(
+                elementType: .wasmRef(.Index(isExact: isExact), nullability: nullability),
+                mutability: mutability, indexType: elementType, isFinal: isFinal)
         } else {
-            // TODO(mliedtke): Extend list with abstract heap types.
-            return chooseUniform(from: ILType.wasmNonRefValueTypes)
+            b.wasmDefineArrayType(
+                elementType: chooseUniform(
+                    from: [
+                        .wasmPackedI8, .wasmPackedI16, .wasmi32, .wasmi64, .wasmf32, .wasmf64,
+                        .wasmSimd128,
+                    ]
+                        + WasmAbstractHeapType.allCases.map {
+                            ILType.wasmRef($0, nullability: Bool.random())
+                        }),
+                mutability: mutability, isFinal: isFinal)
         }
     }
-    let signature =
-        (0..<parameterCount).map { _ in chooseType() }
-        => (0..<returnCount).map { _ in chooseType() }
-    b.wasmDefineSignatureType(signature: signature, indexTypes: indexTypes, isFinal: isFinal)
+}
+
+private let wasmStructTypeGenerator = {
+    GeneratorStub(
+        "WasmStructTypeGenerator",
+        inContext: .single(.wasmTypeGroup),
+        producesComplex: [.init(.wasmTypeDef(), .IsWasmStruct)]
+    ) { b in
+        let isFinal = probability(0.25)
+        // Define struct type with super type (currently: super type and sub type have the same fields)
+        if probability(0.25),
+            // We avoid using super types with self-references to ensure programs are valid.
+            // To support this in the future, we need to replace the self-reference in the
+            // sub type with a reference to the super type.
+            // In the case of forward references, this requires more thought.
+            let superType = b.findVariable(satisfying: {
+                if let desc = b.type(of: $0).wasmTypeDefinition?.description
+                    as? WasmStructTypeDescription
+                {
+                    return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
+                        && (desc.describes == nil || !desc.describes!.isFinal)
+                        && (desc.descriptor == nil || !desc.descriptor!.isFinal)
+                }
+                return false
+            })
+        {
+            b.generateSubtype(for: superType, isFinal: isFinal)
+            return
+        }
+
+        // Define struct type without super type
+        let (fields, indexTypes) = b.generateRandomWasmStructFields()
+
+        b.wasmDefineStructType(fields: fields, indexTypes: indexTypes, isFinal: isFinal)
+    }
+}
+
+private let wasmSignatureTypeGenerator = {
+    GeneratorStub(
+        "WasmSignatureTypeGenerator",
+        inContext: .single(.wasmTypeGroup),
+        producesComplex: [.init(.wasmTypeDef(), .IsWasmFunction)]
+    ) { b in
+        let isFinal = probability(0.25)
+        // Define signature type with super type (currently: super type and sub type have the same signature)
+        if probability(0.25),
+            // We avoid using super types with self-references to ensure programs are valid.
+            let superType = b.findVariable(satisfying: {
+                if let desc = b.type(of: $0).wasmTypeDefinition?.description
+                    as? WasmSignatureTypeDescription
+                {
+                    return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
+                }
+                return false
+            })
+        {
+            b.generateSubtype(for: superType, isFinal: isFinal)
+            return
+        }
+
+        // Define signature type without super type
+        let typeCount = Int.random(in: 0...10)
+        let returnCount = Int.random(in: 0...typeCount)
+        let parameterCount = typeCount - returnCount
+
+        var indexTypes: [Variable] = []
+        let chooseType = {
+            if let elementType = b.randomWasmTypeDef(),
+                probability(0.25)
+            {
+                let nullability =
+                    b.type(of: elementType).wasmTypeDefinition!.description
+                    == .selfReference || probability(0.5)
+                indexTypes.append(elementType)
+                let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
+                return ILType.wasmRef(.Index(isExact: isExact), nullability: nullability)
+            } else {
+                // TODO(mliedtke): Extend list with abstract heap types.
+                return chooseUniform(from: ILType.wasmNonRefValueTypes)
+            }
+        }
+        let signature =
+            (0..<parameterCount).map { _ in chooseType() }
+            => (0..<returnCount).map { _ in chooseType() }
+        b.wasmDefineSignatureType(signature: signature, indexTypes: indexTypes, isFinal: isFinal)
+    }
+}
+
+private let wasmCustomDescriptorsStructTypesGenerator = {
+    GeneratorStub(
+        "WasmCustomDescriptorsStructTypesGenerator",
+        inContext: .single(.wasmTypeGroup),
+        producesComplex: [
+            .init(.wasmTypeDef(), .IsWasmStructWithDescriptor),  // The described struct
+            .init(.wasmTypeDef(), .IsWasmStruct),  // The descriptor struct
+        ]
+    ) { b in
+        let finality = probability(0.25)
+        let (fieldsA, indexTypesA) = b.generateRandomWasmStructFields()
+        let typeA = b.wasmDefineStructType(
+            fields: fieldsA, indexTypes: indexTypesA, isFinal: finality
+        )
+
+        let (fieldsB, indexTypesB) = b.generateRandomWasmStructFields()
+        _ = b.wasmDefineStructType(
+            fields: fieldsB, indexTypes: indexTypesB, isFinal: finality, describes: typeA)
+    }
+}
+
+/// Code generators that may only be used if the custom descriptors feature is enabled.
+///
+/// These are registered separately (see `wasmCodeGenerators()`) because they guarantee to
+/// produce/consume struct types with custom descriptors, which cannot be created when the feature
+/// is disabled.
+private let wasmCustomDescriptorsCodeGenerators: [CodeGenerator] = [
+    CodeGenerator(
+        "WasmCustomDescriptorsStructTypesGenerator", [wasmCustomDescriptorsStructTypesGenerator()]),
+
+    CodeGenerator(
+        "WasmRefGetDescGenerator", inContext: .single(.wasmFunction),
+        inputs: .requiredComplex(.init(.wasmTypeDef(), .IsWasmStructWithDescriptor)),
+        producesComplex: [.init(.anyNonNullableIndexRef, .IsWasmStruct)]
+    ) { b, structTypeDef in
+        let function = b.currentWasmModule.currentWasmFunction
+        let structDesc =
+            b.type(of: structTypeDef).wasmTypeDefinition!.description as! WasmStructTypeDescription
+        let structType = ILType.wasmIndexRef(
+            structDesc, nullability: false, isExact: false)
+        let theStruct = function.findOrGenerateWasmVar(ofType: structType)
+        function.wasmRefGetDesc(theStruct: theStruct)
+    },
+
+    CodeGenerator(
+        "WasmRefCastDescEqGenerator", inContext: .single(.wasmFunction),
+        inputs: .requiredComplex(.init(.wasmTypeDef(), .IsWasmStructWithDescriptor)),
+        produces: [.wasmStructRef()]
+    ) { b, structTypeDef in
+        let function = b.currentWasmModule.currentWasmFunction
+        let structDesc =
+            b.type(of: structTypeDef).wasmTypeDefinition!.description as! WasmStructTypeDescription
+
+        let descriptorType = ILType.wasmIndexRef(
+            structDesc.descriptor!, nullability: probability(0.1), isExact: false)
+        // According to the subtyping rules, `descriptor` can be exact or in-exact.
+        let descriptor = function.findOrGenerateWasmVar(ofType: descriptorType)
+        let descriptorIsExact = b.type(of: descriptor).wasmReferenceType!.kind.isExact
+        let targetIsExact = descriptorIsExact && probability(0.5)
+
+        // Either pick an arbitrary `anyref` (50%), or the described struct type itself (50%), and pass
+        // that to `findOrGenerateWasmVar()`. In the latter case, the cast can still fail because it checks
+        // whether the runtime descriptor instance matches.
+        let sourceType =
+            probability(0.5)
+            ? ILType.wasmIndexRef(structDesc, nullability: true, isExact: false)
+            : .wasmAnyRef()
+        let sourceVar = function.findOrGenerateWasmVar(ofType: sourceType)
+
+        let targetRefType = ILType.wasmRef(
+            .Index(isExact: targetIsExact), nullability: probability(0.5))
+        function.wasmRefCastDescEq(
+            sourceVar, descriptorRef: descriptor, targetRefType: targetRefType)
+    },
+
+    CodeGenerator(
+        "WasmBranchOnCastDescEqGenerator", inContext: .single(.wasmFunction),
+        inputs: .requiredComplex(.init(.wasmTypeDef(), .IsWasmStructWithDescriptor))
+    ) { b, structTypeDef in
+        generateBranchOnCastDesc(b: b, structTypeDef: structTypeDef, branchOnCastFail: false)
+    },
+
+    CodeGenerator(
+        "WasmBranchOnCastDescEqFailGenerator", inContext: .single(.wasmFunction),
+        inputs: .requiredComplex(.init(.wasmTypeDef(), .IsWasmStructWithDescriptor))
+    ) { b, structTypeDef in
+        generateBranchOnCastDesc(b: b, structTypeDef: structTypeDef, branchOnCastFail: true)
+    },
+]
+
+private func generateBranchOnCastDesc(
+    b: ProgramBuilder, structTypeDef: Variable, branchOnCastFail: Bool
+) {
+    let function = b.currentWasmModule.currentWasmFunction
+    // Guaranteed by the .IsWasmStructWithDescriptor input requirement of the calling generators.
+    let structDesc =
+        b.type(of: structTypeDef).wasmTypeDefinition!.description as! WasmStructTypeDescription
+
+    // If the cast target type is exact, the descriptor needs to be exact as well, so request an
+    // exact descriptor value whenever we want to cast to an exact type.
+    let descriptorIsExact = probability(0.5)
+    let castIsExact = descriptorIsExact && probability(0.5)
+    // TODO(bettscheider): Support non-nullable target types. This requires being able to
+    // generate non-nullable values for the block results, see randomWasmBlockOutputTypes().
+    let castType = ILType.wasmRef(.Index(isExact: castIsExact), nullability: true)
+    let descriptorType = ILType.wasmIndexRef(
+        structDesc.descriptor!, nullability: probability(0.1), isExact: descriptorIsExact)
+
+    let sourceType =
+        probability(0.5)
+        ? ILType.wasmIndexRef(structDesc, nullability: true, isExact: false)
+        : .wasmAnyRef()
+
+    // The value carried to the label: br_on_cast_desc branches with the successfully cast value,
+    // br_on_cast_desc_fail with the original, uncast one.
+    let branchedRefType =
+        branchOnCastFail
+        ? sourceType
+        : ILType.wasmIndexRef(structDesc, nullability: true, isExact: castIsExact)
+
+    @discardableResult
+    func emitBranch(to label: Variable, args: [Variable]) -> [Variable] {
+        assert(branchedRefType.Is(b.type(of: label).wasmLabelType!.parameters.last!))
+        let descriptor = function.findOrGenerateWasmVar(ofType: descriptorType)
+        assert(!castIsExact || b.type(of: descriptor).wasmReferenceType!.kind.isExact)
+        let sourceVar = function.findOrGenerateWasmVar(ofType: sourceType)
+        if branchOnCastFail {
+            return function.wasmBranchOnCastDescEqFail(
+                sourceVar, descriptorRef: descriptor, targetRefType: castType, to: label,
+                args: args)
+        } else {
+            return function.wasmBranchOnCastDescEq(
+                sourceVar, descriptorRef: descriptor, targetRefType: castType, to: label,
+                args: args)
+        }
+    }
+
+    // Branch out of an enclosing block whenever one can accept the branched value. Its last
+    // parameter only has to be a supertype, so this also covers labels that expect an abstract
+    // heap type or a supertype of the described struct.
+    if let label = b.findVariable(satisfying: {
+        guard let last = b.type(of: $0).wasmLabelType?.parameters.last else { return false }
+        return branchedRefType.Is(last)
+    }) {
+        let labelParams = b.type(of: label).wasmLabelType!.parameters
+        emitBranch(to: label, args: labelParams.dropLast().map(function.findOrGenerateWasmVar))
+        return
+    }
+
+    // Otherwise create a fitting block ourselves, widening its label every now and then for the
+    // same reason. (There is nothing to widen when branchedRefType is already the top type.)
+    let blockRefType =
+        branchedRefType == .wasmAnyRef() || probability(0.5)
+        ? branchedRefType
+        : chooseUniform(from: [
+            // Drops the exactness of the cast type (a no-op if the branched type isn't exact).
+            ILType.wasmIndexRef(structDesc, nullability: true, isExact: false),
+            .wasmStructRef(),
+            .wasmEqRef(),
+            .wasmAnyRef(),
+        ])
+    let outputTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [blockRefType]
+
+    function.wasmBuildBlockWithResults(with: [] => outputTypes, args: []) { blockLabel, _ in
+        let args = outputTypes.dropLast().map(function.findOrGenerateWasmVar)
+        let fallthroughOutputs = emitBranch(to: blockLabel, args: args)
+        // On fallthrough, br_on_cast_desc_fail puts the successfully cast value on the stack, so
+        // its outputs are exactly the block results. br_on_cast_desc instead leaves the value that
+        // did *not* match the cast, whose type doesn't fit the block result, so generate that one.
+        return b.type(of: fallthroughOutputs.last!).Is(blockRefType)
+            ? fallthroughOutputs : args + [function.findOrGenerateWasmVar(ofType: blockRefType)]
+    }
 }

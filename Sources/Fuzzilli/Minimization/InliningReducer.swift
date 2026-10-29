@@ -47,8 +47,11 @@ struct InliningReducer: Reducer {
             // Currently we only inline plain functions as that guarantees that the resulting code is always valid.
             // Otherwise, we might for example attempt to inline an async function containing an 'await', which would not be valid.
             // This works fine because the ReplaceReducer will attempt to turn "special" functions into plain functions.
-            case .beginPlainFunction:
-                candidates[instr.output] = (callCount: 0, index: instr.index)
+            // We also exclude functions with destructuring parameters as the Inlining reducer does not know how to deal with them.
+            case .beginPlainFunction(let op as BeginAnyFunction):
+                if op.parameters.destructuringParameters.isEmpty {
+                    candidates[instr.output] = (callCount: 0, index: instr.index)
+                }
                 fallthrough
             case .beginWorkerFunction,
                 .beginArrowFunction,
@@ -70,6 +73,8 @@ struct InliningReducer: Reducer {
                 .beginClassComputedGetter,
                 .beginClassSetter,
                 .beginClassComputedSetter,
+                .beginClassPrivateGetter,
+                .beginClassPrivateSetter,
                 .beginClassStaticInitializer, .beginClassPrivateMethod:
                 activeSubroutineDefinitions.append(instr.hasOneOutput ? instr.output : nil)
             case .endPlainFunction,
@@ -93,6 +98,8 @@ struct InliningReducer: Reducer {
                 .endClassComputedGetter,
                 .endClassSetter,
                 .endClassComputedSetter,
+                .endClassPrivateGetter,
+                .endClassPrivateSetter,
                 .endClassStaticInitializer, .endClassPrivateMethod:
                 activeSubroutineDefinitions.removeLast()
             default:
@@ -225,7 +232,7 @@ struct InliningReducer: Reducer {
         var functionDefinitionDepth = 0
         for instr in functionBody {
             let newInouts = instr.inouts.map { arguments[$0] ?? $0 }
-            let newInstr = Instruction(instr.op, inouts: newInouts, flags: instr.flags)
+            let newInstr = Instruction(instr.op, inouts: newInouts)
 
             // Returns (from the function being inlined) are converted to assignments to the return value.
             if instr.op is Return && functionDefinitionDepth == 0 {

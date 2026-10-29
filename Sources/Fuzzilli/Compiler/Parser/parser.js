@@ -91,20 +91,20 @@ function parse(script, proto) {
     }
 
     function visitParameter(param) {
-        switch (param.type) {
-            case 'Identifier':
-                return make('Parameter', { name: param.name });
-            case 'AssignmentPattern':
-                assert(param.left.type === 'Identifier', "Expected identifier in assignment pattern");
-                return make('Parameter', {
-                    name: param.left.name,
-                    defaultValue: visitExpression(param.right)
-                });
-            case 'RestElement':
-                return make('Parameter', { name: param.argument.name });
-            default:
-                assert(false, "Unknown parameter type: " + param.type);
+        let actualParam = param;
+        let defaultValue = undefined;
+
+        if (param.type === 'AssignmentPattern') {
+            defaultValue = visitExpression(param.right);
+            actualParam = param.left;
+        } else if (param.type === 'RestElement') {
+            actualParam = param.argument;
         }
+
+        let pattern = parsePattern(actualParam, true);
+        pattern.defaultValue = defaultValue;
+
+        return make('Parameter', pattern);
     }
 
     function visitParameters(params) {
@@ -129,7 +129,7 @@ function parse(script, proto) {
         return statements;
     }
 
-    function parseTargetAndDefault(node) {
+    function parseTargetAndDefault(node, isParameter = false) {
       let targetNode = node;
       let defaultValue = null;
       if (node.type === "AssignmentPattern") {
@@ -138,12 +138,12 @@ function parse(script, proto) {
       }
 
       return {
-        target: visitLValue(targetNode),
+        target: visitLValue(targetNode, isParameter),
         defaultValue: defaultValue,
       };
     }
 
-    function parsePattern(id) {
+    function parsePattern(id, isParameter = false) {
       if (id.type === "Identifier") {
         return { name: id.name };
       } else if (id.type === "ObjectPattern") {
@@ -151,15 +151,18 @@ function parse(script, proto) {
         let restTarget = undefined;
         for (let prop of id.properties) {
           if (prop.type === "ObjectProperty") {
-            let key = visitMemberKey(prop);
-            let { target, defaultValue } = parseTargetAndDefault(prop.value);
+            let key = visitMemberKey(prop, isParameter);
+            let { target, defaultValue } = parseTargetAndDefault(prop.value, isParameter);
 
             let outProp = { key, target };
-            if (defaultValue !== null) outProp.defaultValue = defaultValue;
+            if (defaultValue !== null) {
+                if (isParameter) throw new Error("Default values in parameter destructuring are not yet supported");
+                outProp.defaultValue = defaultValue;
+            }
 
             properties.push(make("ObjectPatternProperty", outProp));
           } else if (prop.type === "RestElement") {
-            restTarget = visitLValue(prop.argument);
+            restTarget = visitLValue(prop.argument, isParameter);
           } else {
             assert(
               false,
@@ -180,12 +183,15 @@ function parse(script, proto) {
             continue;
           }
           if (elem.type === "RestElement") {
-            restTarget = visitLValue(elem.argument);
+            restTarget = visitLValue(elem.argument, isParameter);
             continue;
           }
-          let { target, defaultValue } = parseTargetAndDefault(elem);
+          let { target, defaultValue } = parseTargetAndDefault(elem, isParameter);
           let outElem = { target };
-          if (defaultValue !== null) outElem.defaultValue = defaultValue;
+          if (defaultValue !== null) {
+              if (isParameter) throw new Error("Default values in parameter destructuring are not yet supported");
+              outElem.defaultValue = defaultValue;
+          }
 
           elements.push(make("ArrayPatternElement", outElem));
         }
@@ -238,9 +244,10 @@ function parse(script, proto) {
         return [type, { kind, declarations }];
     }
 
-    function visitMemberKey(member) {
+    function visitMemberKey(member, isParameter = false) {
         let body = {}
         if (member.computed) {
+            if (isParameter) throw new Error("Computed property keys in parameter destructuring are not yet supported");
             body.expression = visitExpression(member.key);
         } else {
             if (member.key.type === 'Identifier') {
@@ -249,6 +256,11 @@ function parse(script, proto) {
                 body.index = member.key.value;
             } else if (member.key.type === 'StringLiteral') {
                 body.name = member.key.value;
+            } else if (member.key.type === 'BigIntLiteral') {
+                body.name = member.key.value;
+            } else if (member.key.type === 'PrivateName') {
+                assert(member.key.id.type === 'Identifier', "Expected private name ID to be an Identifier");
+                body.privateName = member.key.id.name;
             } else {
                 throw "Unknown member key type: " + member.key.type + " in declaration";
             }
@@ -268,7 +280,7 @@ function parse(script, proto) {
         }
         cls.fields = [];
         for (let field of node.body.body) {
-            if (field.type === 'ClassProperty') {
+            if (field.type === 'ClassProperty' || field.type === 'ClassPrivateProperty') {
                 let property = {};
                 property.isStatic = field.static;
                 if (field.value !== null) {
@@ -276,10 +288,8 @@ function parse(script, proto) {
                 }
                 property.key = visitMemberKey(field);
                 cls.fields.push(make('ClassField', { property: make('ClassProperty', property) }));
-            } else if (field.type === 'ClassMethod') {
+            } else if (field.type === 'ClassMethod' || field.type === 'ClassPrivateMethod') {
                 assert(!field.shorthand, 'Expected field.shorthand to be false');
-                assert(!field.generator, 'Expected field.generator to be false');
-                assert(!field.async, 'Expected field.async to be false');
 
                 let method = field;
                 field = {};
@@ -295,10 +305,19 @@ function parse(script, proto) {
                 } else if (method.kind === 'method') {
                     assert(method.body.type === 'BlockStatement', "Expected method.body.type to be exactly 'BlockStatement'");
 
+                    let type = 0; //"PLAIN";
+                    if (method.generator && method.async) {
+                        type = 3; //"ASYNC_GENERATOR";
+                    } else if (method.generator) {
+                        type = 1; //"GENERATOR";
+                    } else if (method.async) {
+                        type = 2; //"ASYNC";
+                    }
+
                     let parameters = visitParameters(method.params);
                     let body = visitBody(method.body);
                     let key = visitMemberKey(method);
-                    field.method = make('ClassMethod', { key, isStatic, parameters, body });
+                    field.method = make('ClassMethod', { key, isStatic, parameters, body, type });
                 } else if (method.kind === 'get') {
                     assert(method.params.length === 0, "Expected method.params.length to be exactly 0");
                     assert(!method.generator && !method.async, "Expected both conditions to hold: !method.generator and !method.async");
@@ -333,7 +352,8 @@ function parse(script, proto) {
 
     function visitStatement(node) {
         switch (node.type) {
-            case 'EmptyStatement': {
+            case 'EmptyStatement':
+            case 'DebuggerStatement': {
                 return makeStatement('EmptyStatement', {});
             }
             case 'BlockStatement': {
@@ -556,29 +576,33 @@ function parse(script, proto) {
                 assert(node.property.name != 'Super', "super.super(...) is not allowed");
                 out.name = node.property.name;
             }
-            out.isOptional = node.type === 'OptionalMemberExpression';
+            out.isOptional = Boolean(node.optional);
             return { isSuper: true, fields: out };
         }
         let object = visitExpression(node.object);
         let out = { object };
         if (node.computed) {
             out.expression = visitExpression(node.property);
+        } else if (node.property.type === 'PrivateName') {
+            assert(node.property.id.type === 'Identifier', "Expected private name ID to be an Identifier");
+            out.privateName = node.property.id.name;
         } else {
             assert(node.property.type === 'Identifier', "Expected node.property.type to be exactly 'Identifier'");
             out.name = node.property.name;
         }
-        out.isOptional = node.type === 'OptionalMemberExpression';
+        out.isOptional = Boolean(node.optional);
         return { isSuper: false, fields: out };
     }
 
-    function visitLValue(node) {
+    function visitLValue(node, isParameter = false) {
         if (node.type === 'Identifier') {
             return makeLValue('Identifier', { name: node.name });
         } else if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
+            if (isParameter) throw new Error("Unreachable: Babel should have errored out on member expressions in parameters");
             let parsed = parseMemberExpressionFields(node);
             return makeLValue(parsed.isSuper ? 'SuperMemberExpression' : 'MemberExpression', parsed.fields);
         } else if (node.type === 'ArrayPattern' || node.type === 'ObjectPattern') {
-            let parsed = parsePattern(node);
+            let parsed = parsePattern(node, isParameter);
             return makeLValue('DestructuringPattern', parsed);
         } else {
             assert(false, "Unsupported LValue node type: " + node.type);
@@ -632,6 +656,9 @@ function parse(script, proto) {
                         property.value = visitExpression(field.value);
                         property.key = visitMemberKey(field);
                         fields.push(make('ObjectField', { property: make('ObjectProperty', property) }));
+                    } else if (field.type === 'SpreadElement') {
+                        let argument = visitExpression(field.argument);
+                        fields.push(make('ObjectField', { spread: make('SpreadElement', { argument }) }));
                     } else {
                         assert(field.type === 'ObjectMethod', "Expected field.type to be exactly 'ObjectMethod'");
                         assert(!field.shorthand, "Expected field.shorthand to be false");
@@ -729,13 +756,13 @@ function parse(script, proto) {
             case 'OptionalCallExpression': {
                 if (node.callee.type === 'Super') {
                     let arguments = node.arguments.map(visitExpression);
-                    let isOptional = node.type === 'OptionalCallExpression';
+                    let isOptional = Boolean(node.optional);
                     return makeExpression('CallSuperConstructor', { arguments, isOptional });
                 }
 
                 let callee = visitExpression(node.callee);
                 let arguments = node.arguments.map(visitExpression);
-                let isOptional = node.type === 'OptionalCallExpression';
+                let isOptional = Boolean(node.optional);
                 return makeExpression('CallExpression', { callee, arguments, isOptional });
             }
             case 'NewExpression': {

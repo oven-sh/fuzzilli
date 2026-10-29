@@ -13,12 +13,12 @@
 // limitations under the License.
 
 import Foundation
+import SwiftProtobuf
 import Testing
-import XCTest
 
 @testable import Fuzzilli
 
-extension Program: @retroactive Equatable {
+extension Program: Equatable {
     // Fairly expensive equality testing, but it's only needed for testing anyway... :)
     public static func == (lhs: Program, rhs: Program) -> Bool {
         // Quick check, they have to be of equal length.
@@ -27,11 +27,13 @@ extension Program: @retroactive Equatable {
         }
 
         do {
+            var options = BinaryEncodingOptions()
+            options.useDeterministicOrdering = true
             for (instrA, instrB) in zip(lhs.code, rhs.code) {
                 // We need to compare on a binary level as the Protobuf datastructure can contain floats for i.e. LoadFloat and Constf64 instructions. If those contain a NaN, they won't be equal to one another although we only care about their binary representation being equal.
                 // This might also flake and not deterministically serialize super small floats(?)
-                let instrASerialized = try instrA.asProtobuf().serializedData()
-                let instrBSerialized = try instrB.asProtobuf().serializedData()
+                let instrASerialized = try instrA.asProtobuf().serializedData(options: options)
+                let instrBSerialized = try instrB.asProtobuf().serializedData(options: options)
                 if instrASerialized != instrBSerialized {
                     return false
                 }
@@ -49,30 +51,13 @@ func v(_ n: Int) -> Variable {
     return Variable(number: n)
 }
 
-func GetJavaScriptExecutorOrSkipTest() throws -> JavaScriptExecutor {
-    guard let runner = JavaScriptExecutor() else {
-        throw XCTSkip(
-            "Could not find js shell executable. Install Node.js (or if you want to use a different shell, modify the FUZZILLI_TEST_SHELL variable)."
-        )
-    }
-    return runner
-}
-
-func GetJavaScriptExecutorOrSkipTest(
-    type: JavaScriptExecutor.ExecutorType, withArguments args: [String]
-) throws -> JavaScriptExecutor {
-    guard let runner = JavaScriptExecutor(type: type, withArguments: args) else {
-        throw XCTSkip(
-            "Could not find js shell executable. Install Node.js (or if you want to use a different shell, modify the FUZZILLI_TEST_SHELL variable)."
-        )
-    }
-    return runner
-}
-
-func buildAndLiftProgram(withLiftingOptions: LiftingOptions, buildFunc: (ProgramBuilder) -> Void)
+func buildAndLiftProgram(
+    withLiftingOptions: LiftingOptions = [], config: Configuration? = nil,
+    buildFunc: (ProgramBuilder) -> Void
+)
     -> String
 {
-    let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
+    let liveTestConfig = config ?? Configuration(logLevel: .error, enableInspection: true)
 
     // We have to use the proper JavaScriptEnvironment here.
     // This ensures that we use the available builtins.
@@ -94,8 +79,73 @@ func buildAndLiftProgram(withLiftingOptions: LiftingOptions, buildFunc: (Program
     }
 }
 
-func buildAndLiftProgram(buildFunc: (ProgramBuilder) -> Void) -> String {
-    return buildAndLiftProgram(withLiftingOptions: [], buildFunc: buildFunc)
+func shouldRunCompilerTests() -> Bool {
+    guard let nodejs = JavaScriptExecutor(type: .nodejs, withArguments: ["--allow-natives-syntax"])
+    else {
+        return false
+    }
+    guard JavaScriptParser(executor: nodejs) != nil else {
+        return false
+    }
+    return true
+}
+
+/// A ProgramEvaluator that accepts every reduction.
+///
+/// During minimization a reduction is only kept if the program still has the aspects we are
+/// interested in. This applies them unconditionally instead.
+final class AlwaysAcceptingEvaluator: MockEvaluator {
+    override func hasAspects(_ execution: Execution, _ aspects: ProgramAspects) -> Bool {
+        return true
+    }
+}
+
+/// Shared setup for the testsuites that operate on the .js files in the CompilerTests/ directory.
+struct CompilerTestcases {
+    let nodejs: JavaScriptExecutor
+    let parser: JavaScriptParser
+    let compiler: JavaScriptCompiler
+    let lifter: JavaScriptLifter
+
+    init() throws {
+        self.nodejs = try #require(
+            JavaScriptExecutor(type: .nodejs, withArguments: ["--allow-natives-syntax"]))
+        self.parser = try #require(JavaScriptParser(executor: self.nodejs))
+        self.compiler = JavaScriptCompiler()
+        self.lifter = JavaScriptLifter(ecmaVersion: .es6, environment: JavaScriptEnvironment())
+    }
+
+    /// The absolute paths of all .js testcases.
+    var paths: [String] {
+        return Bundle.module.paths(forResourcesOfType: "js", inDirectory: "CompilerTests")
+    }
+
+    /// Compiles the testcase at the given path to FuzzIL, recording an issue if that fails.
+    func compile(testcaseAt path: String) -> Program? {
+        let testName = URL(fileURLWithPath: path).lastPathComponent
+        guard let ast = try? parser.parse(path) else {
+            Issue.record("Could not parse \(testName)")
+            return nil
+        }
+        guard let program = try? compiler.compile(ast) else {
+            Issue.record("Could not compile \(testName)")
+            return nil
+        }
+        return program
+    }
+
+    /// Executes the given script and returns its output, recording an issue if it fails.
+    func execute(_ script: String, describedAs description: @autoclosure () -> String) throws
+        -> String?
+    {
+        let result = try nodejs.executeScript(script)
+        guard result.isSuccess else {
+            Issue.record(
+                "\(description()) failed to execute. Output:\n\(result.output)\nScript:\n\(script)")
+            return nil
+        }
+        return result.output
+    }
 }
 
 @Suite struct TestUtilsTests {

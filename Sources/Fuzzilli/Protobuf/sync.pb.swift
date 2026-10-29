@@ -190,6 +190,36 @@ public struct Fuzzilli_Protobuf_Statistics: @unchecked Sendable {
     set {_uniqueStorage()._contributorStats = newValue}
   }
 
+  //// The number of times the aspect intersection was nil when analyzing an interesting sample.
+  public var aspectIntersectionNilCount: UInt64 {
+    get {_storage._aspectIntersectionNilCount}
+    set {_uniqueStorage()._aspectIntersectionNilCount = newValue}
+  }
+
+  //// The instance import acceptance rate of the parent instance.
+  public var parentInstanceImportRate: Double {
+    get {_storage._parentInstanceImportRate}
+    set {_uniqueStorage()._parentInstanceImportRate = newValue}
+  }
+
+  //// The average instance import acceptance rate across active worker threads.
+  public var avgWorkerInstanceImportRate: Double {
+    get {_storage._avgWorkerInstanceImportRate}
+    set {_uniqueStorage()._avgWorkerInstanceImportRate = newValue}
+  }
+
+  //// The number of programs received from other instances (including initial synchronization).
+  public var instanceImportedProgramsReceived: UInt64 {
+    get {_storage._instanceImportedProgramsReceived}
+    set {_uniqueStorage()._instanceImportedProgramsReceived = newValue}
+  }
+
+  //// The number of programs from other instances that were accepted into the corpus.
+  public var instanceImportedProgramsAccepted: UInt64 {
+    get {_storage._instanceImportedProgramsAccepted}
+    set {_uniqueStorage()._instanceImportedProgramsAccepted = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public struct ContributorStats: Sendable {
@@ -208,6 +238,20 @@ public struct Fuzzilli_Protobuf_Statistics: @unchecked Sendable {
     public var correctSamples: UInt64 = 0
 
     public var isCodeGenerator: Bool = false
+
+    public var interestingSamples: UInt64 = 0
+
+    public var invalidSamples: UInt64 = 0
+
+    public var timedOutSamples: UInt64 = 0
+
+    public var crashingSamples: UInt64 = 0
+
+    public var differentialSamples: UInt64 = 0
+
+    public var failures: UInt64 = 0
+
+    public var totalInstructionsProduced: UInt64 = 0
 
     public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -315,7 +359,7 @@ extension Fuzzilli_Protobuf_FuzzerState: SwiftProtobuf.Message, SwiftProtobuf._M
 
 extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Statistics"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}totalSamples\0\u{1}validSamples\0\u{1}interestingSamples\0\u{1}timedOutSamples\0\u{1}crashingSamples\0\u{1}totalExecs\0\u{1}avgCorpusSize\0\u{1}avgProgramSize\0\u{1}avgCorpusProgramSize\0\u{1}avgExecutionTime\0\u{1}execsPerSecond\0\u{1}fuzzerOverhead\0\u{1}minimizationOverhead\0\u{1}numChildNodes\0\u{1}coverage\0\u{1}correctnessRate\0\u{1}timeoutRate\0\u{1}differentialSamples\0\u{1}contributorStats\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}totalSamples\0\u{1}validSamples\0\u{1}interestingSamples\0\u{1}timedOutSamples\0\u{1}crashingSamples\0\u{1}totalExecs\0\u{1}avgCorpusSize\0\u{1}avgProgramSize\0\u{1}avgCorpusProgramSize\0\u{1}avgExecutionTime\0\u{1}execsPerSecond\0\u{1}fuzzerOverhead\0\u{1}minimizationOverhead\0\u{1}numChildNodes\0\u{1}coverage\0\u{1}correctnessRate\0\u{1}timeoutRate\0\u{1}differentialSamples\0\u{1}contributorStats\0\u{1}aspectIntersectionNilCount\0\u{1}parentInstanceImportRate\0\u{1}avgWorkerInstanceImportRate\0\u{1}instanceImportedProgramsReceived\0\u{1}instanceImportedProgramsAccepted\0")
 
   fileprivate class _StorageClass {
     var _totalSamples: UInt64 = 0
@@ -337,6 +381,11 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
     var _timeoutRate: Double = 0
     var _differentialSamples: UInt64 = 0
     var _contributorStats: [Fuzzilli_Protobuf_Statistics.ContributorStats] = []
+    var _aspectIntersectionNilCount: UInt64 = 0
+    var _parentInstanceImportRate: Double = 0
+    var _avgWorkerInstanceImportRate: Double = 0
+    var _instanceImportedProgramsReceived: UInt64 = 0
+    var _instanceImportedProgramsAccepted: UInt64 = 0
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -366,6 +415,11 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
       _timeoutRate = source._timeoutRate
       _differentialSamples = source._differentialSamples
       _contributorStats = source._contributorStats
+      _aspectIntersectionNilCount = source._aspectIntersectionNilCount
+      _parentInstanceImportRate = source._parentInstanceImportRate
+      _avgWorkerInstanceImportRate = source._avgWorkerInstanceImportRate
+      _instanceImportedProgramsReceived = source._instanceImportedProgramsReceived
+      _instanceImportedProgramsAccepted = source._instanceImportedProgramsAccepted
     }
   }
 
@@ -403,6 +457,11 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
         case 17: try { try decoder.decodeSingularDoubleField(value: &_storage._timeoutRate) }()
         case 18: try { try decoder.decodeSingularUInt64Field(value: &_storage._differentialSamples) }()
         case 19: try { try decoder.decodeRepeatedMessageField(value: &_storage._contributorStats) }()
+        case 20: try { try decoder.decodeSingularUInt64Field(value: &_storage._aspectIntersectionNilCount) }()
+        case 21: try { try decoder.decodeSingularDoubleField(value: &_storage._parentInstanceImportRate) }()
+        case 22: try { try decoder.decodeSingularDoubleField(value: &_storage._avgWorkerInstanceImportRate) }()
+        case 23: try { try decoder.decodeSingularUInt64Field(value: &_storage._instanceImportedProgramsReceived) }()
+        case 24: try { try decoder.decodeSingularUInt64Field(value: &_storage._instanceImportedProgramsAccepted) }()
         default: break
         }
       }
@@ -468,6 +527,21 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
       if !_storage._contributorStats.isEmpty {
         try visitor.visitRepeatedMessageField(value: _storage._contributorStats, fieldNumber: 19)
       }
+      if _storage._aspectIntersectionNilCount != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._aspectIntersectionNilCount, fieldNumber: 20)
+      }
+      if _storage._parentInstanceImportRate.bitPattern != 0 {
+        try visitor.visitSingularDoubleField(value: _storage._parentInstanceImportRate, fieldNumber: 21)
+      }
+      if _storage._avgWorkerInstanceImportRate.bitPattern != 0 {
+        try visitor.visitSingularDoubleField(value: _storage._avgWorkerInstanceImportRate, fieldNumber: 22)
+      }
+      if _storage._instanceImportedProgramsReceived != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._instanceImportedProgramsReceived, fieldNumber: 23)
+      }
+      if _storage._instanceImportedProgramsAccepted != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._instanceImportedProgramsAccepted, fieldNumber: 24)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -496,6 +570,11 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
         if _storage._timeoutRate != rhs_storage._timeoutRate {return false}
         if _storage._differentialSamples != rhs_storage._differentialSamples {return false}
         if _storage._contributorStats != rhs_storage._contributorStats {return false}
+        if _storage._aspectIntersectionNilCount != rhs_storage._aspectIntersectionNilCount {return false}
+        if _storage._parentInstanceImportRate != rhs_storage._parentInstanceImportRate {return false}
+        if _storage._avgWorkerInstanceImportRate != rhs_storage._avgWorkerInstanceImportRate {return false}
+        if _storage._instanceImportedProgramsReceived != rhs_storage._instanceImportedProgramsReceived {return false}
+        if _storage._instanceImportedProgramsAccepted != rhs_storage._instanceImportedProgramsAccepted {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -507,7 +586,7 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 extension Fuzzilli_Protobuf_Statistics.ContributorStats: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = Fuzzilli_Protobuf_Statistics.protoMessageName + ".ContributorStats"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}invocationCount\0\u{1}successfulGenerationCount\0\u{1}totalSamples\0\u{1}correctSamples\0\u{1}isCodeGenerator\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}invocationCount\0\u{1}successfulGenerationCount\0\u{1}totalSamples\0\u{1}correctSamples\0\u{1}isCodeGenerator\0\u{1}interestingSamples\0\u{1}invalidSamples\0\u{1}timedOutSamples\0\u{1}crashingSamples\0\u{1}differentialSamples\0\u{1}failures\0\u{1}totalInstructionsProduced\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -521,6 +600,13 @@ extension Fuzzilli_Protobuf_Statistics.ContributorStats: SwiftProtobuf.Message, 
       case 4: try { try decoder.decodeSingularUInt64Field(value: &self.totalSamples) }()
       case 5: try { try decoder.decodeSingularUInt64Field(value: &self.correctSamples) }()
       case 6: try { try decoder.decodeSingularBoolField(value: &self.isCodeGenerator) }()
+      case 7: try { try decoder.decodeSingularUInt64Field(value: &self.interestingSamples) }()
+      case 8: try { try decoder.decodeSingularUInt64Field(value: &self.invalidSamples) }()
+      case 9: try { try decoder.decodeSingularUInt64Field(value: &self.timedOutSamples) }()
+      case 10: try { try decoder.decodeSingularUInt64Field(value: &self.crashingSamples) }()
+      case 11: try { try decoder.decodeSingularUInt64Field(value: &self.differentialSamples) }()
+      case 12: try { try decoder.decodeSingularUInt64Field(value: &self.failures) }()
+      case 13: try { try decoder.decodeSingularUInt64Field(value: &self.totalInstructionsProduced) }()
       default: break
       }
     }
@@ -545,6 +631,27 @@ extension Fuzzilli_Protobuf_Statistics.ContributorStats: SwiftProtobuf.Message, 
     if self.isCodeGenerator != false {
       try visitor.visitSingularBoolField(value: self.isCodeGenerator, fieldNumber: 6)
     }
+    if self.interestingSamples != 0 {
+      try visitor.visitSingularUInt64Field(value: self.interestingSamples, fieldNumber: 7)
+    }
+    if self.invalidSamples != 0 {
+      try visitor.visitSingularUInt64Field(value: self.invalidSamples, fieldNumber: 8)
+    }
+    if self.timedOutSamples != 0 {
+      try visitor.visitSingularUInt64Field(value: self.timedOutSamples, fieldNumber: 9)
+    }
+    if self.crashingSamples != 0 {
+      try visitor.visitSingularUInt64Field(value: self.crashingSamples, fieldNumber: 10)
+    }
+    if self.differentialSamples != 0 {
+      try visitor.visitSingularUInt64Field(value: self.differentialSamples, fieldNumber: 11)
+    }
+    if self.failures != 0 {
+      try visitor.visitSingularUInt64Field(value: self.failures, fieldNumber: 12)
+    }
+    if self.totalInstructionsProduced != 0 {
+      try visitor.visitSingularUInt64Field(value: self.totalInstructionsProduced, fieldNumber: 13)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -555,6 +662,13 @@ extension Fuzzilli_Protobuf_Statistics.ContributorStats: SwiftProtobuf.Message, 
     if lhs.totalSamples != rhs.totalSamples {return false}
     if lhs.correctSamples != rhs.correctSamples {return false}
     if lhs.isCodeGenerator != rhs.isCodeGenerator {return false}
+    if lhs.interestingSamples != rhs.interestingSamples {return false}
+    if lhs.invalidSamples != rhs.invalidSamples {return false}
+    if lhs.timedOutSamples != rhs.timedOutSamples {return false}
+    if lhs.crashingSamples != rhs.crashingSamples {return false}
+    if lhs.differentialSamples != rhs.differentialSamples {return false}
+    if lhs.failures != rhs.failures {return false}
+    if lhs.totalInstructionsProduced != rhs.totalInstructionsProduced {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

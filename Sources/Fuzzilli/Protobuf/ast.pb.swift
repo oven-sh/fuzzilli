@@ -168,9 +168,33 @@ public struct Compiler_Protobuf_Parameter: @unchecked Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  public var id: OneOf_ID? {
+    get {return _storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
+
   public var name: String {
-    get {_storage._name}
-    set {_uniqueStorage()._name = newValue}
+    get {
+      if case .name(let v)? = _storage._id {return v}
+      return String()
+    }
+    set {_uniqueStorage()._id = .name(newValue)}
+  }
+
+  public var objectPattern: Compiler_Protobuf_ObjectPattern {
+    get {
+      if case .objectPattern(let v)? = _storage._id {return v}
+      return Compiler_Protobuf_ObjectPattern()
+    }
+    set {_uniqueStorage()._id = .objectPattern(newValue)}
+  }
+
+  public var arrayPattern: Compiler_Protobuf_ArrayPattern {
+    get {
+      if case .arrayPattern(let v)? = _storage._id {return v}
+      return Compiler_Protobuf_ArrayPattern()
+    }
+    set {_uniqueStorage()._id = .arrayPattern(newValue)}
   }
 
   public var defaultValue: Compiler_Protobuf_Expression {
@@ -183,6 +207,13 @@ public struct Compiler_Protobuf_Parameter: @unchecked Sendable {
   public mutating func clearDefaultValue() {_uniqueStorage()._defaultValue = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public enum OneOf_ID: Equatable, Sendable {
+    case name(String)
+    case objectPattern(Compiler_Protobuf_ObjectPattern)
+    case arrayPattern(Compiler_Protobuf_ArrayPattern)
+
+  }
 
   public init() {}
 
@@ -399,6 +430,15 @@ public struct Compiler_Protobuf_PropertyKey: Sendable {
     set {body = .expression(newValue)}
   }
 
+  /// A #private property
+  public var privateName: String {
+    get {
+      if case .privateName(let v)? = body {return v}
+      return String()
+    }
+    set {body = .privateName(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Body: Equatable, Sendable {
@@ -408,6 +448,8 @@ public struct Compiler_Protobuf_PropertyKey: Sendable {
     case index(Int64)
     /// A computed property.
     case expression(Compiler_Protobuf_Expression)
+    /// A #private property
+    case privateName(String)
 
   }
 
@@ -497,6 +539,8 @@ public struct Compiler_Protobuf_ClassMethod: Sendable {
   public mutating func clearParameters() {self._parameters = nil}
 
   public var body: [Compiler_Protobuf_Statement] = []
+
+  public var type: Compiler_Protobuf_FunctionType = .plain
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1908,6 +1952,14 @@ public struct Compiler_Protobuf_ObjectField: Sendable {
     set {field = .setter(newValue)}
   }
 
+  public var spread: Compiler_Protobuf_SpreadElement {
+    get {
+      if case .spread(let v)? = field {return v}
+      return Compiler_Protobuf_SpreadElement()
+    }
+    set {field = .spread(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Field: Equatable, Sendable {
@@ -1915,6 +1967,7 @@ public struct Compiler_Protobuf_ObjectField: Sendable {
     case method(Compiler_Protobuf_ObjectMethod)
     case getter(Compiler_Protobuf_ObjectGetter)
     case setter(Compiler_Protobuf_ObjectSetter)
+    case spread(Compiler_Protobuf_SpreadElement)
 
   }
 
@@ -2123,6 +2176,15 @@ public struct Compiler_Protobuf_MemberExpression: @unchecked Sendable {
     set {_uniqueStorage()._property = .expression(newValue)}
   }
 
+  /// A #private property
+  public var privateName: String {
+    get {
+      if case .privateName(let v)? = _storage._property {return v}
+      return String()
+    }
+    set {_uniqueStorage()._property = .privateName(newValue)}
+  }
+
   public var isOptional: Bool {
     get {_storage._isOptional}
     set {_uniqueStorage()._isOptional = newValue}
@@ -2135,6 +2197,8 @@ public struct Compiler_Protobuf_MemberExpression: @unchecked Sendable {
     case name(String)
     /// A computed property or element.
     case expression(Compiler_Protobuf_Expression)
+    /// A #private property
+    case privateName(String)
 
   }
 
@@ -2923,10 +2987,10 @@ extension Compiler_Protobuf_AST: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
 
 extension Compiler_Protobuf_Parameter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Parameter"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}defaultValue\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}defaultValue\0\u{1}objectPattern\0\u{1}arrayPattern\0")
 
   fileprivate class _StorageClass {
-    var _name: String = String()
+    var _id: Compiler_Protobuf_Parameter.OneOf_ID?
     var _defaultValue: Compiler_Protobuf_Expression? = nil
 
       // This property is used as the initial default value for new instances of the type.
@@ -2938,7 +3002,7 @@ extension Compiler_Protobuf_Parameter: SwiftProtobuf.Message, SwiftProtobuf._Mes
     private init() {}
 
     init(copying source: _StorageClass) {
-      _name = source._name
+      _id = source._id
       _defaultValue = source._defaultValue
     }
   }
@@ -2958,8 +3022,41 @@ extension Compiler_Protobuf_Parameter: SwiftProtobuf.Message, SwiftProtobuf._Mes
         // allocates stack space for every case branch when no optimizations are
         // enabled. https://github.com/apple/swift-protobuf/issues/1034
         switch fieldNumber {
-        case 1: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 1: try {
+          var v: String?
+          try decoder.decodeSingularStringField(value: &v)
+          if let v = v {
+            if _storage._id != nil {try decoder.handleConflictingOneOf()}
+            _storage._id = .name(v)
+          }
+        }()
         case 2: try { try decoder.decodeSingularMessageField(value: &_storage._defaultValue) }()
+        case 3: try {
+          var v: Compiler_Protobuf_ObjectPattern?
+          var hadOneofValue = false
+          if let current = _storage._id {
+            hadOneofValue = true
+            if case .objectPattern(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._id = .objectPattern(v)
+          }
+        }()
+        case 4: try {
+          var v: Compiler_Protobuf_ArrayPattern?
+          var hadOneofValue = false
+          if let current = _storage._id {
+            hadOneofValue = true
+            if case .arrayPattern(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._id = .arrayPattern(v)
+          }
+        }()
         default: break
         }
       }
@@ -2972,12 +3069,23 @@ extension Compiler_Protobuf_Parameter: SwiftProtobuf.Message, SwiftProtobuf._Mes
       // allocates stack space for every if/case branch local when no optimizations
       // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
       // https://github.com/apple/swift-protobuf/issues/1182
-      if !_storage._name.isEmpty {
-        try visitor.visitSingularStringField(value: _storage._name, fieldNumber: 1)
-      }
+      try { if case .name(let v)? = _storage._id {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 1)
+      } }()
       try { if let v = _storage._defaultValue {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
       } }()
+      switch _storage._id {
+      case .objectPattern?: try {
+        guard case .objectPattern(let v)? = _storage._id else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+      }()
+      case .arrayPattern?: try {
+        guard case .arrayPattern(let v)? = _storage._id else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      }()
+      default: break
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -2987,7 +3095,7 @@ extension Compiler_Protobuf_Parameter: SwiftProtobuf.Message, SwiftProtobuf._Mes
       let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
         let _storage = _args.0
         let rhs_storage = _args.1
-        if _storage._name != rhs_storage._name {return false}
+        if _storage._id != rhs_storage._id {return false}
         if _storage._defaultValue != rhs_storage._defaultValue {return false}
         return true
       }
@@ -3401,7 +3509,7 @@ extension Compiler_Protobuf_FunctionDeclaration: SwiftProtobuf.Message, SwiftPro
 
 extension Compiler_Protobuf_PropertyKey: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PropertyKey"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}index\0\u{1}expression\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}index\0\u{1}expression\0\u{1}privateName\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3438,6 +3546,14 @@ extension Compiler_Protobuf_PropertyKey: SwiftProtobuf.Message, SwiftProtobuf._M
           self.body = .expression(v)
         }
       }()
+      case 4: try {
+        var v: String?
+        try decoder.decodeSingularStringField(value: &v)
+        if let v = v {
+          if self.body != nil {try decoder.handleConflictingOneOf()}
+          self.body = .privateName(v)
+        }
+      }()
       default: break
       }
     }
@@ -3460,6 +3576,10 @@ extension Compiler_Protobuf_PropertyKey: SwiftProtobuf.Message, SwiftProtobuf._M
     case .expression?: try {
       guard case .expression(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
+    case .privateName?: try {
+      guard case .privateName(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
     }()
     case nil: break
     }
@@ -3558,7 +3678,7 @@ extension Compiler_Protobuf_ClassConstructor: SwiftProtobuf.Message, SwiftProtob
 
 extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ClassMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}isStatic\0\u{1}parameters\0\u{1}body\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}isStatic\0\u{1}parameters\0\u{1}body\0\u{1}type\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3570,6 +3690,7 @@ extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._M
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
       case 3: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 4: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
+      case 5: try { try decoder.decodeSingularEnumField(value: &self.type) }()
       default: break
       }
     }
@@ -3592,6 +3713,9 @@ extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._M
     if !self.body.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.body, fieldNumber: 4)
     }
+    if self.type != .plain {
+      try visitor.visitSingularEnumField(value: self.type, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3600,6 +3724,7 @@ extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._M
     if lhs.isStatic != rhs.isStatic {return false}
     if lhs._parameters != rhs._parameters {return false}
     if lhs.body != rhs.body {return false}
+    if lhs.type != rhs.type {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -6491,7 +6616,7 @@ extension Compiler_Protobuf_ObjectSetter: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Compiler_Protobuf_ObjectField: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ObjectField"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}property\0\u{1}method\0\u{1}getter\0\u{1}setter\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}property\0\u{1}method\0\u{1}getter\0\u{1}setter\0\u{1}spread\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -6551,6 +6676,19 @@ extension Compiler_Protobuf_ObjectField: SwiftProtobuf.Message, SwiftProtobuf._M
           self.field = .setter(v)
         }
       }()
+      case 5: try {
+        var v: Compiler_Protobuf_SpreadElement?
+        var hadOneofValue = false
+        if let current = self.field {
+          hadOneofValue = true
+          if case .spread(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.field = .spread(v)
+        }
+      }()
       default: break
       }
     }
@@ -6577,6 +6715,10 @@ extension Compiler_Protobuf_ObjectField: SwiftProtobuf.Message, SwiftProtobuf._M
     case .setter?: try {
       guard case .setter(let v)? = self.field else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    }()
+    case .spread?: try {
+      guard case .spread(let v)? = self.field else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
     }()
     case nil: break
     }
@@ -6979,7 +7121,7 @@ extension Compiler_Protobuf_NewExpression: SwiftProtobuf.Message, SwiftProtobuf.
 
 extension Compiler_Protobuf_MemberExpression: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".MemberExpression"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}object\0\u{1}name\0\u{1}expression\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}object\0\u{1}name\0\u{1}expression\0\u{1}isOptional\0\u{1}privateName\0")
 
   fileprivate class _StorageClass {
     var _object: Compiler_Protobuf_Expression? = nil
@@ -7039,6 +7181,14 @@ extension Compiler_Protobuf_MemberExpression: SwiftProtobuf.Message, SwiftProtob
           }
         }()
         case 4: try { try decoder.decodeSingularBoolField(value: &_storage._isOptional) }()
+        case 5: try {
+          var v: String?
+          try decoder.decodeSingularStringField(value: &v)
+          if let v = v {
+            if _storage._property != nil {try decoder.handleConflictingOneOf()}
+            _storage._property = .privateName(v)
+          }
+        }()
         default: break
         }
       }
@@ -7063,11 +7213,14 @@ extension Compiler_Protobuf_MemberExpression: SwiftProtobuf.Message, SwiftProtob
         guard case .expression(let v)? = _storage._property else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
       }()
-      case nil: break
+      default: break
       }
       if _storage._isOptional != false {
         try visitor.visitSingularBoolField(value: _storage._isOptional, fieldNumber: 4)
       }
+      try { if case .privateName(let v)? = _storage._property {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }

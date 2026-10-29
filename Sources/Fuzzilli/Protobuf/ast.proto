@@ -22,7 +22,11 @@ message AST {
 
 // A parameter in a function declaration. Not an expression on its own.
 message Parameter {
-    string name = 1;
+    oneof id {
+        string name = 1;
+        ObjectPattern objectPattern = 3;
+        ArrayPattern arrayPattern = 4;
+    }
     Expression defaultValue = 2;
 }
 
@@ -97,6 +101,8 @@ message PropertyKey {
         int64 index = 2;
         // A computed property.
         Expression expression = 3;
+        // A #private property
+        string privateName = 4;
     }
 }
 
@@ -117,6 +123,7 @@ message ClassMethod {
     bool isStatic = 2;
     Parameters parameters = 3;
     repeated Statement body = 4;
+    FunctionType type = 5;
 }
 
 message ClassGetter {
@@ -389,6 +396,7 @@ message ObjectField {
         ObjectMethod method = 2;
         ObjectGetter getter = 3;
         ObjectSetter setter = 4;
+        SpreadElement spread = 5;
     }
 }
 
@@ -437,6 +445,8 @@ message MemberExpression {
         string name = 2;
         // A computed property or element.
         Expression expression = 3;
+        // A #private property
+        string privateName = 5;
     }
     bool isOptional = 4;
 }

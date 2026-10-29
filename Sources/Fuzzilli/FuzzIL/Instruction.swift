@@ -34,9 +34,6 @@ public struct Instruction {
     /// limited by the fact that variables are UInt16 internally.
     private var indexValue: UInt16 = UInt16.max
 
-    /// The flags associated with this instruction, right now these are mainly used during minimization.
-    public var flags: Self.Flags
-
     /// The number of input variables of this instruction.
     public var numInputs: Int {
         return op.numInputs
@@ -229,7 +226,7 @@ public struct Instruction {
 
     /// Whether this instruction's operation is a GuardableOperations _and_ the guarding is active.
     /// Guarded operations "swallow" runtime exceptions, for example by wrapping them into a try-catch during lifting.
-    public var isGuarded: Bool {
+    var isGuarded: Bool {
         return (op as? GuardableOperation)?.isGuarded ?? false
     }
 
@@ -250,7 +247,7 @@ public struct Instruction {
     }
 
     public init<Variables: Collection>(
-        _ op: Operation, inouts: Variables, index: Int? = nil, flags: Self.Flags = .empty
+        _ op: Operation, inouts: Variables, index: Int? = nil
     ) where Variables.Element == Variable {
         assert(op.numInputs + op.numOutputs + op.numInnerOutputs == inouts.count)
         self.op = op
@@ -258,7 +255,6 @@ public struct Instruction {
         if let idx = index {
             self.indexValue = UInt16(idx)
         }
-        self.flags = flags
     }
 
     public init(_ op: Operation, output: Variable) {
@@ -291,21 +287,6 @@ public struct Instruction {
         assert(op.numInputs == 0)
         self.init(op, inouts: [])
     }
-
-    /// Flags associated with an Instruction.
-    /// This can be useful to mark instructions in some way, for example during minimization.
-    public struct Flags: OptionSet, CaseIterable {
-        public static var allCases: [Instruction.Flags] = [.notRemovable]
-
-        public let rawValue: UInt16
-
-        public init(rawValue: UInt16) {
-            self.rawValue = rawValue
-        }
-        /// If this is set, the minimizer cannot remove this instruction.
-        public static let notRemovable = Self(rawValue: 1 << 0)
-        public static let empty = Self([])
-    }
 }
 
 // Protobuf support.
@@ -326,10 +307,16 @@ extension Instruction: ProtobufConvertible {
         }
 
         func convertParameters(_ parameters: Parameters) -> Fuzzilli_Protobuf_Parameters {
+            var destructuringParameters = [UInt32: Fuzzilli_Protobuf_FuzzILDestructuringPattern]()
+            for (idx, pattern) in parameters.destructuringParameters {
+                destructuringParameters[UInt32(idx)] = encodeDestructuringPattern(
+                    pattern, mode: .parameter)
+            }
             return Fuzzilli_Protobuf_Parameters.with {
                 $0.count = UInt32(parameters.count)
                 $0.hasRest_p = parameters.hasRestParameter
                 $0.defaultParameterIndices = parameters.defaultParameterIndices.map(UInt32.init)
+                $0.destructuringParameters = destructuringParameters
             }
         }
 
@@ -384,10 +371,13 @@ extension Instruction: ProtobufConvertible {
             default:
                 if underlyingWasmType <= .wasmGenericRef {
                     switch underlyingWasmType.wasmReferenceType!.kind {
-                    case .Index(_):
+                    case .Index(_, let isExact):
                         return Fuzzilli_Protobuf_WasmILType.with {
                             $0.refType = Fuzzilli_Protobuf_WasmReferenceType.with {
-                                $0.kind = Fuzzilli_Protobuf_WasmReferenceTypeKind.index
+                                $0.kind =
+                                    isExact
+                                    ? Fuzzilli_Protobuf_WasmReferenceTypeKind.indexExact
+                                    : Fuzzilli_Protobuf_WasmReferenceTypeKind.index
                                 $0.nullability = underlyingWasmType.wasmReferenceType!.nullability
                             }
                         }
@@ -402,6 +392,8 @@ extension Instruction: ProtobufConvertible {
                                 Fuzzilli_Protobuf_WasmReferenceTypeKind.funcref
                             case .WasmExtern:
                                 Fuzzilli_Protobuf_WasmReferenceTypeKind.externref
+                            case .WasmJSString:
+                                Fuzzilli_Protobuf_WasmReferenceTypeKind.jsstringref
                             case .WasmAny:
                                 Fuzzilli_Protobuf_WasmReferenceTypeKind.anyref
                             case .WasmEq:
@@ -522,6 +514,12 @@ extension Instruction: ProtobufConvertible {
             case .imported(let ilType):
                 return Fuzzilli_Protobuf_WasmGlobal.OneOf_WasmGlobal.imported(
                     ILTypeToWasmTypeEnum(ilType))
+            case .indexRef:
+                return Fuzzilli_Protobuf_WasmGlobal.OneOf_WasmGlobal.nullref(
+                    Fuzzilli_Protobuf_WasmReferenceTypeKind.index)
+            case .indexExactRef:
+                return Fuzzilli_Protobuf_WasmGlobal.OneOf_WasmGlobal.nullref(
+                    Fuzzilli_Protobuf_WasmReferenceTypeKind.indexExact)
             }
         }
 
@@ -618,6 +616,8 @@ extension Instruction: ProtobufConvertible {
                 $0.beginObjectLiteralMethod = Fuzzilli_Protobuf_BeginObjectLiteralMethod.with {
                     $0.methodName = op.methodName
                     $0.parameters = convertParameters(op.parameters)
+                    $0.isGenerator = op.isGenerator
+                    $0.isAsync = op.isAsync
                 }
             case .endObjectLiteralMethod:
                 $0.endObjectLiteralMethod = Fuzzilli_Protobuf_EndObjectLiteralMethod()
@@ -625,6 +625,8 @@ extension Instruction: ProtobufConvertible {
                 $0.beginObjectLiteralComputedMethod =
                     Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod.with {
                         $0.parameters = convertParameters(op.parameters)
+                        $0.isGenerator = op.isGenerator
+                        $0.isAsync = op.isAsync
                     }
             case .endObjectLiteralComputedMethod:
                 $0.endObjectLiteralComputedMethod =
@@ -689,6 +691,8 @@ extension Instruction: ProtobufConvertible {
                 $0.beginClassComputedMethod = Fuzzilli_Protobuf_BeginClassComputedMethod.with {
                     $0.parameters = convertParameters(op.parameters)
                     $0.isStatic = op.isStatic
+                    $0.isGenerator = op.isGenerator
+                    $0.isAsync = op.isAsync
                 }
             case .endClassComputedMethod:
                 $0.endClassComputedMethod = Fuzzilli_Protobuf_EndClassComputedMethod()
@@ -702,14 +706,32 @@ extension Instruction: ProtobufConvertible {
                     $0.methodName = op.methodName
                     $0.parameters = convertParameters(op.parameters)
                     $0.isStatic = op.isStatic
+                    $0.isGenerator = op.isGenerator
+                    $0.isAsync = op.isAsync
                 }
             case .endClassPrivateMethod:
                 $0.endClassPrivateMethod = Fuzzilli_Protobuf_EndClassPrivateMethod()
+            case .beginClassPrivateGetter(let op):
+                $0.beginClassPrivateGetter = Fuzzilli_Protobuf_BeginClassPrivateGetter.with {
+                    $0.propertyName = op.propertyName
+                    $0.isStatic = op.isStatic
+                }
+            case .endClassPrivateGetter:
+                $0.endClassPrivateGetter = Fuzzilli_Protobuf_EndClassPrivateGetter()
+            case .beginClassPrivateSetter(let op):
+                $0.beginClassPrivateSetter = Fuzzilli_Protobuf_BeginClassPrivateSetter.with {
+                    $0.propertyName = op.propertyName
+                    $0.isStatic = op.isStatic
+                }
+            case .endClassPrivateSetter:
+                $0.endClassPrivateSetter = Fuzzilli_Protobuf_EndClassPrivateSetter()
             case .beginClassMethod(let op):
                 $0.beginClassMethod = Fuzzilli_Protobuf_BeginClassMethod.with {
                     $0.methodName = op.methodName
                     $0.parameters = convertParameters(op.parameters)
                     $0.isStatic = op.isStatic
+                    $0.isGenerator = op.isGenerator
+                    $0.isAsync = op.isAsync
                 }
             case .endClassGetter:
                 $0.endClassGetter = Fuzzilli_Protobuf_EndClassGetter()
@@ -744,12 +766,8 @@ extension Instruction: ProtobufConvertible {
                 }
             case .endClassDefinition:
                 $0.endClassDefinition = Fuzzilli_Protobuf_EndClassDefinition()
-            case .createArray(let op):
-                $0.createArray = Fuzzilli_Protobuf_CreateArray.with {
-                    if let elementGroupName = op.elementGroupName {
-                        $0.elementGroupName = elementGroupName
-                    }
-                }
+            case .createArray:
+                $0.createArray = Fuzzilli_Protobuf_CreateArray()
             case .createIntArray(let op):
                 $0.createIntArray = Fuzzilli_Protobuf_CreateIntArray.with { $0.values = op.values }
             case .createFloatArray(let op):
@@ -767,7 +785,7 @@ extension Instruction: ProtobufConvertible {
             case .getProperty(let op):
                 $0.getProperty = Fuzzilli_Protobuf_GetProperty.with {
                     $0.propertyName = op.propertyName
-                    $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .setProperty(let op):
                 $0.setProperty = Fuzzilli_Protobuf_SetProperty.with {
@@ -778,11 +796,12 @@ extension Instruction: ProtobufConvertible {
                 $0.updateProperty = Fuzzilli_Protobuf_UpdateProperty.with {
                     $0.propertyName = op.propertyName
                     $0.op = convertEnum(op.op, BinaryOperator.allCases)
+                    $0.isGuarded = op.isGuarded
                 }
             case .deleteProperty(let op):
                 $0.deleteProperty = Fuzzilli_Protobuf_DeleteProperty.with {
                     $0.propertyName = op.propertyName
-                    $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .configureProperty(let op):
                 $0.configureProperty = Fuzzilli_Protobuf_ConfigureProperty.with {
@@ -795,19 +814,23 @@ extension Instruction: ProtobufConvertible {
             case .getElement(let op):
                 $0.getElement = Fuzzilli_Protobuf_GetElement.with {
                     $0.index = op.index
-                    $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .setElement(let op):
-                $0.setElement = Fuzzilli_Protobuf_SetElement.with { $0.index = op.index }
+                $0.setElement = Fuzzilli_Protobuf_SetElement.with {
+                    $0.index = op.index
+                    $0.isGuarded = op.isGuarded
+                }
             case .updateElement(let op):
                 $0.updateElement = Fuzzilli_Protobuf_UpdateElement.with {
                     $0.index = op.index
                     $0.op = convertEnum(op.op, BinaryOperator.allCases)
+                    $0.isGuarded = op.isGuarded
                 }
             case .deleteElement(let op):
                 $0.deleteElement = Fuzzilli_Protobuf_DeleteElement.with {
                     $0.index = op.index
-                    $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .configureElement(let op):
                 $0.configureElement = Fuzzilli_Protobuf_ConfigureElement.with {
@@ -819,17 +842,20 @@ extension Instruction: ProtobufConvertible {
                 }
             case .getComputedProperty(let op):
                 $0.getComputedProperty = Fuzzilli_Protobuf_GetComputedProperty.with {
+                    $0.isReceiverOptional = op.isReceiverOptional
+                }
+            case .setComputedProperty(let op):
+                $0.setComputedProperty = Fuzzilli_Protobuf_SetComputedProperty.with {
                     $0.isGuarded = op.isGuarded
                 }
-            case .setComputedProperty:
-                $0.setComputedProperty = Fuzzilli_Protobuf_SetComputedProperty()
             case .updateComputedProperty(let op):
                 $0.updateComputedProperty = Fuzzilli_Protobuf_UpdateComputedProperty.with {
                     $0.op = convertEnum(op.op, BinaryOperator.allCases)
+                    $0.isGuarded = op.isGuarded
                 }
             case .deleteComputedProperty(let op):
                 $0.deleteComputedProperty = Fuzzilli_Protobuf_DeleteComputedProperty.with {
-                    $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .configureComputedProperty(let op):
                 $0.configureComputedProperty = Fuzzilli_Protobuf_ConfigureComputedProperty.with {
@@ -923,11 +949,13 @@ extension Instruction: ProtobufConvertible {
             case .callFunction(let op):
                 $0.callFunction = Fuzzilli_Protobuf_CallFunction.with {
                     $0.isGuarded = op.isGuarded
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .callFunctionWithSpread(let op):
                 $0.callFunctionWithSpread = Fuzzilli_Protobuf_CallFunctionWithSpread.with {
                     $0.spreads = op.spreads
                     $0.isGuarded = op.isGuarded
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .construct(let op):
                 $0.construct = Fuzzilli_Protobuf_Construct.with { $0.isGuarded = op.isGuarded }
@@ -940,22 +968,30 @@ extension Instruction: ProtobufConvertible {
                 $0.callMethod = Fuzzilli_Protobuf_CallMethod.with {
                     $0.methodName = op.methodName
                     $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .callMethodWithSpread(let op):
                 $0.callMethodWithSpread = Fuzzilli_Protobuf_CallMethodWithSpread.with {
                     $0.methodName = op.methodName
                     $0.spreads = op.spreads
                     $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .callComputedMethod(let op):
                 $0.callComputedMethod = Fuzzilli_Protobuf_CallComputedMethod.with {
                     $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .callComputedMethodWithSpread(let op):
                 $0.callComputedMethodWithSpread =
                     Fuzzilli_Protobuf_CallComputedMethodWithSpread.with {
                         $0.spreads = op.spreads
                         $0.isGuarded = op.isGuarded
+                        $0.isReceiverOptional = op.isReceiverOptional
+                        $0.isCallOptional = op.isCallOptional
                     }
             case .unaryOperation(let op):
                 $0.unaryOperation = Fuzzilli_Protobuf_UnaryOperation.with {
@@ -1006,23 +1042,41 @@ extension Instruction: ProtobufConvertible {
             case .callSuperMethod(let op):
                 $0.callSuperMethod = Fuzzilli_Protobuf_CallSuperMethod.with {
                     $0.methodName = op.methodName
+                    $0.isGuarded = op.isGuarded
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .getPrivateProperty(let op):
                 $0.getPrivateProperty = Fuzzilli_Protobuf_GetPrivateProperty.with {
                     $0.propertyName = op.propertyName
+                    $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .setPrivateProperty(let op):
                 $0.setPrivateProperty = Fuzzilli_Protobuf_SetPrivateProperty.with {
                     $0.propertyName = op.propertyName
+                    $0.isGuarded = op.isGuarded
                 }
             case .updatePrivateProperty(let op):
                 $0.updatePrivateProperty = Fuzzilli_Protobuf_UpdatePrivateProperty.with {
                     $0.propertyName = op.propertyName
                     $0.op = convertEnum(op.op, BinaryOperator.allCases)
+                    $0.isGuarded = op.isGuarded
                 }
             case .callPrivateMethod(let op):
                 $0.callPrivateMethod = Fuzzilli_Protobuf_CallPrivateMethod.with {
                     $0.methodName = op.methodName
+                    $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
+                    $0.isCallOptional = op.isCallOptional
+                }
+            case .callPrivateMethodWithSpread(let op):
+                $0.callPrivateMethodWithSpread = Fuzzilli_Protobuf_CallPrivateMethodWithSpread.with
+                {
+                    $0.methodName = op.methodName
+                    $0.spreads = op.spreads
+                    $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .getSuperProperty(let op):
                 $0.getSuperProperty = Fuzzilli_Protobuf_GetSuperProperty.with {
@@ -1114,7 +1168,7 @@ extension Instruction: ProtobufConvertible {
                         }
                     $0.usingType = convertEnum(op.usingType, UsingType.allCases)
                     if case .destruct(let pattern) = op.header {
-                        $0.pattern = encodeDestructuringPattern(pattern)
+                        $0.pattern = encodeDestructuringPattern(pattern, mode: .declaration)
                     }
                 }
 
@@ -1155,8 +1209,10 @@ extension Instruction: ProtobufConvertible {
                 $0.loadNewTarget = Fuzzilli_Protobuf_LoadNewTarget()
             case .beginWasmModule:
                 $0.beginWasmModule = Fuzzilli_Protobuf_BeginWasmModule()
-            case .endWasmModule:
-                $0.endWasmModule = Fuzzilli_Protobuf_EndWasmModule()
+            case .endWasmModule(let op):
+                $0.endWasmModule = Fuzzilli_Protobuf_EndWasmModule.with {
+                    $0.hasStartFunction_p = op.hasStartFunction
+                }
             case .createWasmGlobal(let op):
                 $0.createWasmGlobal = Fuzzilli_Protobuf_CreateWasmGlobal.with {
                     $0.wasmGlobal.isMutable = op.isMutable
@@ -1237,21 +1293,16 @@ extension Instruction: ProtobufConvertible {
                 }
             case .destruct(let op):
                 $0.destruct = Fuzzilli_Protobuf_Destruct.with {
-                    $0.pattern = encodeDestructuringPattern(op.pattern)
+                    $0.pattern = encodeDestructuringPattern(op.pattern, mode: .declaration)
                 }
             case .destructAndReassign(let op):
                 $0.destructAndReassign = Fuzzilli_Protobuf_DestructAndReassign.with {
-                    $0.pattern = encodeDestructuringPattern(op.pattern)
+                    $0.pattern = encodeDestructuringPattern(op.pattern, mode: .assignment)
                 }
             case .print(_):
                 fatalError("Print operations should not be serialized")
-            case .createMap(let op):
-                $0.createMap = Fuzzilli_Protobuf_CreateMap.with {
-                    if let keyGroupName = op.keyGroupName, let valueGroupName = op.valueGroupName {
-                        $0.keyGroupName = keyGroupName
-                        $0.valueGroupName = valueGroupName
-                    }
-                }
+            case .createMap:
+                $0.createMap = Fuzzilli_Protobuf_CreateMap()
             // Wasm Operations
             case .consti64(let op):
                 $0.consti64 = Fuzzilli_Protobuf_Consti64.with { $0.value = op.value }
@@ -1333,6 +1384,36 @@ extension Instruction: ProtobufConvertible {
 
             case .wasmWrapi64Toi32(_):
                 $0.wasmWrapi64Toi32 = Fuzzilli_Protobuf_WasmWrapi64Toi32()
+            case .wasmJSStringLength(_):
+                $0.wasmJsstringLength = Fuzzilli_Protobuf_WasmJSStringLength()
+            case .wasmJSStringFromCharCodeArray(_):
+                $0.wasmJsstringFromCharCodeArray = Fuzzilli_Protobuf_WasmJSStringFromCharCodeArray()
+            case .wasmJSStringFromCharCode(_):
+                $0.wasmJsstringFromCharCode = Fuzzilli_Protobuf_WasmJSStringFromCharCode()
+            case .wasmJSStringFromCodePoint(_):
+                $0.wasmJsstringFromCodePoint = Fuzzilli_Protobuf_WasmJSStringFromCodePoint()
+            case .wasmJSStringCharCodeAt(_):
+                $0.wasmJsstringCharCodeAt = Fuzzilli_Protobuf_WasmJSStringCharCodeAt()
+            case .wasmJSStringCodePointAt(_):
+                $0.wasmJsstringCodePointAt = Fuzzilli_Protobuf_WasmJSStringCodePointAt()
+            case .wasmJSStringIntoCharCodeArray(_):
+                $0.wasmJsstringIntoCharCodeArray = Fuzzilli_Protobuf_WasmJSStringIntoCharCodeArray()
+            case .wasmJSStringCast(_):
+                $0.wasmJsstringCast = Fuzzilli_Protobuf_WasmJSStringCast()
+            case .wasmJSStringTest(_):
+                $0.wasmJsstringTest = Fuzzilli_Protobuf_WasmJSStringTest()
+            case .wasmJSStringConcat(_):
+                $0.wasmJsstringConcat = Fuzzilli_Protobuf_WasmJSStringConcat()
+            case .wasmJSStringSubstring(_):
+                $0.wasmJsstringSubstring = Fuzzilli_Protobuf_WasmJSStringSubstring()
+            case .wasmJSStringEquals(_):
+                $0.wasmJsstringEquals = Fuzzilli_Protobuf_WasmJSStringEquals()
+            case .wasmJSStringCompare(_):
+                $0.wasmJsstringCompare = Fuzzilli_Protobuf_WasmJSStringCompare()
+            case .wasmStringConstant(let op):
+                $0.wasmStringConstant = Fuzzilli_Protobuf_WasmStringConstant.with {
+                    $0.value = op.value
+                }
             case .wasmTruncatef32Toi32(let op):
                 $0.wasmTruncatef32Toi32 = Fuzzilli_Protobuf_WasmTruncatef32Toi32.with {
                     $0.isSigned = op.isSigned
@@ -1432,6 +1513,8 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmDropElementSegment = Fuzzilli_Protobuf_WasmDropElementSegment()
             case .wasmTableCopy(_):
                 $0.wasmTableCopy = Fuzzilli_Protobuf_WasmTableCopy()
+            case .wasmTableFill(_):
+                $0.wasmTableFill = Fuzzilli_Protobuf_WasmTableFill()
             case .wasmTableInit(_):
                 $0.wasmTableInit = Fuzzilli_Protobuf_WasmTableInit()
             case .wasmDefineMemory(let op):
@@ -1450,14 +1533,10 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmDefineDataSegment = Fuzzilli_Protobuf_WasmDefineDataSegment.with {
                     $0.segment = Data(op.segment)
                 }
-            case .wasmLoadGlobal(let op):
-                $0.wasmLoadGlobal = Fuzzilli_Protobuf_WasmLoadGlobal.with {
-                    $0.globalType = ILTypeToWasmTypeEnum(op.globalType)
-                }
-            case .wasmStoreGlobal(let op):
-                $0.wasmStoreGlobal = Fuzzilli_Protobuf_WasmStoreGlobal.with {
-                    $0.globalType = ILTypeToWasmTypeEnum(op.globalType)
-                }
+            case .wasmLoadGlobal(_):
+                $0.wasmLoadGlobal = Fuzzilli_Protobuf_WasmLoadGlobal()
+            case .wasmStoreGlobal(_):
+                $0.wasmStoreGlobal = Fuzzilli_Protobuf_WasmStoreGlobal()
             case .wasmTableGet(let op):
                 $0.wasmTableGet = Fuzzilli_Protobuf_WasmTableGet.with {
                     $0.elementType = ILTypeToWasmTypeEnum(op.elementType)
@@ -1623,6 +1702,14 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmBranchOnCast = Fuzzilli_Protobuf_WasmBranchOnCast.with {
                     $0.type = ILTypeToWasmTypeEnum(op.targetType)
                 }
+            case .wasmBranchOnCastDescEq(let op):
+                $0.wasmBranchOnCastDescEq = Fuzzilli_Protobuf_WasmBranchOnCastDescEq.with {
+                    $0.type = ILTypeToWasmTypeEnum(op.targetType)
+                }
+            case .wasmBranchOnCastDescEqFail(let op):
+                $0.wasmBranchOnCastDescEqFail = Fuzzilli_Protobuf_WasmBranchOnCastDescEqFail.with {
+                    $0.type = ILTypeToWasmTypeEnum(op.targetType)
+                }
             case .wasmBranchOnCastFail(let op):
                 $0.wasmBranchOnCastFail = Fuzzilli_Protobuf_WasmBranchOnCastFail.with {
                     $0.type = ILTypeToWasmTypeEnum(op.targetType)
@@ -1752,16 +1839,18 @@ extension Instruction: ProtobufConvertible {
                     $0.isFinal = op.isFinal
                 }
             case .wasmDefineStructType(let op):
-                $0.wasmDefineStructType = Fuzzilli_Protobuf_WasmDefineStructType.with {
-                    $0.fields = op.fields.map { field in
-                        return Fuzzilli_Protobuf_WasmStructField.with {
-                            $0.type = ILTypeToWasmTypeEnum(field.type)
-                            $0.mutability = field.mutability
+                $0.wasmDefineStructType =
+                    Fuzzilli_Protobuf_WasmDefineStructType.with {
+                        $0.fields = op.fields.map { field in
+                            return Fuzzilli_Protobuf_WasmStructField.with {
+                                $0.type = ILTypeToWasmTypeEnum(field.type)
+                                $0.mutability = field.mutability
+                            }
                         }
+                        $0.hasSuperType_p = op.hasSuperType
+                        $0.isFinal = op.isFinal
+                        $0.hasDescribes_p = op.hasDescribes
                     }
-                    $0.hasSuperType_p = op.hasSuperType
-                    $0.isFinal = op.isFinal
-                }
             case .wasmDefineForwardOrSelfReference(_):
                 $0.wasmDefineForwardOrSelfReference =
                     Fuzzilli_Protobuf_WasmDefineForwardOrSelfReference()
@@ -1771,6 +1860,10 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmArrayNewFixed = Fuzzilli_Protobuf_WasmArrayNewFixed()
             case .wasmArrayNewDefault(_):
                 $0.wasmArrayNewDefault = Fuzzilli_Protobuf_WasmArrayNewDefault()
+            case .wasmArrayNewData(_):
+                $0.wasmArrayNewData = Fuzzilli_Protobuf_WasmArrayNewData()
+            case .wasmArrayNewElem(_):
+                $0.wasmArrayNewElem = Fuzzilli_Protobuf_WasmArrayNewElem()
             case .wasmArrayLen(_):
                 $0.wasmArrayLen = Fuzzilli_Protobuf_WasmArrayLen()
             case .wasmArrayGet(let op):
@@ -1783,6 +1876,12 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmStructNewDefault = Fuzzilli_Protobuf_WasmStructNewDefault()
             case .wasmStructNew(_):
                 $0.wasmStructNew = Fuzzilli_Protobuf_WasmStructNew()
+            case .wasmStructNewDefaultDesc(_):
+                $0.wasmStructNewDefaultDesc = Fuzzilli_Protobuf_WasmStructNewDefaultDesc()
+            case .wasmStructNewDesc(_):
+                $0.wasmStructNewDesc = Fuzzilli_Protobuf_WasmStructNewDesc()
+            case .wasmRefGetDesc(_):
+                $0.wasmRefGetDesc = Fuzzilli_Protobuf_WasmRefGetDesc()
             case .wasmStructGet(let op):
                 $0.wasmStructGet = Fuzzilli_Protobuf_WasmStructGet.with {
                     $0.fieldIndex = Int32(op.fieldIndex)
@@ -1812,6 +1911,10 @@ extension Instruction: ProtobufConvertible {
                 }
             case .wasmRefCast(let op):
                 $0.wasmRefCast = Fuzzilli_Protobuf_WasmRefCast.with {
+                    $0.type = ILTypeToWasmTypeEnum(op.type)
+                }
+            case .wasmRefCastDescEq(let op):
+                $0.wasmRefCastDescEq = Fuzzilli_Protobuf_WasmRefCastDescEq.with {
                     $0.type = ILTypeToWasmTypeEnum(op.type)
                 }
             case .wasmRefI31(let op):
@@ -1884,10 +1987,16 @@ extension Instruction: ProtobufConvertible {
             return allValues[p.rawValue]
         }
 
-        func convertParameters(_ parameters: Fuzzilli_Protobuf_Parameters) -> Parameters {
+        func convertParameters(_ parameters: Fuzzilli_Protobuf_Parameters) throws -> Parameters {
+            var destructuringParameters = [Int: DestructuringPattern]()
+            for (idx, pattern) in parameters.destructuringParameters {
+                destructuringParameters[Int(idx)] = try decodeDestructuringPattern(
+                    from: pattern, mode: .parameter)
+            }
             return Parameters(
                 count: Int(parameters.count), hasRestParameter: parameters.hasRest_p,
-                defaultParameterIndices: parameters.defaultParameterIndices.map(Int.init))
+                defaultParameterIndices: parameters.defaultParameterIndices.map(Int.init),
+                destructuringParameters: destructuringParameters)
         }
 
         // Converts to the Wasm world global type
@@ -1917,13 +2026,18 @@ extension Instruction: ProtobufConvertible {
                     fatalError("Unrecognized wasm value type \(value)")
                 }
             case .refType(_):
-                if wasmType.refType.kind == .index {
-                    return .wasmRef(.Index(), nullability: wasmType.refType.nullability)
+                if wasmType.refType.kind == .index || wasmType.refType.kind == .indexExact {
+                    return .wasmRef(
+                        .Index(isExact: wasmType.refType.kind == .indexExact),
+                        nullability: wasmType.refType.nullability
+                    )
                 }
                 let heapType: WasmAbstractHeapType =
                     switch wasmType.refType.kind {
                     case .externref:
                         .WasmExtern
+                    case .jsstringref:
+                        .WasmJSString
                     case .funcref:
                         .WasmFunc
                     case .exnref:
@@ -1946,7 +2060,7 @@ extension Instruction: ProtobufConvertible {
                         .WasmNoFunc
                     case .noexnref:
                         .WasmNoExn
-                    case .index:
+                    case .index, .indexExact:
                         fatalError("Unexpected index type.")
                     case .UNRECOGNIZED(let value):
                         fatalError("Unrecognized wasm reference type \(value)")
@@ -2033,6 +2147,10 @@ extension Instruction: ProtobufConvertible {
                     return .exnref
                 case .i31Ref:
                     return .i31ref
+                case .index:
+                    return .indexRef
+                case .indexExact:
+                    return .indexExactRef
                 default:
                     fatalError("Unrecognized global wasm reference type \(val)")
                 }
@@ -2128,11 +2246,14 @@ extension Instruction: ProtobufConvertible {
             op = ObjectLiteralSetPrototype()
         case .beginObjectLiteralMethod(let p):
             op = BeginObjectLiteralMethod(
-                methodName: p.methodName, parameters: convertParameters(p.parameters))
+                methodName: p.methodName, parameters: try convertParameters(p.parameters),
+                isGenerator: p.isGenerator, isAsync: p.isAsync)
         case .endObjectLiteralMethod:
             op = EndObjectLiteralMethod()
         case .beginObjectLiteralComputedMethod(let p):
-            op = BeginObjectLiteralComputedMethod(parameters: convertParameters(p.parameters))
+            op = BeginObjectLiteralComputedMethod(
+                parameters: try convertParameters(p.parameters), isGenerator: p.isGenerator,
+                isAsync: p.isAsync)
         case .endObjectLiteralComputedMethod:
             op = EndObjectLiteralComputedMethod()
         case .beginObjectLiteralGetter(let p):
@@ -2157,7 +2278,7 @@ extension Instruction: ProtobufConvertible {
             op = BeginClassDefinition(
                 hasSuperclass: p.hasSuperclass_p, isExpression: p.isExpression)
         case .beginClassConstructor(let p):
-            op = BeginClassConstructor(parameters: convertParameters(p.parameters))
+            op = BeginClassConstructor(parameters: try convertParameters(p.parameters))
         case .endClassConstructor:
             op = EndClassConstructor()
         case .classAddProperty(let p):
@@ -2169,13 +2290,14 @@ extension Instruction: ProtobufConvertible {
             op = ClassAddComputedProperty(hasValue: p.hasValue_p, isStatic: p.isStatic)
         case .beginClassMethod(let p):
             op = BeginClassMethod(
-                methodName: p.methodName, parameters: convertParameters(p.parameters),
-                isStatic: p.isStatic)
+                methodName: p.methodName, parameters: try convertParameters(p.parameters),
+                isStatic: p.isStatic, isGenerator: p.isGenerator, isAsync: p.isAsync)
         case .endClassMethod:
             op = EndClassMethod()
         case .beginClassComputedMethod(let p):
             op = BeginClassComputedMethod(
-                parameters: convertParameters(p.parameters), isStatic: p.isStatic)
+                parameters: try convertParameters(p.parameters), isStatic: p.isStatic,
+                isGenerator: p.isGenerator, isAsync: p.isAsync)
         case .endClassComputedMethod:
             op = EndClassComputedMethod()
         case .beginClassGetter(let p):
@@ -2203,16 +2325,22 @@ extension Instruction: ProtobufConvertible {
                 propertyName: p.propertyName, hasValue: p.hasValue_p, isStatic: p.isStatic)
         case .beginClassPrivateMethod(let p):
             op = BeginClassPrivateMethod(
-                methodName: p.methodName, parameters: convertParameters(p.parameters),
-                isStatic: p.isStatic)
+                methodName: p.methodName, parameters: try convertParameters(p.parameters),
+                isStatic: p.isStatic, isGenerator: p.isGenerator, isAsync: p.isAsync)
         case .endClassPrivateMethod:
             op = EndClassPrivateMethod()
+        case .beginClassPrivateGetter(let p):
+            op = BeginClassPrivateGetter(propertyName: p.propertyName, isStatic: p.isStatic)
+        case .endClassPrivateGetter:
+            op = EndClassPrivateGetter()
+        case .beginClassPrivateSetter(let p):
+            op = BeginClassPrivateSetter(propertyName: p.propertyName, isStatic: p.isStatic)
+        case .endClassPrivateSetter:
+            op = EndClassPrivateSetter()
         case .endClassDefinition:
             op = EndClassDefinition()
-        case .createArray(let p):
-            let elementGroupName = p.hasElementGroupName ? p.elementGroupName : nil
-            op = CreateArray(
-                numInitialValues: inouts.count - 1, elementGroupName: elementGroupName)
+        case .createArray:
+            op = CreateArray(numInitialValues: inouts.count - 1)
         case .createIntArray(let p):
             op = CreateIntArray(values: p.values)
         case .createFloatArray(let p):
@@ -2222,15 +2350,18 @@ extension Instruction: ProtobufConvertible {
         case .createTemplateString(let p):
             op = CreateTemplateString(parts: p.parts)
         case .getProperty(let p):
-            op = GetProperty(propertyName: p.propertyName, isGuarded: p.isGuarded)
+            op = GetProperty(
+                propertyName: p.propertyName, isReceiverOptional: p.isReceiverOptional)
         case .setProperty(let p):
             op = SetProperty(propertyName: p.propertyName, isGuarded: p.isGuarded)
         case .updateProperty(let p):
             op = UpdateProperty(
                 propertyName: p.propertyName,
-                operator: try convertEnum(p.op, BinaryOperator.allCases))
+                operator: try convertEnum(p.op, BinaryOperator.allCases),
+                isGuarded: p.isGuarded)
         case .deleteProperty(let p):
-            op = DeleteProperty(propertyName: p.propertyName, isGuarded: p.isGuarded)
+            op = DeleteProperty(
+                propertyName: p.propertyName, isReceiverOptional: p.isReceiverOptional)
         case .configureProperty(let p):
             var flags = PropertyFlags()
             if p.isWritable { flags.insert(.writable) }
@@ -2240,14 +2371,16 @@ extension Instruction: ProtobufConvertible {
                 propertyName: p.propertyName, flags: flags,
                 type: try convertEnum(p.type, PropertyType.allCases))
         case .getElement(let p):
-            op = GetElement(index: p.index, isGuarded: p.isGuarded)
+            op = GetElement(index: p.index, isReceiverOptional: p.isReceiverOptional)
         case .setElement(let p):
-            op = SetElement(index: p.index)
+            op = SetElement(index: p.index, isGuarded: p.isGuarded)
         case .updateElement(let p):
             op = UpdateElement(
-                index: p.index, operator: try convertEnum(p.op, BinaryOperator.allCases))
+                index: p.index,
+                operator: try convertEnum(p.op, BinaryOperator.allCases),
+                isGuarded: p.isGuarded)
         case .deleteElement(let p):
-            op = DeleteElement(index: p.index, isGuarded: p.isGuarded)
+            op = DeleteElement(index: p.index, isReceiverOptional: p.isReceiverOptional)
         case .configureElement(let p):
             var flags = PropertyFlags()
             if p.isWritable { flags.insert(.writable) }
@@ -2256,13 +2389,15 @@ extension Instruction: ProtobufConvertible {
             op = ConfigureElement(
                 index: p.index, flags: flags, type: try convertEnum(p.type, PropertyType.allCases))
         case .getComputedProperty(let p):
-            op = GetComputedProperty(isGuarded: p.isGuarded)
-        case .setComputedProperty:
-            op = SetComputedProperty()
+            op = GetComputedProperty(isReceiverOptional: p.isReceiverOptional)
+        case .setComputedProperty(let p):
+            op = SetComputedProperty(isGuarded: p.isGuarded)
         case .updateComputedProperty(let p):
-            op = UpdateComputedProperty(operator: try convertEnum(p.op, BinaryOperator.allCases))
+            op = UpdateComputedProperty(
+                operator: try convertEnum(p.op, BinaryOperator.allCases),
+                isGuarded: p.isGuarded)
         case .deleteComputedProperty(let p):
-            op = DeleteComputedProperty(isGuarded: p.isGuarded)
+            op = DeleteComputedProperty(isReceiverOptional: p.isReceiverOptional)
         case .configureComputedProperty(let p):
             var flags = PropertyFlags()
             if p.isWritable { flags.insert(.writable) }
@@ -2279,47 +2414,47 @@ extension Instruction: ProtobufConvertible {
         case .testIn:
             op = TestIn()
         case .beginPlainFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             let functionName = p.name.isEmpty ? nil : p.name
             op = BeginPlainFunction(parameters: parameters, functionName: functionName)
         case .endPlainFunction:
             op = EndPlainFunction()
         case .beginWorkerFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             let functionName = p.name.isEmpty ? nil : p.name
             op = BeginWorkerFunction(parameters: parameters, functionName: functionName)
         case .endWorkerFunction:
             op = EndWorkerFunction()
         case .beginArrowFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             op = BeginArrowFunction(parameters: parameters)
         case .endArrowFunction:
             op = EndArrowFunction()
         case .beginGeneratorFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             let functionName = p.name.isEmpty ? nil : p.name
             op = BeginGeneratorFunction(parameters: parameters, functionName: functionName)
         case .endGeneratorFunction:
             op = EndGeneratorFunction()
         case .beginAsyncFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             let functionName = p.name.isEmpty ? nil : p.name
             op = BeginAsyncFunction(parameters: parameters, functionName: functionName)
         case .endAsyncFunction:
             op = EndAsyncFunction()
         case .beginAsyncArrowFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             op = BeginAsyncArrowFunction(parameters: parameters)
         case .endAsyncArrowFunction:
             op = EndAsyncArrowFunction()
         case .beginAsyncGeneratorFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             let functionName = p.name.isEmpty ? nil : p.name
             op = BeginAsyncGeneratorFunction(parameters: parameters, functionName: functionName)
         case .endAsyncGeneratorFunction:
             op = EndAsyncGeneratorFunction()
         case .beginConstructor(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             op = BeginConstructor(parameters: parameters)
         case .endConstructor:
             op = EndConstructor()
@@ -2336,10 +2471,13 @@ extension Instruction: ProtobufConvertible {
         case .await:
             op = Await()
         case .callFunction(let p):
-            op = CallFunction(numArguments: inouts.count - 2, isGuarded: p.isGuarded)
+            op = CallFunction(
+                numArguments: inouts.count - 2, isGuarded: p.isGuarded,
+                isCallOptional: p.isCallOptional)
         case .callFunctionWithSpread(let p):
             op = CallFunctionWithSpread(
-                numArguments: inouts.count - 2, spreads: p.spreads, isGuarded: p.isGuarded)
+                numArguments: inouts.count - 2, spreads: p.spreads, isGuarded: p.isGuarded,
+                isCallOptional: p.isCallOptional)
         case .construct(let p):
             op = Construct(numArguments: inouts.count - 2, isGuarded: p.isGuarded)
         case .constructWithSpread(let p):
@@ -2347,16 +2485,21 @@ extension Instruction: ProtobufConvertible {
                 numArguments: inouts.count - 2, spreads: p.spreads, isGuarded: p.isGuarded)
         case .callMethod(let p):
             op = CallMethod(
-                methodName: p.methodName, numArguments: inouts.count - 2, isGuarded: p.isGuarded)
+                methodName: p.methodName, numArguments: inouts.count - 2, isGuarded: p.isGuarded,
+                isReceiverOptional: p.isReceiverOptional, isCallOptional: p.isCallOptional)
         case .callMethodWithSpread(let p):
             op = CallMethodWithSpread(
                 methodName: p.methodName, numArguments: inouts.count - 2, spreads: p.spreads,
-                isGuarded: p.isGuarded)
+                isGuarded: p.isGuarded, isReceiverOptional: p.isReceiverOptional,
+                isCallOptional: p.isCallOptional)
         case .callComputedMethod(let p):
-            op = CallComputedMethod(numArguments: inouts.count - 3, isGuarded: p.isGuarded)
+            op = CallComputedMethod(
+                numArguments: inouts.count - 3, isGuarded: p.isGuarded,
+                isReceiverOptional: p.isReceiverOptional, isCallOptional: p.isCallOptional)
         case .callComputedMethodWithSpread(let p):
             op = CallComputedMethodWithSpread(
-                numArguments: inouts.count - 3, spreads: p.spreads, isGuarded: p.isGuarded)
+                numArguments: inouts.count - 3, spreads: p.spreads, isGuarded: p.isGuarded,
+                isReceiverOptional: p.isReceiverOptional, isCallOptional: p.isCallOptional)
         case .unaryOperation(let p):
             op = UnaryOperation(try convertEnum(p.op, UnaryOperator.allCases))
         case .binaryOperation(let p):
@@ -2387,17 +2530,29 @@ extension Instruction: ProtobufConvertible {
         case .callSuperConstructor:
             op = CallSuperConstructor(numArguments: inouts.count)
         case .callSuperMethod(let p):
-            op = CallSuperMethod(methodName: p.methodName, numArguments: inouts.count - 1)
+            op = CallSuperMethod(
+                methodName: p.methodName, numArguments: inouts.count - 1, isGuarded: p.isGuarded,
+                isCallOptional: p.isCallOptional)
         case .getPrivateProperty(let p):
-            op = GetPrivateProperty(propertyName: p.propertyName)
+            op = GetPrivateProperty(
+                propertyName: p.propertyName, isGuarded: p.isGuarded,
+                isReceiverOptional: p.isReceiverOptional)
         case .setPrivateProperty(let p):
-            op = SetPrivateProperty(propertyName: p.propertyName)
+            op = SetPrivateProperty(propertyName: p.propertyName, isGuarded: p.isGuarded)
         case .updatePrivateProperty(let p):
             op = UpdatePrivateProperty(
                 propertyName: p.propertyName,
-                operator: try convertEnum(p.op, BinaryOperator.allCases))
+                operator: try convertEnum(p.op, BinaryOperator.allCases),
+                isGuarded: p.isGuarded)
         case .callPrivateMethod(let p):
-            op = CallPrivateMethod(methodName: p.methodName, numArguments: inouts.count - 2)
+            op = CallPrivateMethod(
+                methodName: p.methodName, numArguments: inouts.count - 2, isGuarded: p.isGuarded,
+                isReceiverOptional: p.isReceiverOptional, isCallOptional: p.isCallOptional)
+        case .callPrivateMethodWithSpread(let p):
+            op = CallPrivateMethodWithSpread(
+                methodName: p.methodName, numArguments: inouts.count - 2, spreads: p.spreads,
+                isGuarded: p.isGuarded, isReceiverOptional: p.isReceiverOptional,
+                isCallOptional: p.isCallOptional)
         case .getSuperProperty(let p):
             op = GetSuperProperty(propertyName: p.propertyName)
         case .setSuperProperty(let p):
@@ -2470,7 +2625,7 @@ extension Instruction: ProtobufConvertible {
                 case .destruct:
                     .destruct(
                         pattern: try decodeDestructuringPattern(
-                            from: p.pattern, isDeclaration: true))
+                            from: p.pattern, mode: .declaration))
                 default:
                     .simple
                 }
@@ -2547,7 +2702,7 @@ extension Instruction: ProtobufConvertible {
         case .dynamicImport(let p):
             op = DynamicImport(isDeferred: p.isDeferred)
         case .destruct(let p):
-            let pattern = try decodeDestructuringPattern(from: p.pattern, isDeclaration: true)
+            let pattern = try decodeDestructuringPattern(from: p.pattern, mode: .declaration)
             let numInputs = inouts.count - pattern.numBindings
             guard numInputs == 1 + pattern.numExtraInputs else {
                 throw FuzzilliError.instructionDecodingError(
@@ -2557,7 +2712,7 @@ extension Instruction: ProtobufConvertible {
                 pattern: pattern, numInputs: numInputs,
                 numOutputs: pattern.numBindings)
         case .destructAndReassign(let p):
-            let pattern = try decodeDestructuringPattern(from: p.pattern, isDeclaration: false)
+            let pattern = try decodeDestructuringPattern(from: p.pattern, mode: .assignment)
             guard inouts.count == 1 + pattern.numExtraInputs + pattern.numBindings else {
                 throw FuzzilliError.instructionDecodingError(
                     "Invalid number of inputs for DestructAndReassign")
@@ -2599,22 +2754,14 @@ extension Instruction: ProtobufConvertible {
             op = BindFunction(numInputs: inouts.count - 1)
         case .print(_):
             fatalError("Should not deserialize a Print instruction!")
-        case .createMap(let p):
-            var keyGroupName: String? = nil
-            var valueGroupName: String? = nil
-            if p.hasKeyGroupName && p.hasValueGroupName {
-                keyGroupName = p.keyGroupName
-                valueGroupName = p.valueGroupName
-            }
-            op = CreateMap(
-                numInitialValues: inouts.count - 1, keyGroupName: keyGroupName,
-                valueGroupName: valueGroupName)
+        case .createMap:
+            op = CreateMap(numInitialValues: inouts.count - 1)
 
         // Wasm cases
         case .beginWasmModule(_):
             op = BeginWasmModule()
-        case .endWasmModule(_):
-            op = EndWasmModule()
+        case .endWasmModule(let p):
+            op = EndWasmModule(hasStartFunction: p.hasStartFunction_p)
         case .consti64(let p):
             op = Consti64(value: p.value)
         case .consti32(let p):
@@ -2670,6 +2817,34 @@ extension Instruction: ProtobufConvertible {
 
         case .wasmWrapi64Toi32(_):
             op = WasmWrapi64Toi32()
+        case .wasmJsstringLength(_):
+            op = WasmJSStringLength()
+        case .wasmJsstringFromCharCodeArray(_):
+            op = WasmJSStringFromCharCodeArray()
+        case .wasmJsstringFromCharCode(_):
+            op = WasmJSStringFromCharCode()
+        case .wasmJsstringFromCodePoint(_):
+            op = WasmJSStringFromCodePoint()
+        case .wasmJsstringCharCodeAt(_):
+            op = WasmJSStringCharCodeAt()
+        case .wasmJsstringCodePointAt(_):
+            op = WasmJSStringCodePointAt()
+        case .wasmJsstringIntoCharCodeArray(_):
+            op = WasmJSStringIntoCharCodeArray()
+        case .wasmJsstringCast(_):
+            op = WasmJSStringCast()
+        case .wasmJsstringTest(_):
+            op = WasmJSStringTest()
+        case .wasmJsstringConcat(_):
+            op = WasmJSStringConcat()
+        case .wasmJsstringSubstring(_):
+            op = WasmJSStringSubstring()
+        case .wasmJsstringEquals(_):
+            op = WasmJSStringEquals()
+        case .wasmJsstringCompare(_):
+            op = WasmJSStringCompare()
+        case .wasmStringConstant(let p):
+            op = WasmStringConstant(value: p.value)
         case .wasmTruncatef32Toi32(let p):
             op = WasmTruncatef32Toi32(isSigned: p.isSigned)
         case .wasmTruncatef64Toi32(let p):
@@ -2738,6 +2913,8 @@ extension Instruction: ProtobufConvertible {
             op = WasmTableInit()
         case .wasmTableCopy(_):
             op = WasmTableCopy()
+        case .wasmTableFill(_):
+            op = WasmTableFill()
         case .wasmDefineMemory(let p):
             let maxPages = p.wasmMemory.hasMaxPages ? Int(p.wasmMemory.maxPages) : nil
             op = WasmDefineMemory(
@@ -2745,10 +2922,10 @@ extension Instruction: ProtobufConvertible {
                 isShared: p.wasmMemory.isShared, isMemory64: p.wasmMemory.isMemory64)
         case .wasmDefineDataSegment(let p):
             op = WasmDefineDataSegment(segment: [UInt8](p.segment))
-        case .wasmLoadGlobal(let p):
-            op = WasmLoadGlobal(globalType: WasmTypeEnumToILType(p.globalType))
-        case .wasmStoreGlobal(let p):
-            op = WasmStoreGlobal(globalType: WasmTypeEnumToILType(p.globalType))
+        case .wasmLoadGlobal(_):
+            op = WasmLoadGlobal()
+        case .wasmStoreGlobal(_):
+            op = WasmStoreGlobal()
         case .wasmTableGet(let p):
             op = WasmTableGet(elementType: WasmTypeEnumToILType(p.elementType))
         case .wasmTableSet(_):
@@ -2845,6 +3022,16 @@ extension Instruction: ProtobufConvertible {
             let type = WasmTypeEnumToILType(p.type)
             op = WasmBranchOnCast(
                 parameterCount: (inouts.count - 3 - type.requiredInputCount()) / 2,
+                targetRefType: type)
+        case .wasmBranchOnCastDescEq(let p):
+            let type = WasmTypeEnumToILType(p.type)
+            op = WasmBranchOnCastDescEq(
+                parameterCount: (inouts.count - 4) / 2,
+                targetRefType: type)
+        case .wasmBranchOnCastDescEqFail(let p):
+            let type = WasmTypeEnumToILType(p.type)
+            op = WasmBranchOnCastDescEqFail(
+                parameterCount: (inouts.count - 4) / 2,
                 targetRefType: type)
         case .wasmBranchOnCastFail(let p):
             let type = WasmTypeEnumToILType(p.type)
@@ -2953,7 +3140,8 @@ extension Instruction: ProtobufConvertible {
                     return WasmDefineStructType.Field(
                         type: WasmTypeEnumToILType(field.type), mutability: field.mutability)
                 },
-                hasSuperType: p.hasSuperType_p, isFinal: p.isFinal)
+                hasSuperType: p.hasSuperType_p, isFinal: p.isFinal,
+                hasDescribes: p.hasDescribes_p)
         case .wasmDefineForwardOrSelfReference(_):
             op = WasmDefineForwardOrSelfReference()
         case .wasmResolveForwardReference(_):
@@ -2962,6 +3150,10 @@ extension Instruction: ProtobufConvertible {
             op = WasmArrayNewFixed(size: inouts.count - 2)
         case .wasmArrayNewDefault(_):
             op = WasmArrayNewDefault()
+        case .wasmArrayNewData(_):
+            op = WasmArrayNewData()
+        case .wasmArrayNewElem(_):
+            op = WasmArrayNewElem()
         case .wasmArrayLen(_):
             op = WasmArrayLen()
         case .wasmArrayGet(let p):
@@ -2972,6 +3164,12 @@ extension Instruction: ProtobufConvertible {
             op = WasmStructNew(fieldCount: inouts.count - 2)
         case .wasmStructNewDefault(_):
             op = WasmStructNewDefault()
+        case .wasmStructNewDesc(_):
+            op = WasmStructNewDesc(fieldCount: inouts.count - 3)
+        case .wasmRefGetDesc(_):
+            op = WasmRefGetDesc()
+        case .wasmStructNewDefaultDesc(_):
+            op = WasmStructNewDefaultDesc()
         case .wasmStructGet(let p):
             op = WasmStructGet(fieldIndex: Int(p.fieldIndex), isSigned: p.isSigned)
         case .wasmStructSet(let p):
@@ -2991,6 +3189,8 @@ extension Instruction: ProtobufConvertible {
             op = WasmRefTest(refType: WasmTypeEnumToILType(p.type))
         case .wasmRefCast(let p):
             op = WasmRefCast(refType: WasmTypeEnumToILType(p.type))
+        case .wasmRefCastDescEq(let p):
+            op = WasmRefCastDescEq(refType: WasmTypeEnumToILType(p.type))
         case .wasmRefI31(let p):
             op = WasmRefI31(isShared: p.isShared)
         case .wasmI31Get(let p):
@@ -3092,31 +3292,63 @@ extension Operation {
     }
 }
 
-private func encodeDestructuringTarget(_ target: DestructuringPattern.Target)
+enum DestructuringMode {
+    case declaration
+    case assignment
+    // TODO: merge with .declaration once we support computed keys and defaults in parameters.
+    case parameter
+}
+
+private func encodeDestructuringTarget(
+    _ target: DestructuringPattern.Target, mode: DestructuringMode
+)
     -> Fuzzilli_Protobuf_FuzzILDestructuringPattern.Target
 {
+    func checkValidTarget() {
+        if mode != .assignment {
+            fatalError("Member expression targets are only valid in destructuring for assignment")
+        }
+    }
+
     return Fuzzilli_Protobuf_FuzzILDestructuringPattern.Target.with { encodedTarget in
         switch target {
         case .flatBinding: encodedTarget.flatBinding = Fuzzilli_Protobuf_Empty()
-        case .pattern(let pattern): encodedTarget.pattern = encodeDestructuringPattern(pattern)
-        case .property(let propertyName): encodedTarget.property = propertyName
-        case .element(let index): encodedTarget.element = index
-        case .computedProperty: encodedTarget.computedProperty = Fuzzilli_Protobuf_Empty()
-        case .superProperty(let propertyName): encodedTarget.superProperty = propertyName
-        case .superElement(let index): encodedTarget.superElement = index
-        case .superComputedProperty: encodedTarget.superComputedProperty = Fuzzilli_Protobuf_Empty()
+        case .pattern(let pattern):
+            encodedTarget.pattern = encodeDestructuringPattern(pattern, mode: mode)
+        case .property(let propertyName):
+            checkValidTarget()
+            encodedTarget.property = propertyName
+        case .element(let index):
+            checkValidTarget()
+            encodedTarget.element = index
+        case .computedProperty:
+            checkValidTarget()
+            encodedTarget.computedProperty = Fuzzilli_Protobuf_Empty()
+        case .superProperty(let propertyName):
+            checkValidTarget()
+            encodedTarget.superProperty = propertyName
+        case .superElement(let index):
+            checkValidTarget()
+            encodedTarget.superElement = index
+        case .superComputedProperty:
+            checkValidTarget()
+            encodedTarget.superComputedProperty = Fuzzilli_Protobuf_Empty()
+        case .privateProperty(let propertyName):
+            checkValidTarget()
+            encodedTarget.privateProperty = propertyName
         }
     }
 }
 
 private func decodeDestructuringTarget(
     from targetProto: Fuzzilli_Protobuf_FuzzILDestructuringPattern.Target,
-    isDeclaration: Bool
+    mode: DestructuringMode
 ) throws -> DestructuringPattern.Target {
     func checkValidTarget() throws {
-        if isDeclaration {
+        if mode != .assignment {
             throw FuzzilliError.instructionDecodingError(
-                "Member expression targets are only valid in DestructAndReassign, not Destruct")
+                "Member expression targets are only valid in destructuring for assignment"
+            )
         }
     }
 
@@ -3124,7 +3356,7 @@ private func decodeDestructuringTarget(
     case .flatBinding(_): return .flatBinding
     case .pattern(let patternProto):
         return .pattern(
-            try decodeDestructuringPattern(from: patternProto, isDeclaration: isDeclaration))
+            try decodeDestructuringPattern(from: patternProto, mode: mode))
     case .property(let propertyName):
         try checkValidTarget()
         return .property(propertyName)
@@ -3143,12 +3375,15 @@ private func decodeDestructuringTarget(
     case .superComputedProperty(_):
         try checkValidTarget()
         return .superComputedProperty
+    case .privateProperty(let propertyName):
+        try checkValidTarget()
+        return .privateProperty(propertyName)
     case nil:
         throw FuzzilliError.instructionDecodingError("Missing or invalid target")
     }
 }
 
-private func encodeDestructuringPattern(_ pattern: DestructuringPattern)
+private func encodeDestructuringPattern(_ pattern: DestructuringPattern, mode: DestructuringMode)
     -> Fuzzilli_Protobuf_FuzzILDestructuringPattern
 {
     switch pattern {
@@ -3162,9 +3397,18 @@ private func encodeDestructuringPattern(_ pattern: DestructuringPattern)
                         case .string(let s):
                             propProto.stringKey = s
                         case .computed:
+                            if mode == .parameter {
+                                fatalError(
+                                    "Computed keys are not supported in parameter destructuring")
+                            }
                             propProto.computedKey = Fuzzilli_Protobuf_Empty()
                         }
-                        propProto.target = encodeDestructuringTarget(prop.target)
+                        propProto.target = encodeDestructuringTarget(prop.target, mode: mode)
+
+                        if mode == .parameter && prop.hasDefaultValue {
+                            fatalError(
+                                "Default values in parameter destructuring are not yet supported")
+                        }
                         propProto.hasDefaultValue_p = prop.hasDefaultValue
                     }
                 }
@@ -3178,13 +3422,17 @@ private func encodeDestructuringPattern(_ pattern: DestructuringPattern)
                     Fuzzilli_Protobuf_FuzzILDestructuringPattern.ArrayElement.with {
                         elemProto in
                         if let target = elem.target {
-                            elemProto.target = encodeDestructuringTarget(target)
+                            elemProto.target = encodeDestructuringTarget(target, mode: mode)
+                        }
+                        if mode == .parameter && elem.hasDefaultValue {
+                            fatalError(
+                                "Default values in parameter destructuring are not yet supported")
                         }
                         elemProto.hasDefaultValue_p = elem.hasDefaultValue
                     }
                 }
                 if let restTarget = arr.restTarget {
-                    $0.restTarget = encodeDestructuringTarget(restTarget)
+                    $0.restTarget = encodeDestructuringTarget(restTarget, mode: mode)
                 }
             }
         }
@@ -3192,7 +3440,7 @@ private func encodeDestructuringPattern(_ pattern: DestructuringPattern)
 }
 
 private func decodeDestructuringPattern(
-    from proto: Fuzzilli_Protobuf_FuzzILDestructuringPattern, isDeclaration: Bool
+    from proto: Fuzzilli_Protobuf_FuzzILDestructuringPattern, mode: DestructuringMode
 )
     throws -> DestructuringPattern
 {
@@ -3200,19 +3448,30 @@ private func decodeDestructuringPattern(
     case .objectPattern(let objProto):
         let properties = try objProto.properties.map {
             propProto -> DestructuringPattern.ObjectProperty in
-            let key: DestructuringPattern.ObjectProperty.Key =
-                switch propProto.key {
-                case .stringKey(let s): .string(s)
-                case .computedKey(_): .computed
-                case nil:
+            let key: DestructuringPattern.ObjectProperty.Key
+            switch propProto.key {
+            case .stringKey(let s):
+                key = .string(s)
+            case .computedKey(_):
+                if mode == .parameter {
                     throw FuzzilliError.instructionDecodingError(
-                        "Missing or invalid key in ObjectProperty")
+                        "Computed keys are not supported in parameter destructuring")
                 }
+                key = .computed
+            case nil:
+                throw FuzzilliError.instructionDecodingError(
+                    "Missing or invalid key in ObjectProperty")
+            }
+
+            if mode == .parameter && propProto.hasDefaultValue_p {
+                throw FuzzilliError.instructionDecodingError(
+                    "Default values in parameter destructuring are not yet supported")
+            }
 
             return DestructuringPattern.ObjectProperty(
                 key: key,
                 target: try decodeDestructuringTarget(
-                    from: propProto.target, isDeclaration: isDeclaration),
+                    from: propProto.target, mode: mode),
                 hasDefaultValue: propProto.hasDefaultValue_p)
         }
         return .object(
@@ -3224,14 +3483,18 @@ private func decodeDestructuringPattern(
             let target: DestructuringPattern.Target? =
                 elemProto.hasTarget
                 ? try decodeDestructuringTarget(
-                    from: elemProto.target, isDeclaration: isDeclaration) : nil
+                    from: elemProto.target, mode: mode) : nil
+            if mode == .parameter && elemProto.hasDefaultValue_p {
+                throw FuzzilliError.instructionDecodingError(
+                    "Default values in parameter destructuring are not yet supported")
+            }
             return DestructuringPattern.ArrayElement(
                 target: target, hasDefaultValue: elemProto.hasDefaultValue_p)
         }
 
         let restTarget: DestructuringPattern.Target? =
             arrProto.hasRestTarget
-            ? try decodeDestructuringTarget(from: arrProto.restTarget, isDeclaration: isDeclaration)
+            ? try decodeDestructuringTarget(from: arrProto.restTarget, mode: mode)
             : nil
         return .array(DestructuringPattern.ArrayPattern(elements: elements, restTarget: restTarget))
 

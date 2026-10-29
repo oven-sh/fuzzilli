@@ -28,7 +28,7 @@ public let ProgramTemplates = [
 
     WasmProgramTemplate("WasmCodegen50") { b in
         b.buildPrefix()
-        let m = b.buildWasmModule { _ in
+        let m = b.buildWasmModule(possiblyWithStartFunction: true) { _ in
             b.build(n: 50)
         }
         b.build(n: 10)
@@ -40,7 +40,7 @@ public let ProgramTemplates = [
 
     WasmProgramTemplate("WasmCodegen100") { b in
         b.buildPrefix()
-        let m = b.buildWasmModule { _ in
+        let m = b.buildWasmModule(possiblyWithStartFunction: true) { _ in
             b.build(n: 100)
         }
         b.build(n: 10)
@@ -53,7 +53,7 @@ public let ProgramTemplates = [
     WasmProgramTemplate("MixedJsAndWasm1") { b in
         b.buildPrefix()
         b.build(n: 10)
-        let m = b.buildWasmModule { _ in
+        let m = b.buildWasmModule(possiblyWithStartFunction: true) { _ in
             b.build(n: 30)
         }
         b.build(n: 20)
@@ -66,11 +66,11 @@ public let ProgramTemplates = [
     WasmProgramTemplate("MixedJsAndWasm2") { b in
         b.buildPrefix()
         b.build(n: 10)
-        b.buildWasmModule { _ in
+        b.buildWasmModule(possiblyWithStartFunction: true) { _ in
             b.build(n: 20)
         }
         b.build(n: 10)
-        let m = b.buildWasmModule { _ in
+        let m = b.buildWasmModule(possiblyWithStartFunction: true) { _ in
             b.build(n: 20)
         }
         b.build(n: 20)
@@ -109,7 +109,7 @@ public let ProgramTemplates = [
             signature, availableTypes: allWasmTypes)
         let wrapped = b.wrapSuspending(function: f!)
 
-        let m = b.buildWasmModule { mod in
+        let m = b.buildWasmModule(possiblyWithStartFunction: true) { mod in
             mod.addWasmFunction(with: [] => []) { fbuilder, _, _ in
                 // This will create a bunch of locals, which should create large (>4KB) frames.
                 if probability(0.02) {
@@ -162,7 +162,7 @@ public let ProgramTemplates = [
         let catchBlockOutputTypes =
             b.type(of: tagToCatchForRethrow).wasmTagType!.parameters + [.wasmExnRef()]
 
-        let module = b.buildWasmModule { wasmModule in
+        let module = b.buildWasmModule(possiblyWithStartFunction: true) { wasmModule in
             // Wasm function that throws a tag, catches a tag (the same or a different one) to
             // rethrow it again (or another exnref if present).
             wasmModule.addWasmFunction(with: [] => []) { function, label, args in
@@ -234,7 +234,7 @@ public let ProgramTemplates = [
         let useTable64 = Bool.random()
         let numCallees = Int.random(in: 1...5)
 
-        let module = b.buildWasmModule { wasmModule in
+        let module = b.buildWasmModule(possiblyWithStartFunction: true) { wasmModule in
             let callees = (0..<numCallees).map { _ in
                 wasmModule.addWasmFunction(signature: calleeSigDef) { function, label, params in
                     b.build(n: 10)
@@ -578,7 +578,7 @@ public let ProgramTemplates = [
             minPages: 1, maxPages: Int.random(in: 50...200), isShared: isShared,
             isMemory64: isMemory64)
 
-        let module = b.buildWasmModule { m in
+        let module = b.buildWasmModule(possiblyWithStartFunction: true) { m in
             let internalMem = m.addMemory(
                 minPages: 1, maxPages: Int.random(in: 50...200), isShared: isShared,
                 isMemory64: isMemory64)
@@ -599,8 +599,9 @@ public let ProgramTemplates = [
 
         // 2. In JavaScript, obtain references to the exported Wasm function and memory.
         let exports = module.loadExports()
-        let wasmFunc = b.getProperty("w0", of: exports)
-        let exportedMem = b.getProperty("wm0", of: exports)
+        let wasmFunc = b.getProperty(module.getExportedMethod(at: 0), of: exports)
+        let exportedMem = b.getProperty(
+            WasmModuleInterface.exportName(of: .memory, index: 0, isImport: false), of: exports)
 
         // 3. Create a ResizableArrayBuffer (RAB) and a random TypedArray view on the Wasm memory.
         let rab = b.callMethod("toResizableBuffer", on: exportedMem)
@@ -637,7 +638,7 @@ public let ProgramTemplates = [
             minPages: 1, maxPages: 256, isShared: false, isMemory64: probability(0.5))
 
         // 1. Setup: Wasm Module with Memory and Grow export
-        let module = b.buildWasmModule { m in
+        let module = b.buildWasmModule(possiblyWithStartFunction: true) { m in
             let mem = m.addMemory(
                 minPages: 1, maxPages: 256, isShared: false, isMemory64: probability(0.5))
             m.addWasmFunction(with: [.wasmi32] => [.wasmi32]) { f, _, args in
@@ -652,8 +653,9 @@ public let ProgramTemplates = [
             }
         }
         let exports = module.loadExports()
-        let memory = b.getProperty("wm0", of: exports)
-        let wasmGrow = b.getProperty("w0", of: exports)
+        let memory = b.getProperty(
+            WasmModuleInterface.exportName(of: .memory, index: 0, isImport: false), of: exports)
+        let wasmGrow = b.getProperty(module.getExportedMethod(at: 0), of: exports)
 
         // 2. JS Loop
         b.buildRepeatLoop(n: 20) { _ in

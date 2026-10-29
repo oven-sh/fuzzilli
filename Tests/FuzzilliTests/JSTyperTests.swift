@@ -239,13 +239,17 @@ struct JSTyperTests {
                     #expect(b.type(of: params[1]) == .integer)
                 }
 
+                cls.addPrivateInstanceProperty("q")
+                cls.addPrivateStaticProperty("q")
+
                 cls.addPrivateInstanceMethod("p", with: .parameters(n: 0)) { params in
                     let this = params[0]
                     #expect(
                         b.type(of: this)
                             == .object(
                                 ofGroup: "_fuzz_Class0", withProperties: ["a", "b", "c"],
-                                withMethods: ["f", "g"]))
+                                withMethods: ["f", "g"],
+                                withPrivateProperties: ["q"]))
                 }
 
                 cls.addPrivateStaticMethod("p", with: .parameters(n: 0)) { params in
@@ -254,7 +258,8 @@ struct JSTyperTests {
                         b.type(of: this)
                             == .object(
                                 ofGroup: "_fuzz_Constructor0", withProperties: ["a", "d", "e"],
-                                withMethods: ["g", "h"]))
+                                withMethods: ["g", "h"],
+                                withPrivateProperties: ["q"]))
                 }
             }
 
@@ -262,12 +267,16 @@ struct JSTyperTests {
             #expect(
                 b.type(of: cls) == .object(
                     ofGroup: "_fuzz_Constructor0", withProperties: ["a", "d", "e"],
-                    withMethods: ["g", "h"])
+                    withMethods: ["g", "h"],
+                    withPrivateProperties: ["q"],
+                    withPrivateMethods: ["p"])
                     + .constructor(
                         [.string]
                             => .object(
                                 ofGroup: "_fuzz_Class0", withProperties: ["a", "b", "c"],
-                                withMethods: ["f", "g"])))
+                                withMethods: ["f", "g"],
+                                withPrivateProperties: ["q"],
+                                withPrivateMethods: ["p"])))
         }
     }
 
@@ -484,7 +493,7 @@ struct JSTyperTests {
             }
             #expect(b.type(of: f) == .function(signature4))
 
-            let signature5 = [.string, .number] => .jsPromise
+            let signature5 = [.string, .number] => .jsPromise(resolvingTo: .undefined)
             f = b.buildAsyncFunction(with: .parameters(signature5.parameters)) { params in
                 #expect(b.type(of: params[0]) == .string)
                 #expect(b.type(of: params[1]) == .number)
@@ -645,18 +654,57 @@ struct JSTyperTests {
             let g1 = b.buildGeneratorFunction(with: .parameters(n: 0)) { _ in
                 b.yield(b.loadInt(42))
             }
-            #expect(b.type(of: g1).signature?.outputType == .jsGenerator)
+            #expect(
+                b.type(of: g1).signature?.outputType
+                    == ILType.createJsGeneratorType(ofYieldType: .integer))
 
             let g2 = b.buildAsyncGeneratorFunction(with: .parameters(n: 0)) { _ in
                 b.yield(b.loadInt(42))
             }
-            #expect(b.type(of: g2).signature?.outputType == .jsAsyncGenerator)
+            #expect(
+                b.type(of: g2).signature?.outputType
+                    == ILType.createJsAsyncGeneratorType(ofYieldType: .integer))
+
+            let g3 = b.buildGeneratorFunction(with: .parameters(n: 0)) { _ in
+                let array = b.createArray(with: [b.loadInt(42)])
+                b.yieldEach(array)
+            }
+            #expect(
+                b.type(of: g3).signature?.outputType
+                    == ILType.createJsGeneratorType(ofYieldType: .integer))
+
+            let g4 = b.buildGeneratorFunction(with: .parameters(n: 0)) { _ in
+                b.buildIfElse(
+                    b.loadBool(true),
+                    ifBody: {
+                        b.yield(b.loadInt(1))
+                        b.yield(b.loadString("foo"))
+                    },
+                    elseBody: {
+                        b.yield(b.loadFloat(1.5))
+                    })
+                b.yield(b.loadBool(false))
+            }
+            let expectedYield = ILType.integer | .jsString | .float | .boolean
+            #expect(
+                b.type(of: g4).signature?.outputType
+                    == ILType.createJsGeneratorType(ofYieldType: expectedYield))
 
             let a2 = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in }
-            #expect(b.type(of: a2).signature?.outputType == .jsPromise)
+            #expect(b.type(of: a2).signature?.outputType == .jsPromise(resolvingTo: .undefined))
 
             let a3 = b.buildAsyncArrowFunction(with: .parameters(n: 0)) { _ in }
-            #expect(b.type(of: a3).signature?.outputType == .jsPromise)
+            #expect(b.type(of: a3).signature?.outputType == .jsPromise(resolvingTo: .undefined))
+
+            let a4 = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                b.doReturn(b.loadInt(42))
+            }
+            #expect(b.type(of: a4).signature?.outputType == .jsPromise(resolvingTo: .integer))
+
+            let a5 = b.buildAsyncArrowFunction(with: .parameters(n: 0)) { _ in
+                b.doReturn(b.loadInt(42))
+            }
+            #expect(b.type(of: a5).signature?.outputType == .jsPromise(resolvingTo: .integer))
         }
     }
 
@@ -945,6 +993,65 @@ struct JSTyperTests {
         }
     }
 
+    @Test func testGlobalThisTypeInference() {
+        let env = JavaScriptEnvironment()
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let globalThis = b.createNamedVariable(forBuiltin: "globalThis")
+            #expect(b.type(of: globalThis).properties.contains("Number"))
+            #expect(b.type(of: globalThis).methods.contains("Number"))
+
+            // Property lookups on globalThis
+            let number = b.getProperty("Number", of: globalThis)
+            #expect(b.type(of: number) == .jsNumberConstructor)
+            let math = b.getProperty("Math", of: globalThis)
+            #expect(b.type(of: math) == .jsMathObject)
+            let undefined = b.getProperty("undefined", of: globalThis)
+            #expect(b.type(of: undefined) == .undefined)
+            let isNaNProp = b.getProperty("isNaN", of: globalThis)
+            #expect(b.type(of: isNaNProp) == .jsIsNaNFunction)
+            // globalThis is recursive.
+            let g = b.getProperty("globalThis", of: globalThis)
+            #expect(b.type(of: g) == b.type(of: globalThis))
+
+            // Calling methods on globalThis
+            let res = b.callMethod("isNaN", on: globalThis, withArgs: [b.loadInt(42)])
+            #expect(b.type(of: res) == .boolean)
+        }
+    }
+
+    @Test func testGlobalThisWithAdditionalBuiltins() {
+        let builtinAType = ILType.integer
+        let builtinBType = ILType.object(
+            ofGroup: "B", withProperties: ["foo", "bar"], withMethods: ["m1", "m2"])
+        let builtinCType = ILType.function([] => .number)
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": builtinAType,
+            "B": builtinBType,
+            "C": builtinCType,
+        ])
+
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let globalThis = b.createNamedVariable(forBuiltin: "globalThis")
+
+            let a = b.getProperty("A", of: globalThis)
+            #expect(b.type(of: a) == builtinAType)
+            let bObj = b.getProperty("B", of: globalThis)
+            #expect(b.type(of: bObj) == builtinBType)
+            let cFunc = b.getProperty("C", of: globalThis)
+            #expect(b.type(of: cFunc) == builtinCType)
+            let cCall = b.callMethod("C", on: globalThis, withArgs: [])
+            #expect(b.type(of: cCall) == .number)
+            // globalThis is recursive including the additional properties.
+            let g = b.getProperty("globalThis", of: globalThis)
+            #expect(b.type(of: g) == b.type(of: globalThis))
+        }
+    }
+
     @Test func testPropertyTypeInference() {
         let propFooType = ILType.float
         let propBarType = ILType.function([] => .jsAnything)
@@ -1126,36 +1233,6 @@ struct JSTyperTests {
         }
     }
 
-    @Test func testParameterizedArrayCreation() {
-        let propFooType = ILType.float
-        let fooElement = ILType.object(ofGroup: "FooElement", withProperties: ["foo"])
-        let additionalObjectGroups: [ObjectGroup] = [
-            ObjectGroup(
-                name: "FooElement",
-                instanceType: fooElement,
-                properties: [
-                    "foo": propFooType
-                ],
-                methods: [:])
-        ]
-
-        let env = JavaScriptEnvironment(additionalObjectGroups: additionalObjectGroups)
-        let fuzzer = makeMockFuzzer(environment: env)
-        fuzzer.sync {
-            let b = fuzzer.makeBuilder()
-
-            let a1 = b.createArray(with: [], elementGroupName: "FooElement")
-            #expect(b.type(of: a1) == ILType.createJsArrayType(ofElementType: fooElement))
-
-            // For an unregistered group, resulting `jsArray` will have element type `.jsAnything`
-            let a2 = b.createArray(with: [], elementGroupName: "UnknownGroup")
-            #expect(b.type(of: a2) == ILType.createJsArrayType(ofElementType: .jsAnything))
-
-            let a3 = b.createArray(with: [])
-            #expect(b.type(of: a3) == ILType.jsArray)
-        }
-    }
-
     @Test func testMapCreation() {
         let env = JavaScriptEnvironment()
 
@@ -1168,9 +1245,68 @@ struct JSTyperTests {
         }
     }
 
-    @Test func testParameterizedMapCreation() {
+    @Test func testArrayCreationTyping() {
+        let builtins: [String: ILType] = [
+            "PureDisposable": .disposable,
+            "PureObjFooBar": .object(withMethods: ["foo", "bar"]),
+            "PureObjBarBaz": .object(withMethods: ["bar", "baz"]),
+        ]
+        let env = JavaScriptEnvironment(additionalBuiltins: builtins)
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let i = b.loadInt(42)
+            let f = b.loadFloat(13.37)
+            let s = b.loadString("foo")
+
+            // 1. Array with homogeneous elements
+            let a1 = b.createArray(with: [i, i])
+            #expect(b.type(of: a1) == .createJsArrayType(ofElementType: .integer))
+
+            // 2. Array with heterogeneous elements
+            let a2 = b.createArray(with: [i, f])
+            #expect(b.type(of: a2) == .createJsArrayType(ofElementType: .integer | .float))
+
+            // 3. Array with spread homogeneous
+            let a3 = b.createArray(with: [a1, a1], spreading: [true, true])
+            #expect(b.type(of: a3) == .createJsArrayType(ofElementType: .integer))
+
+            // 4. Array with spread heterogeneous
+            let a4 = b.createArray(with: [a1, s], spreading: [true, false])
+            #expect(b.type(of: a4) == .createJsArrayType(ofElementType: .integer | .jsString))
+
+            // 5. Spread an element that isn't statically typed as iterable
+            let bool = b.loadBool(true)
+            let a5 = b.createArray(with: [bool], spreading: [true])
+            #expect(b.type(of: a5) == .jsArray)
+
+            // 6. .jsAnything and .disposable
+            let disp = b.createNamedVariable(forBuiltin: "PureDisposable")
+            let jsAny = b.createNamedVariable(forBuiltin: "UnknownBuiltinThatYieldsAnything")
+            let a6 = b.createArray(with: [jsAny, disp])
+            #expect(b.type(of: a6) == .jsArray)
+
+            // 7. int and .disposable
+            let a7 = b.createArray(with: [i, disp])
+            #expect(b.type(of: a7) == .createJsArrayType(ofElementType: .integer | .disposable))
+
+            // 8. object(withMethods: [foo, bar]) and object(withMethods: [bar,baz])
+            let oFooAndBar = b.createNamedVariable(forBuiltin: "PureObjFooBar")
+            let oBarAndBaz = b.createNamedVariable(forBuiltin: "PureObjBarBaz")
+
+            let a8 = b.createArray(with: [oFooAndBar, oBarAndBaz])
+            #expect(
+                b.type(of: a8) == .createJsArrayType(ofElementType: .object(withMethods: ["bar"])))
+
+            // 9. Array of undefined
+            let a9 = b.createArray(with: [b.loadUndefined()])
+            #expect(b.type(of: a9) == .createJsArrayType(ofElementType: .undefined))
+        }
+    }
+
+    @Test func testMapCreationTyping() {
         let fooElement = ILType.object(ofGroup: "FooElement", withProperties: ["foo"])
-        let stringElement = ILType.object(ofGroup: "StringElement")
         let additionalObjectGroups: [ObjectGroup] = [
             ObjectGroup(
                 name: "FooElement",
@@ -1178,40 +1314,40 @@ struct JSTyperTests {
                 properties: [
                     "foo": .float
                 ],
-                methods: [:]),
-            ObjectGroup(
-                name: "StringElement",
-                instanceType: stringElement,
-                properties: [:],
-                methods: [:]),
+                methods: [:])
         ]
-
-        let env = JavaScriptEnvironment(additionalObjectGroups: additionalObjectGroups)
+        let builtins: [String: ILType] = ["PureFoo": fooElement]
+        let env = JavaScriptEnvironment(
+            additionalBuiltins: builtins, additionalObjectGroups: additionalObjectGroups)
         let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
 
-            let keyGroups = ["StringElement", "UnknownGroup", nil]
-            let valueGroups = ["FooElement", "UnknownGroup", nil]
-            for (keyGroupName, valueGroupName) in zip(keyGroups, valueGroups) {
-                let m = b.createMap(
-                    withKeys: [], withValues: [], keyGroupName: keyGroupName,
-                    valueGroupName: valueGroupName)
+            let i = b.loadInt(42)
+            let s = b.loadString("foo")
+            let foo = b.createNamedVariable(forBuiltin: "PureFoo")
 
-                if keyGroupName == nil || valueGroupName == nil {
-                    // If either group name is nil, resulting `jsMap` will have both key and value types set to nil
-                    #expect(b.type(of: m) == ILType.createJsMapType())
-                    continue
-                }
+            // 1. Map with homogeneous keys and values
+            let m1 = b.createMap(withKeys: [i, i], withValues: [i, i])
+            #expect(b.type(of: m1) == .createJsMapType(ofKeyType: .integer, ofValueType: .integer))
 
-                // Unregistered group names get resolved to jsAnything
-                let keyElement = keyGroupName != "UnknownGroup" ? stringElement : .jsAnything
-                let valueElement = valueGroupName != "UnknownGroup" ? fooElement : .jsAnything
+            // 2. Map with string keys and object values
+            let m2 = b.createMap(withKeys: [s], withValues: [foo])
+            #expect(
+                b.type(of: m2) == .createJsMapType(ofKeyType: .jsString, ofValueType: fooElement))
 
-                #expect(
-                    b.type(of: m)
-                        == ILType.createJsMapType(ofKeyType: keyElement, ofValueType: valueElement))
-            }
+            // 3. Map with heterogeneous keys
+            let m3 = b.createMap(withKeys: [i, s], withValues: [foo, foo])
+            #expect(
+                b.type(of: m3)
+                    == .createJsMapType(ofKeyType: .integer | .jsString, ofValueType: fooElement))
+
+            // 4. Map with heterogeneous entries
+            let m4 = b.createMap(withKeys: [i, s], withValues: [foo, i])
+            #expect(
+                b.type(of: m4)
+                    == .createJsMapType(
+                        ofKeyType: .integer | .jsString, ofValueType: fooElement | .integer))
         }
     }
 
@@ -1616,14 +1752,14 @@ struct JSTyperTests {
         ]
 
         let env = JavaScriptEnvironment(
-            additionalBuiltins: [:], additionalObjectGroups: objectGroups)
+            additionalBuiltins: [
+                "myO": .object(ofGroup: "O", withProperties: ["foo", "bar", "baz"])
+            ], additionalObjectGroups: objectGroups)
         let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
 
             let obj = b.createNamedVariable(forBuiltin: "myO")
-            b.setType(
-                ofVariable: obj, to: .object(ofGroup: "O", withProperties: ["foo", "bar", "baz"]))
 
             let outputs = b.destruct(obj, selecting: ["foo", "bar"], hasRestElement: true)
             #expect(b.type(of: outputs[0]) == .integer)
@@ -1644,14 +1780,14 @@ struct JSTyperTests {
         ]
 
         let env = JavaScriptEnvironment(
-            additionalBuiltins: [:], additionalObjectGroups: objectGroups)
+            additionalBuiltins: [
+                "myO": .object(ofGroup: "O", withProperties: ["foo"])
+            ], additionalObjectGroups: objectGroups)
         let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
 
             let obj = b.createNamedVariable(forBuiltin: "myO")
-            b.setType(
-                ofVariable: obj, to: .object(ofGroup: "O", withProperties: ["foo"]))
 
             let v1 = b.loadInt(0)
             let v2 = b.loadInt(0)
@@ -1675,6 +1811,44 @@ struct JSTyperTests {
             #expect(b.type(of: v1) == .integer)
             #expect(b.type(of: v2) == .jsAnything)
             #expect(b.type(of: v3) == .object())
+        }
+    }
+
+    @Test func testDestructAndReassignPropertyTargetTypeInference() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let srcObj = b.createObject(with: ["a": b.loadInt(42)])
+            let srcArr = b.createArray(with: [b.loadString("hello")])
+            let targetObj = b.createObject(with: [:])
+
+            #expect(b.type(of: targetObj).properties.isEmpty)
+
+            // Object destructuring reassignment to a property target: ({ a: targetObj.foo } = srcObj)
+            let objPattern = DestructuringPattern.ObjectPattern(
+                properties: [
+                    DestructuringPattern.ObjectProperty(
+                        key: .string("a"),
+                        target: .property("foo"))
+                ],
+                hasRestElement: false)
+            b.destruct(srcObj, using: .object(objPattern), into: [targetObj])
+            #expect(b.type(of: targetObj).properties == ["foo"])
+
+            // Array destructuring reassignment to property targets: ([targetObj.bar, ...targetObj.baz] = srcArr)
+            let arrPattern = DestructuringPattern.ArrayPattern(
+                elements: [
+                    DestructuringPattern.ArrayElement(
+                        target: .property("bar"),
+                        hasDefaultValue: false)
+                ],
+                restTarget: .property("baz"))
+            b.destruct(srcArr, using: .array(arrPattern), into: [targetObj, targetObj])
+            #expect(b.type(of: targetObj).properties == ["foo", "bar", "baz"])
+
+            // Subsequent operations (e.g. rest destructuring) observe the newly added properties.
+            let outputs = b.destruct(targetObj, selecting: ["foo"], hasRestElement: true)
+            #expect(b.type(of: outputs[1]) == .object(withProperties: ["bar", "baz"]))
         }
     }
 
@@ -1748,13 +1922,13 @@ struct JSTyperTests {
                         WasmStructTypeDescription.Field(type: .wasmi32, mutability: true),
                         WasmStructTypeDescription.Field(type: .wasmi64, mutability: true),
                     ],
-                    indexTypes: [])
+                )
                 let structType2 = b.wasmDefineStructType(
                     fields: [
                         WasmStructTypeDescription.Field(type: .wasmi32, mutability: true),
                         WasmStructTypeDescription.Field(type: .wasmi64, mutability: true),
                     ],
-                    indexTypes: [])
+                )
                 #expect(b.type(of: structType).Is(.wasmTypeDef()))
                 // Despite having identical structure, the two struct types are not comparable.
                 #expect(!b.type(of: structType).Is(b.type(of: structType2)))
@@ -2182,8 +2356,9 @@ struct JSTyperTests {
             #expect(fun3 == [[.jsAnything] => .jsArray])
             #expect(fun4 == [[] => .jsAnything])
             #expect(fun5 == [[] => .jsAnything])
-            // Here the typer should be able to see the full JS signature.
-            #expect(reexportedFunction == [[] => .object(ofGroup: "_fuzz_Object0")])
+            // The re-exported function converts its arguments and its result according to the
+            // signature of the import, like a Wasm function with that signature.
+            #expect(reexportedFunction == [[] => .jsAnything])
 
             let glob0 = b.getProperty("wg0", of: exports)
             #expect(
@@ -2217,6 +2392,151 @@ struct JSTyperTests {
     @Test func testDynamicObjectGroupTypingOfWasmModules() {
         dynamicObjectGroupTypingOfWasmModulesTestCase(isShared: false)
         dynamicObjectGroupTypingOfWasmModulesTestCase(isShared: true)
+    }
+
+    @Test func testWasmTableInitDoesNotExportElementSegment() {
+        let fuzzer = makeMockFuzzer(environment: JavaScriptEnvironment())
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let module = b.buildWasmModule { wasmModule in
+                let function = wasmModule.addWasmFunction(with: [] => []) { _, _, _ in [] }
+                let table = wasmModule.addTable(
+                    elementType: .wasmFuncRef(), minSize: 10, isTable64: false)
+                let segment = wasmModule.addElementSegment(elements: [function])
+                wasmModule.addWasmFunction(with: [] => []) { f, _, _ in
+                    let zero = f.consti32(0)
+                    f.wasmTableInit(
+                        elementSegment: segment, table: table, tableOffset: zero,
+                        elementSegmentOffset: zero, elementCount: zero)
+                    return []
+                }
+                wasmModule.addTable(elementType: .wasmExternRef(), minSize: 5, isTable64: false)
+            }
+
+            // The element segment is not a table, so it must not use up a table export name.
+            let exports = module.loadExports()
+            #expect(b.type(of: exports).properties == ["wt0", "wt1"])
+            #expect(
+                b.type(ofProperty: "wt0", on: exports).wasmTableType?.elementType == .wasmFuncRef())
+            #expect(
+                b.type(ofProperty: "wt1", on: exports).wasmTableType?.elementType
+                    == .wasmExternRef())
+        }
+    }
+
+    @Test func testWasmModuleReexportsImportedTablesAndMemoriesInOrderOfUse() {
+        let fuzzer = makeMockFuzzer(environment: JavaScriptEnvironment())
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // The imported tables and memories can be told apart by their size.
+            let tables = (1...6).map {
+                b.createWasmTable(
+                    elementType: .wasmFuncRef(), limits: Limits(min: $0), isTable64: false)
+            }
+            let memories = (1...7).map { b.createWasmMemory(minPages: $0) }
+
+            // Use them in reverse order, through operations that take them at various input positions.
+            let module = b.buildWasmModule { wasmModule in
+                let function = wasmModule.addWasmFunction(with: [] => []) { _, _, _ in [] }
+                let elementSegment = wasmModule.addElementSegment(elements: [function])
+                let dataSegment = wasmModule.addDataSegment(segment: [1, 2, 3])
+                let signature = wasmModule.wasmDefineAdHocSignatureType(signature: [] => [])
+                wasmModule.addWasmFunction(with: [] => []) { f, _, _ in
+                    let zero = f.consti32(0)
+                    f.wasmCallIndirect(
+                        signatureDef: signature, table: tables[5], functionArgs: [],
+                        tableIndex: zero)
+                    f.wasmTableInit(
+                        elementSegment: elementSegment, table: tables[4], tableOffset: zero,
+                        elementSegmentOffset: zero, elementCount: zero)
+                    f.wasmTableCopy(
+                        dstTable: tables[3], srcTable: tables[2], dstOffset: zero,
+                        srcOffset: zero, count: zero)
+                    f.wasmTableSize(table: tables[1])
+                    f.wasmMemoryCopy(
+                        dstMemory: memories[6], srcMemory: memories[5], dstOffset: zero,
+                        srcOffset: zero, size: zero)
+                    f.wasmMemoryFill(
+                        memory: memories[4], offset: zero, byteToSet: zero,
+                        byteCount: zero)
+                    f.wasmMemoryInit(
+                        dataSegment: dataSegment, memory: memories[3], memoryOffset: zero,
+                        dataSegmentOffset: zero, byteCount: zero)
+                    let simd = f.wasmSimdLoad(
+                        kind: .LoadS128, memory: memories[2], dynamicOffset: zero,
+                        staticOffset: 0)
+                    f.wasmSimdStoreLane(
+                        kind: .Store8, memory: memories[1], dynamicOffset: zero, staticOffset: 0,
+                        from: simd, lane: 0)
+                    f.wasmMemorySize(memory: memories[0])
+                    return []
+                }
+                wasmModule.addWasmFunction(with: [] => []) { f, _, _ in
+                    f.wasmReturnCallIndirect(
+                        signatureDef: signature, table: tables[0], functionArgs: [],
+                        tableIndex: f.consti32(0))
+                    return []
+                }
+            }
+
+            // The module re-exports its imports in the order of their first use.
+            let exports = module.loadExports()
+            let tableSizes = (0..<6).map {
+                b.type(ofProperty: "iwt\($0)", on: exports).wasmTableType?.limits.min
+            }
+            #expect(tableSizes == [6, 5, 4, 3, 2, 1])
+            let memorySizes = (0..<7).map {
+                b.type(ofProperty: "iwm\($0)", on: exports).wasmMemoryType?.limits.min
+            }
+            #expect(memorySizes == [7, 6, 5, 4, 3, 2, 1])
+            // In particular, the element and data segments are not exported.
+            #expect(b.type(of: exports).properties.count == tables.count + memories.count)
+        }
+    }
+
+    @Test func testWasmModuleReexportsJSFunctionOncePerImportSignature() {
+        let fuzzer = makeMockFuzzer(environment: JavaScriptEnvironment())
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let f = b.buildPlainFunction(with: .parameters(n: 1)) { args in b.doReturn(args[0]) }
+            let g = b.buildPlainFunction(with: .parameters(n: 0)) { _ in }
+
+            let module = b.buildWasmModule { wasmModule in
+                // The module imports a JS function once per signature with which it calls it, ...
+                wasmModule.addWasmFunction(with: [] => []) { function, _, _ in
+                    function.wasmJsCall(
+                        function: f, withArgs: [function.consti32(1)],
+                        withWasmSignature: [.wasmi32] => [])
+                    function.wasmJsCall(
+                        function: f, withArgs: [function.consti64(2)],
+                        withWasmSignature: [.wasmi64] => [.wasmi64])
+                    function.wasmJsCall(
+                        function: f, withArgs: [function.consti32(3)],
+                        withWasmSignature: [.wasmi32] => [])
+                    function.wasmJsCall(function: g, withArgs: [], withWasmSignature: [] => [])
+                    return []
+                }
+                // ... and separately for the signature definition with which it puts it into a
+                // table, even though the signature equals the one of the WasmJsCall above.
+                let signature = wasmModule.wasmDefineAdHocSignatureType(signature: [] => [])
+                wasmModule.addTable(
+                    elementType: .wasmFuncRef(), minSize: 2,
+                    definedSignatures: [g, signature, g, signature], isTable64: false)
+            }
+
+            let exports = module.loadExports()
+            #expect(b.type(of: exports).properties == ["wt0"])
+            #expect(b.type(of: exports).methods == ["w0", "iw0", "iw1", "iw2", "iw3"])
+            // The re-exported functions convert their arguments and results according to the
+            // signature of the import.
+            #expect(b.methodSignatures(of: "iw0", on: exports) == [[.integer] => .undefined])
+            #expect(b.methodSignatures(of: "iw1", on: exports) == [[.bigint] => .bigint])
+            #expect(b.methodSignatures(of: "iw2", on: exports) == [[] => .undefined])
+            #expect(b.methodSignatures(of: "iw3", on: exports) == [[] => .undefined])
+        }
     }
 
     @Test func testBuiltinPrototypes() {
@@ -2253,7 +2573,7 @@ struct JSTyperTests {
             let then = b.getProperty("then", of: promiseProto)
             #expect(
                 b.type(of: then)
-                    == .unboundFunction([.function()] => .jsPromise, receiver: .jsPromise))
+                    == .unboundFunction([.function()] => .jsPromise(), receiver: .jsPromise()))
 
             // ArrayBuffer.prototype
             let arrayBufferBuiltin = b.createNamedVariable(forBuiltin: "ArrayBuffer")
@@ -2412,9 +2732,9 @@ struct JSTyperTests {
             let memoryPrototype = b.getProperty("prototype", of: wasmMemoryConstructor)
             let grow = b.getProperty("grow", of: memoryPrototype)
             #expect(
-                b.type(of: grow).Is(
-                    .unboundFunction([.number] => .number, receiver: .object(ofGroup: "WasmMemory"))
-                ))
+                b.type(of: grow)
+                    == .unboundFunction(
+                        [.number] => .number, receiver: ObjectGroup.jsWasmMemory.instanceType))
 
             let wasmTableConstructor = b.getProperty("Table", of: wasm)
             let wasmTable = b.construct(wasmTableConstructor)  // In theory this needs arguments.
@@ -2426,11 +2746,11 @@ struct JSTyperTests {
             let tablePrototype = b.getProperty("prototype", of: wasmTableConstructor)
             let tableGrow = b.getProperty("grow", of: tablePrototype)
             #expect(
-                b.type(of: tableGrow).Is(
-                    .unboundFunction(
+                b.type(of: tableGrow)
+                    == .unboundFunction(
                         [.number, .opt(.jsAnything)] => .number,
-                        receiver: .object(ofGroup: "WasmTable")
-                    )))
+                        receiver: ObjectGroup.wasmTable.instanceType
+                    ))
 
             let wasmTagConstructor = b.getProperty("Tag", of: wasm)
             let wasmTag = b.construct(wasmTagConstructor)  // In theory this needs arguments.
@@ -2453,10 +2773,10 @@ struct JSTyperTests {
                     ObjectGroup.jsWebAssemblyExceptionPrototype.instanceType))
             let exceptionIs = b.getProperty("is", of: exceptionPrototype)
             #expect(
-                b.type(of: exceptionIs).Is(
-                    .unboundFunction(
+                b.type(of: exceptionIs)
+                    == .unboundFunction(
                         [.plain(ObjectGroup.jsWasmTag.instanceType)] => ILType.boolean,
-                        receiver: .object(ofGroup: "WebAssembly.Exception"))))
+                        receiver: ObjectGroup.jsWebAssemblyException.instanceType))
         }
     }
 
@@ -2492,6 +2812,12 @@ struct JSTyperTests {
             return "mockStringValue"
         }
 
+        let mockNamedInteger = ILType.namedInteger(ofName: "NamedInteger")
+        func generateInteger() -> Int64 {
+            callCount += 1
+            return 42
+        }
+
         let fuzzer = makeMockFuzzer()
         fuzzer.sync {
             fuzzer.environment.registerObjectGroup(mockObject)
@@ -2500,6 +2826,8 @@ struct JSTyperTests {
                 forType: mockObject.instanceType, with: generateObject)
             fuzzer.environment.addNamedStringGenerator(
                 forType: mockNamedString, with: generateString)
+            fuzzer.environment.addNamedIntegerGenerator(
+                forType: mockNamedInteger, with: generateInteger)
             let b = fuzzer.makeBuilder()
             b.buildPrefix()
 
@@ -2518,6 +2846,15 @@ struct JSTyperTests {
             // Test that the returned variable gets typed correctly
             #expect(b.type(of: variable2).Is(mockNamedString))
             #expect(b.type(of: variable2).group == "NamedString")
+
+            // Try to get it to invoke the integer generator
+            let variable3 = b.findOrGenerateType(mockNamedInteger)
+            // Test that the generator was invoked
+            #expect(callCount == 3)
+
+            // Test that the returned variable gets typed correctly
+            #expect(b.type(of: variable3).Is(mockNamedInteger))
+            #expect(b.type(of: variable3).group == "NamedInteger")
 
             // We already generated a mockEnum, look for it.
             let foundEnum = b.randomVariable(ofType: mockEnum)!
@@ -2707,8 +3044,127 @@ struct JSTyperTests {
 
             b.buildBundleModuleEntryPoint {
                 let dynImport = b.dynamicImport(module)
-                #expect(b.type(of: dynImport) == .jsPromise)
+                #expect(
+                    b.type(of: dynImport).promiseResolvingTo.properties == ["foo", "bar"])
             }
+        }
+    }
+
+    @Test
+    func testAwaitTyping() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let dummy = b.loadInt(0)
+
+            // Await a promise with a known resolving type.
+            let a1 = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                b.doReturn(b.loadInt(42))
+            }
+            let p1 = b.callFunction(a1)
+            #expect(b.type(of: p1) == .jsPromise(resolvingTo: .integer))
+
+            _ = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let r1 = b.await(p1)
+                #expect(b.type(of: r1) == .integer)
+            }
+
+            // Await a primitive.
+            _ = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let primitive = b.loadInt(123)
+                let r3 = b.await(primitive)
+                #expect(b.type(of: r3) == .integer)
+            }
+
+            // Await a thenable.
+            let thenableType = ILType.object(withMethods: ["then"])
+            let sig4 = [Parameter.plain(thenableType)] => thenableType
+            let f4 = b.buildPlainFunction(with: .parameters(sig4.parameters)) { args in
+                b.doReturn(args[0])
+            }
+            let thenable = b.callFunction(f4, withArgs: [dummy])
+            #expect(b.type(of: thenable) == thenableType)
+
+            _ = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let r4 = b.await(thenable)
+                #expect(b.type(of: r4) == .jsAnything)
+            }
+
+            // Await a non-thenable object (but we don't know that it will surely
+            // not have the "then" method, so awaiting gives .jsAnything.)
+            let nonThenableType = ILType.object(ofGroup: "MyGroup", withMethods: ["foo"])
+            let sig5 = [Parameter.plain(nonThenableType)] => nonThenableType
+            let f5 = b.buildPlainFunction(with: .parameters(sig5.parameters)) { args in
+                b.doReturn(args[0])
+            }
+            let nonThenable = b.callFunction(f5, withArgs: [dummy])
+            #expect(b.type(of: nonThenable) == nonThenableType)
+
+            _ = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let r5 = b.await(nonThenable)
+                #expect(b.type(of: r5) == .jsAnything)
+            }
+        }
+    }
+
+    @Test
+    func testAsyncFunctionReturningPromise() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // async function a() { return 42; }
+            let a = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                b.doReturn(b.loadInt(42))
+            }
+            #expect(b.type(of: a).signature?.outputType == .jsPromise(resolvingTo: .integer))
+
+            // async function b() { return a(); }
+            let bVar = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let r = b.callFunction(a)
+                b.doReturn(r)
+            }
+            #expect(b.type(of: bVar).signature?.outputType == .jsPromise(resolvingTo: .integer))
+        }
+    }
+
+    @Test
+    func testAsyncMethodReturnInference() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Object literal with async method
+            let obj = b.buildObjectLiteral { obj in
+                obj.addMethod("m", with: .parameters(n: 0), isAsync: true) { _ in
+                    b.doReturn(b.loadInt(42))
+                }
+            }
+            let res = b.callMethod("m", on: obj)
+            #expect(b.type(of: res) == .jsPromise(resolvingTo: .integer))
+
+            _ = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let val = b.await(res)
+                #expect(b.type(of: val) == .integer)
+            }
+
+            // Class with async instance and static methods
+            let cls = b.buildClassDefinition { cls in
+                cls.addInstanceMethod("asyncInstance", with: .parameters(n: 0), isAsync: true) {
+                    _ in
+                    b.doReturn(b.loadInt(100))
+                }
+                cls.addStaticMethod("asyncStatic", with: .parameters(n: 0), isAsync: true) { _ in
+                    b.doReturn(b.loadFloat(13.37))
+                }
+            }
+            let instance = b.construct(cls)
+            let instRes = b.callMethod("asyncInstance", on: instance)
+            #expect(b.type(of: instRes) == .jsPromise(resolvingTo: .integer))
+
+            let staticRes = b.callMethod("asyncStatic", on: cls)
+            #expect(b.type(of: staticRes) == .jsPromise(resolvingTo: .float))
         }
     }
 
@@ -2756,6 +3212,82 @@ struct JSTyperTests {
 
                 #expect(b.type(of: vC) == .jsModule(exports: ["export_C": .float]))
             }
+        }
+    }
+
+    @Test func testSymbolIteratorTyping() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // 1. Test Object Literal with [Symbol.iterator]
+            let iteratorSymbol = b.createSymbolProperty("iterator")
+            let iterableObject = b.buildObjectLiteral { obj in
+                obj.addComputedMethod(iteratorSymbol, with: .parameters(n: 0)) { _ in }
+            }
+            #expect(b.type(of: iterableObject).Is(.iterable()))
+            #expect(b.type(of: iterableObject).Is(.object()))
+
+            // 2. Test Object Literal with [Symbol.asyncIterator]
+            let asyncIteratorSymbol = b.createSymbolProperty("asyncIterator")
+            let asyncIterableObject = b.buildObjectLiteral { obj in
+                obj.addComputedMethod(asyncIteratorSymbol, with: .parameters(n: 0)) { _ in }
+            }
+            #expect(b.type(of: asyncIterableObject).Is(.asyncIterable()))
+            #expect(b.type(of: asyncIterableObject).Is(.object()))
+
+            // 3. Test Class Definition with [Symbol.iterator]
+            let iterableClass = b.buildClassDefinition { cls in
+                cls.addConstructor(with: .parameters(n: 0)) { _ in }
+                cls.addInstanceComputedMethod(iteratorSymbol, with: .parameters(n: 0)) { _ in }
+            }
+            let classInstance = b.construct(iterableClass)
+            #expect(b.type(of: classInstance).Is(.iterable()))
+        }
+    }
+
+    @Test func testDisposableStackTyping() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let dispStack = b.createNamedVariable(forBuiltin: "DisposableStack")
+            let dispInstance = b.construct(dispStack)
+            #expect(b.type(of: dispInstance).Is(.disposable))
+            #expect(b.type(of: dispInstance).symbolMethods.contains("Symbol.dispose"))
+
+            let asyncDispStack = b.createNamedVariable(forBuiltin: "AsyncDisposableStack")
+            let asyncDispInstance = b.construct(asyncDispStack)
+            #expect(b.type(of: asyncDispInstance).Is(.asyncDisposable))
+            #expect(b.type(of: asyncDispInstance).symbolMethods.contains("Symbol.asyncDispose"))
+        }
+    }
+
+    @Test func testDerivedClassIterableInheritance() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // 1. Subclassing an iterable class (with [Symbol.iterator])
+            let iteratorSymbol = b.createSymbolProperty("iterator")
+            let baseClass = b.buildClassDefinition { cls in
+                cls.addConstructor(with: .parameters(n: 0)) { _ in }
+                cls.addInstanceComputedMethod(iteratorSymbol, with: .parameters(n: 0)) { _ in }
+            }
+            let derivedClass = b.buildClassDefinition(withSuperclass: baseClass) { cls in
+                cls.addConstructor(with: .parameters(n: 0)) { _ in }
+            }
+            let derivedInstance = b.construct(derivedClass)
+            #expect(b.type(of: derivedInstance).Is(.iterable()))
+            #expect(b.type(of: derivedInstance).symbolMethods.contains("Symbol.iterator"))
+
+            // 2. Subclassing Array
+            let arrayBuiltin = b.createNamedVariable(forBuiltin: "Array")
+            let arraySubclass = b.buildClassDefinition(withSuperclass: arrayBuiltin) { cls in
+                cls.addConstructor(with: .parameters(n: 0)) { _ in }
+            }
+            let arraySubclassInstance = b.construct(arraySubclass)
+            #expect(b.type(of: arraySubclassInstance).Is(.iterable()))
         }
     }
 }

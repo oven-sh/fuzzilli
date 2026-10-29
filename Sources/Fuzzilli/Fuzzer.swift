@@ -126,11 +126,25 @@ public class Fuzzer {
         state = newState
     }
 
+    func setCorpusImportJobForTesting(_ job: CorpusImportJob) {
+        self.currentCorpusImportJob = job
+        self.state = .corpusImport
+    }
+
+    func getConvergencePatternsForTesting() -> [String: Int] {
+        return self.currentCorpusImportJob.convergencePatterns
+    }
+
     /// Start time of this fuzzing session
     private let startTime = Date()
 
     public var isDifferentialFuzzing: Bool {
         return referenceRunner != nil
+    }
+
+    /// Whether we are currently tracking convergence patterns.
+    var isTrackingConvergencePatterns: Bool {
+        return config.trackConvergencePatterns && state == .corpusImport
     }
 
     /// Returns the uptime of this fuzzer as TimeInterval.
@@ -169,6 +183,9 @@ public class Fuzzer {
     private var iterations = 0
     private var iterationOfLastInterestingSample = 0
 
+    /// The slowest run of the program in the current determinism check, including its original run.
+    private var slowestDeterminismRun: TimeInterval = 0
+
     /// Currently active corpus import job, if any.
     private var currentCorpusImportJob = CorpusImportJob(corpus: [], mode: .full)
 
@@ -177,8 +194,15 @@ public class Fuzzer {
         return iterations - iterationOfLastInterestingSample
     }
 
+    private final class WeakFuzzerRef {
+        weak var value: Fuzzer?
+        init(_ value: Fuzzer) {
+            self.value = value
+        }
+    }
+
     /// Fuzzer instances can be looked up from a dispatch queue through this key. See below.
-    private static let dispatchQueueKey = DispatchSpecificKey<Fuzzer>()
+    private static let dispatchQueueKey = DispatchSpecificKey<WeakFuzzerRef>()
 
     /// Constructs a new fuzzer instance with the provided components.
     public init(
@@ -221,14 +245,40 @@ public class Fuzzer {
 
         // Register this fuzzer instance with its queue so that it is possible to
         // obtain a reference to the Fuzzer instance when running on its queue.
-        // This creates a reference cycle, but Fuzzer instances aren't expected
-        // to be deallocated, so this is ok.
-        self.queue.setSpecific(key: Fuzzer.dispatchQueueKey, value: self)
+        // A weak reference is used to avoid a retain cycle with the dispatch queue.
+        self.queue.setSpecific(key: Fuzzer.dispatchQueueKey, value: WeakFuzzerRef(self))
+
+        #if DEBUG
+            do {
+                let allNames =
+                    self.codeGenerators.map { $0.name }
+                    + self.mutators.map { $0.name }
+                    + self.programTemplates.map { $0.name }
+                var seen = Set<String>()
+                let duplicateNames = allNames.filter { !seen.insert($0).inserted }
+                assert(
+                    duplicateNames.isEmpty,
+                    "Contributor names must be unique, found duplicates: \(duplicateNames)")
+
+                // Similarly check that all code generator stubs are unique. As the stub stores the
+                // contributor statistics, if a stub is reused across multiple code generators, it
+                // should be recreated each time.
+                let allStubs = self.codeGenerators.flatMap { $0.parts }
+                var seenStubs = Set<ObjectIdentifier>()
+                let duplicateStubs = allStubs.filter {
+                    !seenStubs.insert(ObjectIdentifier($0)).inserted
+                }
+                assert(
+                    duplicateStubs.isEmpty,
+                    "CodeGenerator stubs must be unique, found duplicate: \(duplicateStubs)")
+
+            }
+        #endif
     }
 
     /// Returns the fuzzer for the active DispatchQueue.
     public static var current: Fuzzer? {
-        return DispatchQueue.getSpecific(key: Fuzzer.dispatchQueueKey)
+        return DispatchQueue.getSpecific(key: Fuzzer.dispatchQueueKey)?.value
     }
 
     /// Schedule work on this fuzzer's dispatch queue.
@@ -314,7 +364,8 @@ public class Fuzzer {
 
         // Install a watchdog to monitor the utilization of this instance.
         var lastCheck = Date()
-        timers.scheduleTask(every: 1 * Minutes) {
+        timers.scheduleTask(every: 1 * Minutes) { [weak self] in
+            guard let self = self else { return }
             // Monitor responsiveness
             let now = Date()
             let interval = now.timeIntervalSince(lastCheck)
@@ -428,12 +479,16 @@ public class Fuzzer {
     }
 
     /// Tuple containing the result of importing a program.
-    public enum ImportResult {
+    public enum ImportResult: Equatable {
         case imported
         case dropped
         case needsWasm
         case needsBundles
         case failed(ExecutionOutcome)
+
+        public var wasImported: Bool {
+            return self == .imported
+        }
     }
 
     private func containsWasm(_ program: Program) -> Bool {
@@ -454,8 +509,14 @@ public class Fuzzer {
     ) -> ImportResult {
         dispatchPrecondition(condition: .onQueue(queue))
 
+        func finish(_ result: ImportResult) -> ImportResult {
+            dispatchEvent(
+                events.ProgramImported, data: (program, origin, result.wasImported))
+            return result
+        }
+
         if enableDropout && probability(config.dropoutRate) {
-            return .dropped
+            return finish(.dropped)
         }
 
         if !config.isWasmEnabled && containsWasm(program) {
@@ -468,11 +529,11 @@ public class Fuzzer {
                     program,
                     as: "program_\(program.id).fzil", in: dirName)
             }
-            return .needsWasm
+            return finish(.needsWasm)
         }
 
         if !config.generateBundle && program.code.isBundle {
-            return .needsBundles
+            return finish(.needsBundles)
         }
 
         let execution = execute(program, purpose: .programImport)
@@ -493,7 +554,8 @@ public class Fuzzer {
         case .succeeded:
             if let aspects = evaluator.evaluate(execution) {
                 wasImported = processMaybeInteresting(
-                    program, havingAspects: aspects, origin: origin)
+                    program, havingAspects: aspects, origin: origin,
+                    withExectime: execution.execTime)
             }
 
             if case .corpusImport(let mode) = origin, mode == .full, !wasImported {
@@ -508,7 +570,7 @@ public class Fuzzer {
             break
         }
 
-        return wasImported ? .imported : .failed(execution.outcome)
+        return finish(wasImported ? .imported : .failed(execution.outcome))
     }
 
     /// Imports a crashing program into this fuzzer.
@@ -580,7 +642,7 @@ public class Fuzzer {
                     let inouts = instr.inouts.map({
                         variablesToReplaceWithDummy.contains($0) ? dummy : b.adopt($0)
                     })
-                    let newInstr = Instruction(instr.op, inouts: inouts, flags: instr.flags)
+                    let newInstr = Instruction(instr.op, inouts: inouts)
                     b.append(newInstr)
                 }
             }
@@ -612,8 +674,10 @@ public class Fuzzer {
         switch result {
         case .dropped, .needsWasm, .needsBundles, .imported:
             return (result, 0)
-        case .failed(_):
-            break
+        case .failed(let outcome):
+            if !outcome.isFailure() {
+                return (result, 0)
+            }
         }
 
         let b = makeBuilder()
@@ -636,18 +700,28 @@ public class Fuzzer {
         switch result {
         case .dropped, .needsWasm, .needsBundles, .imported:
             return (result, 1)
-        case .failed(_):
-            break
+        case .failed(let outcome):
+            if !outcome.isFailure() {
+                return (result, 1)
+            }
         }
 
-        // Second attempt at fixing the program: enable guards (try-catch) for all guardable operations, then
-        // remove all guards that aren't needed (because no exception is thrown).
+        // Second attempt at fixing the program: enable guards (try-catch) for all guardable operations
         for instr in program.code {
             var newOp = instr.op
             if let op = instr.op as? GuardableOperation {
-                newOp = GuardableOperation.enableGuard(of: op)
+                if !op.isGuarded {
+                    newOp = op.withGuardedState(true)
+                }
+            } else {
+                if let op = newOp as? ReceiverOptionalOperation, !op.isReceiverOptional {
+                    newOp = op.withReceiverOptionalState(true)
+                }
+                if let op = newOp as? CallOptionalOperation, !op.isCallOptional {
+                    newOp = op.withCallOptionalState(true)
+                }
             }
-            b.append(Instruction(newOp, inouts: instr.inouts, flags: instr.flags))
+            b.append(Instruction(newOp, inouts: instr.inouts))
         }
         program = b.finalize()
         if let result = currentCorpusImportJob.fixupMutator.mutate(program, for: self) {
@@ -657,8 +731,10 @@ public class Fuzzer {
         switch result {
         case .dropped, .needsWasm, .needsBundles, .imported:
             return (result, 2)
-        case .failed(_):
-            break
+        case .failed(let outcome):
+            if !outcome.isFailure() {
+                return (result, 2)
+            }
         }
 
         // Third and final attempt at fixing up the program: simply wrap the entire program in a try-catch block.
@@ -740,6 +816,9 @@ public class Fuzzer {
         dispatchEvent(events.PreExecute, data: (program, purpose))
         let execution = runner.run(script, withTimeout: timeout ?? config.timeout)
         dispatchEvent(events.PostExecute, data: execution)
+        if purpose == .checkForDeterministicBehavior {
+            slowestDeterminismRun = max(slowestDeterminismRun, execution.execTime)
+        }
 
         if isDifferentialFuzzing && purpose.supportsDifferentialRun
             && execution.outcome == .succeeded
@@ -756,13 +835,16 @@ public class Fuzzer {
     /// Returns true if this program was interesting (i.e. had at least some interesting aspects that are triggered reliably), false if not.
     @discardableResult
     func processMaybeInteresting(
-        _ program: Program, havingAspects aspects: ProgramAspects, origin: ProgramOrigin
+        _ program: Program, havingAspects aspects: ProgramAspects, origin: ProgramOrigin,
+        withExectime exectime: TimeInterval
     ) -> Bool {
         var aspects = aspects
+        var pattern = ""
+        slowestDeterminismRun = exectime
 
-        // Determine which (if any) aspects of the program are triggered deterministially.
-        // For that, the sample is executed at a few more times and the intersection of the interesting aspects of each execution is computed.
-        // Once that intersection is stable, the remaining aspects are considered to be triggered deterministic.
+        // Determine which (if any) aspects of the program are triggered deterministically.
+        // For that, the sample is executed a few more times and the intersection of the interesting aspects of each execution is computed.
+        // Once that intersection is stable, the remaining aspects are considered to be triggered deterministically.
         let minAttempts = 5
         let maxAttempts = 50
         var didConverge = false
@@ -772,20 +854,31 @@ public class Fuzzer {
             if attempt > maxAttempts {
                 logger.warning(
                     "Sample did not converage after \(maxAttempts) attempts. Discarding it")
+                // This case is rare, and we do not track convergence patterns here as extremely long patterns are not expected to be interesting.
                 return false
             }
 
             guard let intersection = evaluator.computeAspectIntersection(of: program, with: aspects)
             else {
                 // This likely means that no aspects are triggered deterministically, so discard this sample.
+                dispatchEvent(events.AspectIntersectionNil)
+                if isTrackingConvergencePatterns {
+                    pattern += "0"
+                    currentCorpusImportJob.recordConvergencePattern(pattern)
+                }
                 return false
             }
 
             // Since evaluateAndIntersect will only ever return aspects that are equivalent to, or a subset of,
             // the provided aspects, we can check if they are identical by comparing their sizes
             didConverge = aspects.count == intersection.count
+            pattern += didConverge ? "1" : "0"
             aspects = intersection
         } while !didConverge || attempt < minAttempts
+
+        if isTrackingConvergencePatterns {
+            currentCorpusImportJob.recordConvergencePattern(pattern)
+        }
 
         if origin == .local {
             iterationOfLastInterestingSample = iterations
@@ -818,7 +911,7 @@ public class Fuzzer {
             // will only start once the curent sample has been fully processed and inserted into the corpus.
             fuzzGroup.enter()
             minimizer.withMinimizedCopy(
-                program, withAspects: aspects, limit: config.minimizationLimit
+                program, withAspects: aspects, parentExecTime: slowestDeterminismRun
             ) { minimizedProgram in
                 self.fuzzGroup.leave()
                 finishProcessing(minimizedProgram)
@@ -1002,6 +1095,9 @@ public class Fuzzer {
                     "    Of which \(currentCorpusImportJob.numberOfProgramsThatWereImport) programs were added to the corpus"
                 )
                 logger.info(
+                    "    Of which \(currentCorpusImportJob.numberOfProgramsNotImportedBecauseUninteresting) programs were not interesting (e.g. lack of coverage)"
+                )
+                logger.info(
                     "\(currentCorpusImportJob.numberOfProgramsThatNeededFixup)/\(currentCorpusImportJob.totalNumberOfProgramsToImport) programs needed fixup during import"
                 )
                 logger.info(
@@ -1050,6 +1146,16 @@ public class Fuzzer {
                     logger.warning(
                         "\(String(format: "%.2f", failureRatio * 100))% of imported programs failed to \(reason) and therefore couldn't be imported."
                     )
+                }
+
+                if config.trackConvergencePatterns {
+                    logger.info("Convergence patterns report:")
+                    let sortedPatterns = currentCorpusImportJob.convergencePatterns.sorted {
+                        $0.value > $1.value
+                    }
+                    for (pattern, count) in sortedPatterns {
+                        logger.info("    \(pattern): \(count)")
+                    }
                 }
 
                 dispatchEvent(events.CorpusImportComplete)
@@ -1321,7 +1427,7 @@ public class Fuzzer {
     }
 
     /// A pending corpus import job together with some statistics.
-    private struct CorpusImportJob {
+    struct CorpusImportJob {
         private var corpusToImport: [Program]
 
         let importMode: CorpusImportMode
@@ -1333,6 +1439,7 @@ public class Fuzzer {
         private(set) var numberOfProgramsProcessedSoFar = 0
         private(set) var numberOfProgramsThatExecutedSuccessfullyDuringImport = 0
         private(set) var numberOfProgramsThatWereImport = 0
+        private(set) var numberOfProgramsNotImportedBecauseUninteresting = 0
         private(set) var numberOfProgramsThatFailedDuringImport = 0
         private(set) var numberOfProgramsThatTimedOutDuringImport = 0
         private(set) var numberOfProgramsThatNeededOneFixupAttempt = 0
@@ -1340,6 +1447,7 @@ public class Fuzzer {
         private(set) var numberOfProgramsThatNeededThreeFixupAttempts = 0
         private(set) var numberOfProgramsRequiringWasmButDisabled = 0
         private(set) var numberOfProgramsRequiringBundlesButDisabled = 0
+        private(set) var convergencePatterns = [String: Int]()
 
         var numberOfProgramsThatNeededFixup: Int {
             assert(Fuzzer.maxProgramImportFixupAttempts == 3)
@@ -1364,6 +1472,10 @@ public class Fuzzer {
             return corpusToImport.removeLast()
         }
 
+        mutating func recordConvergencePattern(_ pattern: String) {
+            convergencePatterns[pattern, default: 0] += 1
+        }
+
         mutating func notifyImportOutcome(_ result: ImportResult, fixupAttempts: Int) {
             switch result {
             case .imported:
@@ -1386,13 +1498,17 @@ public class Fuzzer {
                 numberOfProgramsRequiringBundlesButDisabled += 1
             case .failed(let outcome):
                 switch outcome {
-                case .crashed, .succeeded, .differential:
-                    // This is unexpected so we don't track these.
-                    break
+                case .succeeded:
+                    // The execution succeeded, but the program was not imported (e.g. because it was not interesting).
+                    numberOfProgramsThatExecutedSuccessfullyDuringImport += 1
+                    numberOfProgramsNotImportedBecauseUninteresting += 1
                 case .failed:
                     numberOfProgramsThatFailedDuringImport += 1
                 case .timedOut:
                     numberOfProgramsThatTimedOutDuringImport += 1
+                case .crashed, .differential:
+                    // This is unexpected during corpus import (unless it's a crash/differential corpus), so we don't track these.
+                    break
                 }
             }
         }

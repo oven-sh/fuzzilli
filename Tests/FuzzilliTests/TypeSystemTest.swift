@@ -80,6 +80,16 @@ struct TypeSystemTests {
         #expect(.object(withMethods: ["m1"]) != .object(withMethods: ["m2"]))
         #expect(.object(withMethods: ["m1"]) != .object())
 
+        #expect(.object(withPrivateProperties: ["p1"]) == .object(withPrivateProperties: ["p1"]))
+        #expect(.object(withPrivateProperties: ["p1"]) != .object(withPrivateProperties: ["p2"]))
+        #expect(.object(withPrivateProperties: ["p1"]) != .object())
+        #expect(.object(withPrivateProperties: ["x"]) != .object(withPrivateMethods: ["x"]))
+        #expect(.object(withPrivateProperties: ["x"]) != .object(withProperties: ["x"]))
+        #expect(.object(withPrivateMethods: ["pm1"]) == .object(withPrivateMethods: ["pm1"]))
+        #expect(.object(withPrivateMethods: ["pm1"]) != .object(withPrivateMethods: ["pm2"]))
+        #expect(.object(withPrivateMethods: ["pm1"]) != .object())
+        #expect(.object(withPrivateMethods: ["m1"]) != .object(withMethods: ["m1"]))
+
         #expect(.function() == .function())
         #expect(
             .function([.integer, .rest(.integer)] => .undefined)
@@ -207,6 +217,21 @@ struct TypeSystemTests {
         #expect(o1.MayBe(o2))
         #expect(o2.MayBe(o2))
 
+        #expect(
+            ILType.object(withProperties: ["foo"]).intersection(with: .object(withMethods: ["bar"]))
+                == .object(withProperties: ["foo"], withMethods: ["bar"]))
+        #expect(
+            ILType.object(withProperties: ["foo"]).intersection(
+                with: .object(withProperties: ["bar"]))
+                == .object(withProperties: ["foo", "bar"]))
+        // results in
+        #expect(
+            ILType.object(withProperties: ["foo"], withMethods: [])
+                .MayBe(.object(withProperties: [], withMethods: ["bar"])))
+        #expect(
+            ILType.object(withProperties: ["foo"], withMethods: [])
+                .MayBe(.object(withProperties: ["bar"], withMethods: [])))
+
         for t1 in typeSuite {
             for t2 in typeSuite {
                 // Below tests don't work for .nothing because that
@@ -288,6 +313,20 @@ struct TypeSystemTests {
     }
 
     @Test
+    func testUnionTypesOfMergedTypesSubsumption() {
+        let unionType = (.object() + .function()) | (.function() + .constructor())
+        #expect(unionType.Is(.function()))
+        #expect(unionType.Is(.function() | .integer))
+        #expect(unionType.Is(.object() | .constructor()))
+        #expect(unionType.Is(.object() | .constructor() | .integer))
+        #expect(!unionType.Is(.object()))
+        #expect(!unionType.Is(.object() + .function()))
+        #expect(!unionType.Is(.object() + .constructor()))
+        #expect(!unionType.Is(.constructor()))
+        #expect(!unionType.Is(.function() + .constructor()))
+    }
+
+    @Test
     func testObjectTypeSubsumption() {
         // Verify that object type A >= object type B implies that B has at least
         // the properties and methods of A.
@@ -304,6 +343,9 @@ struct TypeSystemTests {
                 if t1 >= t2 && t2 != .nothing {
                     #expect(t1.properties.isSubset(of: t2.properties))
                     #expect(t1.methods.isSubset(of: t2.methods))
+                    #expect(t1.symbolMethods.isSubset(of: t2.symbolMethods))
+                    #expect(t1.privateProperties.isSubset(of: t2.privateProperties))
+                    #expect(t1.privateMethods.isSubset(of: t2.privateMethods))
                 }
 
                 // The opposite direction holds if the base types are equal and if the groups are compatible.
@@ -311,7 +353,11 @@ struct TypeSystemTests {
                 // properties and methods are a subset.
                 if t1.baseType == t2.baseType && (t1.group == nil || t1.group == t2.group) {
                     if t1.properties.isSubset(of: t2.properties)
-                        && t1.methods.isSubset(of: t2.methods) && t1.wasmType == t2.wasmType
+                        && t1.methods.isSubset(of: t2.methods)
+                        && t1.symbolMethods.isSubset(of: t2.symbolMethods)
+                        && t1.privateProperties.isSubset(of: t2.privateProperties)
+                        && t1.privateMethods.isSubset(of: t2.privateMethods)
+                        && t1.wasmType == t2.wasmType
                     {
                         #expect(t1 >= t2, "\(t1) >= \(t2)")
                     }
@@ -415,13 +461,13 @@ struct TypeSystemTests {
             #expect(fooBazObj & fooObj == fooBazObj)
             #expect(fooBazObj & bazObj == fooBazObj)
 
-            // ... However, the other intersections are empty.
-            #expect(fooObj & barObj == .nothing)
-            #expect(fooObj & bazObj == .nothing)
-            #expect(barObj & bazObj == .nothing)
-            #expect(barObj & fooBazObj == .nothing)
-            #expect(bazObj & fooBarObj == .nothing)
-            #expect(fooBarObj & fooBazObj == .nothing)
+            // Under width subtyping, object intersection is the union of their properties and methods.
+            #expect(fooObj & barObj == fooBarObj)
+            #expect(fooObj & bazObj == fooBazObj)
+            #expect(barObj & bazObj == barObj + bazObj)
+            #expect(barObj & fooBazObj == fooBarObj + bazObj)
+            #expect(bazObj & fooBarObj == fooBarObj + bazObj)
+            #expect(fooBarObj & fooBazObj == fooBarObj + fooBazObj)
 
             // FooBar objects are Foo objects but not every Foo object is a FooBar object. Same for FooBar and Bar objects.
             #expect(fooObj >= fooBarObj)
@@ -491,7 +537,7 @@ struct TypeSystemTests {
         let fooBazObj = ILType.object(withProperties: ["foo", "baz"])
         #expect((fooBarObj | fooBazObj).properties == ["foo"])
         #expect((fooBarObj + fooBazObj).properties == ["foo", "bar", "baz"])
-        #expect((fooBarObj & fooBazObj).properties == [])
+        #expect((fooBarObj & fooBazObj).properties == ["foo", "bar", "baz"])
 
         // Unions of objects with non-objects do not have any definite properties or methods.
         #expect((aObj | .integer).properties == [])
@@ -540,6 +586,82 @@ struct TypeSystemTests {
         #expect(fooBarObj.removing(method: "baz") == fooBarObj)
         #expect(fooBarObj.removing(method: "foo") == barObj)
         #expect(barObj.removing(method: "bar") == object)
+    }
+
+    @Test
+    func testPrivatePropertyTypeTransitions() {
+        let object = ILType.object(ofGroup: "A")
+        let p1Obj = ILType.object(ofGroup: "A", withPrivateProperties: ["p1"])
+        let p2Obj = ILType.object(ofGroup: "A", withPrivateProperties: ["p2"])
+        let p3Obj = ILType.object(ofGroup: "A", withPrivateProperties: ["p3"])
+        let p1p2Obj = ILType.object(ofGroup: "A", withPrivateProperties: ["p1", "p2"])
+        let p1p3Obj = ILType.object(ofGroup: "A", withPrivateProperties: ["p1", "p3"])
+
+        #expect(object.adding(privateProperty: "p1") == p1Obj)
+        #expect(p1Obj.adding(privateProperty: "p2") == p1p2Obj)
+        #expect(p2Obj.adding(privateProperty: "p1") == p1p2Obj)
+        #expect(p1Obj.adding(privateProperty: "p3") == p1p3Obj)
+        #expect(p3Obj.adding(privateProperty: "p1") == p1p3Obj)
+
+        var mutableObj = object
+        mutableObj.add(privateProperty: "p1")
+        #expect(mutableObj == p1Obj)
+        mutableObj.add(privateProperty: "p2")
+        #expect(mutableObj == p1p2Obj)
+    }
+
+    @Test
+    func testPrivateMethodTypeTransitions() {
+        let object = ILType.object(ofGroup: "A")
+        let pm1Obj = ILType.object(ofGroup: "A", withPrivateMethods: ["pm1"])
+        let pm2Obj = ILType.object(ofGroup: "A", withPrivateMethods: ["pm2"])
+        let pm3Obj = ILType.object(ofGroup: "A", withPrivateMethods: ["pm3"])
+        let pm1pm2Obj = ILType.object(ofGroup: "A", withPrivateMethods: ["pm1", "pm2"])
+        let pm1pm3Obj = ILType.object(ofGroup: "A", withPrivateMethods: ["pm1", "pm3"])
+
+        #expect(object.adding(privateMethod: "pm1") == pm1Obj)
+        #expect(pm1Obj.adding(privateMethod: "pm2") == pm1pm2Obj)
+        #expect(pm2Obj.adding(privateMethod: "pm1") == pm1pm2Obj)
+        #expect(pm1Obj.adding(privateMethod: "pm3") == pm1pm3Obj)
+        #expect(pm3Obj.adding(privateMethod: "pm1") == pm1pm3Obj)
+
+        var mutableObj = object
+        mutableObj.add(privateMethod: "pm1")
+        #expect(mutableObj == pm1Obj)
+        mutableObj.add(privateMethod: "pm2")
+        #expect(mutableObj == pm1pm2Obj)
+    }
+
+    @Test
+    func testPrivateMemberUnionAndIntersection() {
+        let obj1 = ILType.object(withPrivateProperties: ["p1", "p2"], withPrivateMethods: ["pm1"])
+        let obj2 = ILType.object(
+            withPrivateProperties: ["p2", "p3"], withPrivateMethods: ["pm1", "pm2"])
+
+        // Union finds the intersection of private members (common shared members)
+        let union = obj1.union(with: obj2)
+        #expect(union.privateProperties == ["p2"])
+        #expect(union.privateMethods == ["pm1"])
+        #expect(union >= obj1)
+        #expect(union >= obj2)
+
+        // Intersection finds the union of private members
+        let intersection = obj1.intersection(with: obj2)
+        #expect(intersection.privateProperties == ["p1", "p2", "p3"])
+        #expect(intersection.privateMethods == ["pm1", "pm2"])
+        #expect(obj1 >= intersection)
+        #expect(obj2 >= intersection)
+
+        // Subsumption
+        let superObj = ILType.object(withPrivateProperties: ["p1"])
+        let subObj = ILType.object(withPrivateProperties: ["p1", "p2"])
+        #expect(superObj >= subObj)
+        #expect(!(subObj >= superObj))
+
+        let superMethodObj = ILType.object(withPrivateMethods: ["pm1"])
+        let subMethodObj = ILType.object(withPrivateMethods: ["pm1", "pm2"])
+        #expect(superMethodObj >= subMethodObj)
+        #expect(!(subMethodObj >= superMethodObj))
     }
 
     @Test
@@ -1266,6 +1388,17 @@ struct TypeSystemTests {
     }
 
     @Test
+    func testNamedIntegers() {
+        let namedA = ILType.namedInteger(ofName: "A")
+        #expect(namedA.Is(.integer))
+        let namedB = ILType.namedInteger(ofName: "B")
+        #expect(namedA | namedB == .integer)
+        #expect(namedA & namedB == .nothing)
+        let objectA = ILType.object(ofGroup: "A", withProperties: ["a"])
+        #expect(namedA & objectA == .nothing)
+    }
+
+    @Test
     func testTypeDescriptions() {
         // Test primitive types
         #expect(ILType.undefined.description == ".undefined")
@@ -1402,6 +1535,13 @@ struct TypeSystemTests {
             elementType: .wasmi32, mutability: false, typeGroupIndex: 0)
         let arrayRef = ILType.wasmIndexRef(arrayDesc, nullability: true)
         #expect(arrayRef.description == ".wasmRef(null Index 0 Array[immutable .wasmi32])")
+        let exactArrayRef = ILType.wasmIndexRef(arrayDesc, nullability: false, isExact: true)
+        #expect(exactArrayRef.description == ".wasmRef(exact Index 0 Array[immutable .wasmi32])")
+        let exactNullableArrayRef = ILType.wasmIndexRef(arrayDesc, nullability: true, isExact: true)
+        #expect(
+            exactNullableArrayRef.description
+                == ".wasmRef(null exact Index 0 Array[immutable .wasmi32])")
+
         let nullableSelfRef = ILType.wasmRef(
             .Index(.init(WasmTypeDescription.selfReference)), nullability: true)
         let structDesc = WasmStructTypeDescription(
@@ -1447,7 +1587,7 @@ struct TypeSystemTests {
         // A generic index type without a type description.
         // These are e.g. used by the element types for arrays and structs inside the operation as
         // the operation doesn't know about the actual type definition inputs.
-        let nullableGenericIndexRef = ILType.wasmRef(.Index(), nullability: true)
+        let nullableGenericIndexRef = ILType.anyIndexRef
         #expect(nullableGenericIndexRef.description == ".wasmRef(null Index)")
         #expect(ILType.anyNonNullableIndexRef.description == ".wasmRef(Index)")
     }
@@ -1487,19 +1627,19 @@ struct TypeSystemTests {
 
         // Test Wasm references.
         #expect(
-            ILType.wasmRef(.Index(), nullability: true)
-                <= ILType.wasmRef(.Index(), nullability: true))
+            ILType.anyIndexRef
+                <= ILType.anyIndexRef)
         #expect(
-            ILType.wasmRef(.Index(), nullability: false)
-                <= ILType.wasmRef(.Index(), nullability: false))
+            ILType.anyNonNullableIndexRef
+                <= ILType.anyNonNullableIndexRef)
         #expect(
-            ILType.wasmRef(.Index(), nullability: false)
-                <= ILType.wasmRef(.Index(), nullability: true))
+            ILType.anyNonNullableIndexRef
+                <= ILType.anyIndexRef)
         #expect(
-            !(ILType.wasmRef(.Index(), nullability: true)
-                <= ILType.wasmRef(.Index(), nullability: false)))
-        #expect(!(ILType.wasmi32 <= ILType.wasmRef(.Index(), nullability: true)))
-        #expect(!(ILType.wasmRef(.Index(), nullability: true) <= ILType.wasmi32))
+            !(ILType.anyIndexRef
+                <= ILType.anyNonNullableIndexRef))
+        #expect(!(ILType.wasmi32 <= ILType.anyIndexRef))
+        #expect(!(ILType.anyIndexRef <= ILType.wasmi32))
         #expect(
             !(ILType.wasmIndexRef(arrayi32Desc, nullability: true)
                 >= ILType.wasmIndexRef(arrayi64Desc, nullability: true)))
@@ -1513,14 +1653,14 @@ struct TypeSystemTests {
             ILType.wasmIndexRef(arrayi32Desc, nullability: true)
                 >= ILType.wasmIndexRef(arrayi32Desc, nullability: false))
         #expect(
-            ILType.wasmRef(.Index(), nullability: true)
+            ILType.anyIndexRef
                 >= ILType.wasmIndexRef(arrayi32Desc, nullability: true))
         #expect(
-            !(ILType.wasmRef(.Index(), nullability: true)
+            !(ILType.anyIndexRef
                 <= ILType.wasmIndexRef(arrayi32Desc, nullability: true)))
 
-        #expect(ILType.wasmRef(.Index(), nullability: true) <= ILType.wasmGenericRef)
-        #expect(!(ILType.wasmGenericRef <= ILType.wasmRef(.Index(), nullability: true)))
+        #expect(ILType.anyIndexRef <= ILType.wasmGenericRef)
+        #expect(!(ILType.wasmGenericRef <= ILType.anyIndexRef))
 
         // Test nullability rules for abstract Wasm types.
         for heapType: WasmAbstractHeapType in WasmAbstractHeapType.allCases {
@@ -1655,6 +1795,37 @@ struct TypeSystemTests {
         #expect(subRefNonNull.intersection(with: subSubRefNonNull) == subSubRefNonNull)
         #expect(subRefNullable.intersection(with: subRefNonNull) == subRefNonNull)
         #expect(subRefNonNull.intersection(with: subSubRefNullable) == subSubRefNonNull)
+
+        let exactBase = ILType.wasmIndexRef(baseDesc, nullability: true, isExact: true)
+        let exactSub = ILType.wasmIndexRef(subDesc, nullability: true, isExact: true)
+        let inexactBase = baseRefNullable
+        let inexactSub = subRefNullable
+
+        // Identical Types
+        #expect(!(exactBase >= inexactBase))
+        #expect(inexactBase >= exactBase)
+        #expect(exactBase >= exactBase)
+
+        #expect(exactBase.union(with: inexactBase) == inexactBase)
+        #expect(inexactBase.union(with: exactBase) == inexactBase)
+        #expect(exactBase.union(with: exactBase) == exactBase)
+
+        #expect(exactBase.intersection(with: inexactBase) == exactBase)
+        #expect(inexactBase.intersection(with: exactBase) == exactBase)
+        #expect(exactBase.intersection(with: exactBase) == exactBase)
+
+        // Strict Subtypes
+        #expect(!(exactBase >= inexactSub))
+        #expect(inexactBase >= exactSub)
+        #expect(!(exactBase >= exactSub))
+
+        #expect(exactBase.union(with: inexactSub) == inexactBase)
+        #expect(inexactBase.union(with: exactSub) == inexactBase)
+        #expect(exactBase.union(with: exactSub) == inexactBase)
+
+        #expect(exactBase.intersection(with: exactSub) == .nothing)
+        #expect(exactBase.intersection(with: inexactSub) == .nothing)
+        #expect(inexactBase.intersection(with: exactSub) == exactSub)
     }
 
     @Test
@@ -1758,10 +1929,43 @@ struct TypeSystemTests {
     }
 
     @Test
+    func testWasmAnyExactIndexRefSubsumptionRules() {
+        let anyIndexRef = ILType.anyIndexRef
+        let anyExactIndexRef = ILType.anyExactIndexRef
+
+        #expect(anyIndexRef.subsumes(anyExactIndexRef))
+        #expect(!anyExactIndexRef.subsumes(anyIndexRef))
+
+        #expect(anyIndexRef.union(with: anyExactIndexRef) == anyIndexRef)
+        #expect(anyIndexRef.intersection(with: anyExactIndexRef) == anyExactIndexRef)
+
+        let structDesc = WasmStructTypeDescription(
+            fields: [], typeGroupIndex: 0)
+        let concreteRef = ILType.wasmIndexRef(structDesc, nullability: true, isExact: false)
+        let concreteExactRef = ILType.wasmIndexRef(structDesc, nullability: true, isExact: true)
+
+        #expect(anyIndexRef.subsumes(concreteRef))
+        #expect(anyIndexRef.subsumes(concreteExactRef))
+
+        #expect(anyExactIndexRef.subsumes(concreteExactRef))
+        #expect(!anyExactIndexRef.subsumes(concreteRef))
+
+        #expect(anyIndexRef.union(with: concreteRef) == anyIndexRef)
+        #expect(anyIndexRef.union(with: concreteExactRef) == anyIndexRef)
+        #expect(anyExactIndexRef.union(with: concreteExactRef) == anyExactIndexRef)
+        #expect(anyExactIndexRef.union(with: concreteRef) == anyIndexRef)
+
+        #expect(anyIndexRef.intersection(with: concreteRef) == concreteRef)
+        #expect(anyIndexRef.intersection(with: concreteExactRef) == concreteExactRef)
+        #expect(anyExactIndexRef.intersection(with: concreteExactRef) == concreteExactRef)
+        #expect(anyExactIndexRef.intersection(with: concreteRef) == concreteExactRef)
+    }
+
+    @Test
     func testWasmAbstractHeapTypeSubsumptionRules() {
         let groupAny: [WasmAbstractHeapType] =
             [.WasmAny, .WasmEq, .WasmI31, .WasmStruct, .WasmArray, .WasmNone]
-        let groupExtern: [WasmAbstractHeapType] = [.WasmExtern, .WasmNoExtern]
+        let groupExtern: [WasmAbstractHeapType] = [.WasmExtern, .WasmJSString, .WasmNoExtern]
         let groupFunc: [WasmAbstractHeapType] = [.WasmFunc, .WasmNoFunc]
         let groupExn: [WasmAbstractHeapType] = [.WasmExn, .WasmNoExn]
         let allGroups = [groupAny, groupExtern, groupFunc, groupExn]
@@ -1861,19 +2065,28 @@ struct TypeSystemTests {
         #expect(ILType.unboundFunction(receiver: .object()).Is(.unboundFunction()))
         #expect(!ILType.unboundFunction().Is(.unboundFunction(receiver: .object())))
         #expect(
-            ILType.unboundFunction(receiver: .object()).Is(.unboundFunction(receiver: .jsAnything)))
+            ILType.unboundFunction(receiver: .jsAnything).Is(.unboundFunction(receiver: .object())))
         #expect(
-            !ILType.unboundFunction(receiver: .jsAnything).Is(.unboundFunction(receiver: .object()))
+            !ILType.unboundFunction(receiver: .object()).Is(.unboundFunction(receiver: .jsAnything))
         )
 
         let receiverNil = ILType.unboundFunction()
         let receiverObject = ILType.unboundFunction(receiver: .object())
         let receiverArray = ILType.unboundFunction(receiver: .object(ofGroup: "Array"))
+        let receiverDate = ILType.unboundFunction(receiver: .object(ofGroup: "Date"))
+        let receiverRegExp = ILType.unboundFunction(receiver: .object(ofGroup: "RegExp"))
+
+        #expect(receiverObject.Is(receiverArray))
+        #expect(!receiverArray.Is(receiverObject))
 
         #expect(receiverArray.union(with: receiverObject) == receiverArray)
         #expect(receiverObject.union(with: receiverArray) == receiverArray)
         #expect(receiverNil.union(with: receiverObject) == receiverNil)
         #expect(receiverObject.union(with: receiverNil) == receiverNil)
+        #expect(receiverDate.union(with: receiverRegExp) == receiverNil)
+        #expect(receiverRegExp.union(with: receiverDate) == receiverNil)
+        #expect(receiverDate.union(with: receiverRegExp).receiver == nil)
+
         #expect(receiverObject.intersection(with: receiverArray) == receiverObject)
         #expect(receiverArray.intersection(with: receiverObject) == receiverObject)
         #expect(receiverNil.intersection(with: receiverObject) == receiverObject)
@@ -1901,6 +2114,7 @@ struct TypeSystemTests {
         #expect(!(intIterable >= strIterable))
         #expect(objIterable >= objIterable2)
         #expect(!(objIterable2 >= objIterable))
+        #expect(factory(.jsAnything) == baseInstance)
 
         #expect(intIterable | strIterable == multiIterable)
         #expect(baseInstance | strIterable == baseInstance)
@@ -2043,6 +2257,13 @@ struct TypeSystemTests {
             .object(ofGroup: "B", withProperties: ["foo"], withMethods: ["m1"]),
             .object(ofGroup: "B", withProperties: ["foo", "bar"], withMethods: ["m1"]),
             .object(ofGroup: "B", withProperties: ["foo", "bar"], withMethods: ["m1", "m2"]),
+            .object(withPrivateProperties: ["p1"]),
+            .object(withPrivateProperties: ["p1", "p2"]),
+            .object(withPrivateMethods: ["pm1"]),
+            .object(withPrivateMethods: ["pm1", "pm2"]),
+            .object(withPrivateProperties: ["p1"], withPrivateMethods: ["pm1"]),
+            .object(withProperties: ["foo"], withPrivateProperties: ["p1"]),
+            .object(ofGroup: "A", withPrivateProperties: ["p1"]),
             .function(),
             .function([.string] => .string),
             .function([.string] => .jsAnything),
@@ -2100,4 +2321,101 @@ struct TypeSystemTests {
             .wasmMemory(limits: Limits(min: 10)),
             .wasmMemory(limits: Limits(min: 10, max: 20)),
         ] + ILType.allNullableAbstractWasmRefTypes()
+
+    @Test
+    func testPromiseIsThenable() {
+        #expect(ILType.jsPromise().Is(ILType.thenable))
+    }
+
+    @Test
+    func testPromiseTypeOperations() {
+        let pInt = ILType.jsPromise(resolvingTo: .integer)
+        let pString = ILType.jsPromise(resolvingTo: .string)
+        let obj = ILType.object()
+
+        // union(Promise<.integer>, .string) -> resolves to .jsAnything (because union drops Promise info and creates an .object | .string type, which might be anything when awaited)
+        let u1 = pInt.union(with: .string)
+        #expect(u1.promiseResolvingTo == .jsAnything)
+
+        // union(Promise<.integer>, Promise<.string>) == Promise<.integer | .string>
+        let u2 = pInt.union(with: pString)
+        #expect(u2 == .jsPromise(resolvingTo: .integer | .string))
+
+        // intersection(Promise<.integer>, .object) == Promise<.integer> because .object is a supertype
+        let i1 = pInt.intersection(with: obj)
+        #expect(i1 == pInt)
+
+        // intersection(Promise<.integer>, Promise<.string>) == .nothing (since .integer intersect .string is .nothing)
+        let i2 = pInt.intersection(with: pString)
+        #expect(i2 == .nothing)
+
+        // intersection(Promise<.integer>, .string | .object) -> resolving type preserved because .object is a supertype (Promise<.integer> cannot be a .string)
+        let i3 = pInt.intersection(with: .string | obj)
+        #expect(i3 == .jsPromise(resolvingTo: .integer))
+
+        // intersection(Promise<.integer>, {someRandomProperty: ...}) -> Promise<.integer> with someRandomProperty
+        let someObj = ILType.object(withProperties: ["someRandomProperty"])
+        let i4 = pInt.intersection(with: someObj)
+        #expect(
+            i4 == ILType.jsPromise(resolvingTo: .integer, withProperties: ["someRandomProperty"]))
+
+        // intersect(.thenable, Promise<.integer>) -> Promise<.integer>
+        let thenable = ILType.object(withMethods: ["then"])
+        let i5 = thenable.intersection(with: pInt)
+        #expect(i5 == pInt)
+
+        // Several tests for intersect(<something not thenable>, Promise<.integer>):
+
+        // primitive -> .nothing
+        let i6 = ILType.string.intersection(with: pInt)
+        #expect(i6 == .nothing)
+
+        // Object with other methods (might still be a Promise or a thenable)
+        let otherObj1 = ILType.object(withMethods: ["foo"])
+        let i7 = otherObj1.intersection(with: pInt)
+        #expect(i7.promiseResolvingTo == .integer)
+        #expect(i7.methods.contains("foo"))
+
+        // Object with other properties (might still be a Promise or a thenable)
+        let otherObj2 = ILType.object(withProperties: ["foo"])
+        let i8 = otherObj2.intersection(with: pInt)
+        #expect(i8 == .jsPromise(resolvingTo: .integer, withProperties: ["foo"]))
+
+        // Generic Object (not .thenable but has no methods, so it is supertype)
+        // Resolving type is preserved.
+        let i9 = obj.intersection(with: pInt)
+        #expect(i9 == pInt)
+    }
+
+    @Test
+    func testPromiseSubtyping() {
+        let pInt = ILType.jsPromise(resolvingTo: .integer)
+        let pString = ILType.jsPromise(resolvingTo: .string)
+        let pAnything = ILType.jsPromise(resolvingTo: .jsAnything)
+
+        // Promise<.integer> should NOT subsume Promise<.string>
+        #expect(!pInt.subsumes(pString))
+        #expect(!pInt.Is(pString))
+        #expect(!pString.subsumes(pInt))
+        #expect(!pString.Is(pInt))
+
+        // Promise<.jsAnything> SHOULD subsume Promise<.integer>
+        #expect(pAnything.subsumes(pInt))
+        #expect(pInt.Is(pAnything))
+
+        // Promise<.integer> should NOT subsume Promise<.jsAnything>
+        #expect(!pInt.subsumes(pAnything))
+        #expect(!pAnything.Is(pInt))
+
+        // Promise<.integer> SHOULD subsume Promise<.integer>
+        #expect(pInt.subsumes(pInt))
+        #expect(pInt.Is(pInt))
+
+        let pIntOrString = ILType.jsPromise(resolvingTo: .integer | .string)
+        #expect(pIntOrString.subsumes(pInt))
+        #expect(pIntOrString.subsumes(pString))
+        #expect(!pInt.subsumes(pIntOrString))
+        #expect(!pString.subsumes(pIntOrString))
+    }
+
 }

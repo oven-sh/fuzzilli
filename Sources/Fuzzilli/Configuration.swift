@@ -59,13 +59,6 @@ public struct Configuration {
     ///   - Check that known-safe crashes are ignored (with `.shouldNotCrash`)
     public let startupTests: [(String, ExpectedStartupTestResult)]
 
-    /// The fraction of instruction to keep from the original program when minimizing.
-    /// This setting is useful to avoid "over-minimization", which can negatively impact the fuzzer's
-    /// performance if program features are removed that could later be mutated to trigger new
-    /// interesting behaviour or crashes.
-    /// See Minimizer.swift for the exact algorithm used to implement this.
-    public let minimizationLimit: Double
-
     /// When receiving programs from another node during distributed fuzzing, discard this percentage of samples.
     ///
     /// Dropout can provide a way to make multiple instances less "similar" to each
@@ -81,6 +74,9 @@ public struct Configuration {
     /// is recorded as well as the exact list of mutations and code generations, as well
     /// as the reductions performed by the minimizer.
     public let enableInspection: Bool
+
+    /// Whether to track convergence patterns during corpus import.
+    public let trackConvergencePatterns: Bool
 
     /// Determines if we want to have a static corpus, i.e. we don't add any
     /// programs to the corpus even if they find new coverage.
@@ -116,13 +112,15 @@ public struct Configuration {
     // Whether the fuzzer generates bundles containing multiple JavaScript scripts or modules.
     public let generateBundle: Bool
 
+    // Wasm experimental features
+    public let enableCustomDescriptors: Bool
+
     public init(
         arguments: [String] = [],
         timeout: UInt32 = 250,
         skipStartupTests: Bool = false,
         logLevel: LogLevel = .info,
         startupTests: [(String, ExpectedStartupTestResult)] = [],
-        minimizationLimit: Double = 0.0,
         dropoutRate: Double = 0,
         enableDiagnostics: Bool = false,
         enableInspection: Bool = false,
@@ -135,22 +133,25 @@ public struct Configuration {
         corpusGenerationIterations: Int = 100,
         forDifferentialFuzzing: Bool = false,
         instanceId: Int = -1,
-        dumplingEnabled: Bool = false
+        dumplingEnabled: Bool = false,
+        enableCustomDescriptors: Bool = false,
+        trackConvergencePatterns: Bool = false
     ) {
         self.arguments = arguments
         self.timeout = timeout
         self.logLevel = logLevel
         self.startupTests = startupTests
         self.dropoutRate = dropoutRate
-        self.minimizationLimit = minimizationLimit
         self.enableDiagnostics = enableDiagnostics
         // If we have enabledDiagnostics we should also enable inspection.
         self.enableInspection = enableDiagnostics || enableInspection
+        self.trackConvergencePatterns = trackConvergencePatterns
         self.staticCorpus = staticCorpus
         self.tag = tag
         self.isWasmEnabled = isWasmEnabled
         self.wasmOptPath = wasmOptPath
         self.generateBundle = generateBundle
+        self.enableCustomDescriptors = enableCustomDescriptors
         self.storagePath = storagePath
         self.corpusGenerationIterations = corpusGenerationIterations
         self.forDifferentialFuzzing = forDifferentialFuzzing

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import OrderedCollections
+
 // MARK: - Bun Type Definitions
 
 public extension ILType {
@@ -522,11 +524,11 @@ public let bunRequestGroup = ObjectGroup(
     ],
     methods: [
         "clone":       [] => .bunRequest,
-        "arrayBuffer": [] => .jsPromise,
-        "blob":        [] => .jsPromise,
-        "formData":    [] => .jsPromise,
-        "json":        [] => .jsPromise,
-        "text":        [] => .jsPromise,
+        "arrayBuffer": [] => .jsPromise(),
+        "blob":        [] => .jsPromise(),
+        "formData":    [] => .jsPromise(),
+        "json":        [] => .jsPromise(),
+        "text":        [] => .jsPromise(),
     ]
 )
 
@@ -546,11 +548,11 @@ public let bunResponseGroup = ObjectGroup(
     ],
     methods: [
         "clone":       [] => .bunResponse,
-        "arrayBuffer": [] => .jsPromise,
-        "blob":        [] => .jsPromise,
-        "formData":    [] => .jsPromise,
-        "json":        [] => .jsPromise,
-        "text":        [] => .jsPromise,
+        "arrayBuffer": [] => .jsPromise(),
+        "blob":        [] => .jsPromise(),
+        "formData":    [] => .jsPromise(),
+        "json":        [] => .jsPromise(),
+        "text":        [] => .jsPromise(),
     ]
 )
 
@@ -716,8 +718,8 @@ public let bunBlobGroup = ObjectGroup(
     methods: [
         "slice":       [.opt(.integer), .opt(.integer), .opt(.string)] => .bunBlob,
         "stream":      [] => .object(),
-        "text":        [] => .jsPromise,
-        "arrayBuffer": [] => .jsPromise,
+        "text":        [] => .jsPromise(),
+        "arrayBuffer": [] => .jsPromise(),
     ]
 )
 
@@ -758,12 +760,12 @@ public let bunFileGroup = ObjectGroup(
         "name": .string,
     ],
     methods: [
-        "text":        [] => .jsPromise,
-        "json":        [] => .jsPromise,
-        "arrayBuffer": [] => .jsPromise,
+        "text":        [] => .jsPromise(),
+        "json":        [] => .jsPromise(),
+        "arrayBuffer": [] => .jsPromise(),
         "stream":      [] => .jsAnything,
         "slice":       [.opt(.integer), .opt(.integer)] => .bunFile,
-        "exists":      [] => .jsPromise,
+        "exists":      [] => .jsPromise(),
         "writer":      [.opt(.object())] => .jsAnything,
     ]
 )
@@ -778,7 +780,7 @@ public let bunSubprocessGroup = ObjectGroup(
         "stdin":      .jsAnything,
         "stdout":     .jsAnything,
         "stderr":     .jsAnything,
-        "exited":     .jsPromise,
+        "exited":     .jsPromise(),
     ],
     methods: [
         "kill":  [.opt(.integer)] => .undefined,
@@ -819,8 +821,8 @@ public let bunArchiveGroup = ObjectGroup(
         "count": .integer,
     ],
     methods: [
-        "extract":  [.opt(.string)] => .jsPromise,
-        "readFile": [.string] => .jsPromise,
+        "extract":  [.opt(.string)] => .jsPromise(),
+        "readFile": [.string] => .jsPromise(),
         "entries":  [] => .jsAnything,
         "close":    [] => .undefined,
     ]
@@ -916,13 +918,13 @@ public let bunS3ClientGroup = ObjectGroup(
     properties: [:],
     methods: [
         "file":    [.string] => .jsAnything,
-        "write":   [.string, .jsAnything] => .jsPromise,
-        "exists":  [.string] => .jsPromise,
-        "delete":  [.string] => .jsPromise,
-        "size":    [.string] => .jsPromise,
-        "stat":    [.string] => .jsPromise,
+        "write":   [.string, .jsAnything] => .jsPromise(),
+        "exists":  [.string] => .jsPromise(),
+        "delete":  [.string] => .jsPromise(),
+        "size":    [.string] => .jsPromise(),
+        "stat":    [.string] => .jsPromise(),
         "presign": [.string, .opt(.object())] => .string,
-        "unlink":  [.string] => .jsPromise,
+        "unlink":  [.string] => .jsPromise(),
     ]
 )
 
@@ -932,15 +934,15 @@ public let bunRedisClientGroup = ObjectGroup(
     instanceType: .bunRedisClient,
     properties: [:],
     methods: [
-        "get":       [.string] => .jsPromise,
-        "set":       [.string, .jsAnything] => .jsPromise,
-        "del":       [.string] => .jsPromise,
-        "exists":    [.string] => .jsPromise,
-        "keys":      [.string] => .jsPromise,
-        "ping":      [] => .jsPromise,
-        "quit":      [] => .jsPromise,
-        "subscribe": [.string, .function()] => .jsPromise,
-        "publish":   [.string, .string] => .jsPromise,
+        "get":       [.string] => .jsPromise(),
+        "set":       [.string, .jsAnything] => .jsPromise(),
+        "del":       [.string] => .jsPromise(),
+        "exists":    [.string] => .jsPromise(),
+        "keys":      [.string] => .jsPromise(),
+        "ping":      [] => .jsPromise(),
+        "quit":      [] => .jsPromise(),
+        "subscribe": [.string, .function()] => .jsPromise(),
+        "publish":   [.string, .string] => .jsPromise(),
     ]
 )
 
@@ -1407,7 +1409,7 @@ public let BunFetchGenerator = CodeGenerator("BunFetchGenerator") { b in
 
         // Shuffle the order of properties
         let shuffledKeys = optionsDict.keys.shuffled()
-        var shuffledOptions: [String: Variable] = [:]
+        var shuffledOptions = OrderedDictionary<String, Variable>()
         for key in shuffledKeys {
             shuffledOptions[key] = optionsDict[key]
         }
@@ -1473,7 +1475,7 @@ public let BunFetchGenerator = CodeGenerator("BunFetchGenerator") { b in
 
     // Shuffle the order of properties by recreating dict with shuffled keys
     let shuffledKeys = responseOptionsDict.keys.shuffled()
-    var shuffledOptions: [String: Variable] = [:]
+    var shuffledOptions = OrderedDictionary<String, Variable>()
     for key in shuffledKeys {
         shuffledOptions[key] = responseOptionsDict[key]
     }
@@ -1783,7 +1785,7 @@ let bunProfile = Profile(
         "Buffer"            : .constructor([.jsAnything] => .bunBuffer),
 
         // Web APIs
-        "fetch"             : .function([.jsAnything, .opt(.object())] => .jsPromise),
+        "fetch"             : .function([.jsAnything, .opt(.object())] => .jsPromise()),
         "Headers"           : .constructor([.opt(.jsAnything)] => .bunHeaders),
         "Request"           : .constructor([.jsAnything, .opt(.object())] => .bunRequest),
         "Response"          : .constructor([.opt(.jsAnything), .opt(.object())] => .bunResponse),
@@ -1874,8 +1876,8 @@ let bunProfile = Profile(
         "Bun.resolveSync"   : .function([.string, .string] => .string),
 
         // Promise inspection
-        "Bun.peek"          : .function([.plain(.jsPromise)] => .jsAnything),
-        "Bun.peek.status"   : .function([.plain(.jsPromise)] => .string),
+        "Bun.peek"          : .function([.plain(.jsPromise())] => .jsAnything),
+        "Bun.peek.status"   : .function([.plain(.jsPromise())] => .string),
 
         // Password hashing
         "Bun.password"      : .bunPasswordHasher,
@@ -1893,8 +1895,8 @@ let bunProfile = Profile(
         "Bun.zstdDecompressSync" : .function([.jsAnything] => .object()),
 
         // Compression (async)
-        "Bun.zstdCompress"   : .function([.jsAnything, .opt(.object())] => .jsPromise),
-        "Bun.zstdDecompress" : .function([.jsAnything] => .jsPromise),
+        "Bun.zstdCompress"   : .function([.jsAnything, .opt(.object())] => .jsPromise()),
+        "Bun.zstdDecompress" : .function([.jsAnything] => .jsPromise()),
 
         // Bun metadata properties
         "Bun.version"       : .string,
@@ -1923,17 +1925,17 @@ let bunProfile = Profile(
 
         // File I/O
         "Bun.file"          : .function([.string] => .bunFile),
-        "Bun.write"         : .function([.string, .jsAnything] => .jsPromise),
+        "Bun.write"         : .function([.string, .jsAnything] => .jsPromise()),
 
         // Process spawning
         "Bun.spawn"         : .function([.object()] => .bunSubprocess),
         "Bun.spawnSync"     : .function([.object()] => .bunSyncSubprocess),
 
         // Async sleep
-        "Bun.sleep"         : .function([.number] => .jsPromise),
+        "Bun.sleep"         : .function([.number] => .jsPromise()),
 
         // Resolve
-        "Bun.resolve"       : .function([.string, .string] => .jsPromise),
+        "Bun.resolve"       : .function([.string, .string] => .jsPromise()),
 
         // DNS
         "Bun.dns"           : .object(withMethods: ["lookup"]),
@@ -1943,8 +1945,8 @@ let bunProfile = Profile(
 
         // Server / networking
         "Bun.serve"         : .function([.object()] => .bunServer),
-        "Bun.fetch"         : .function([.string, .opt(.object())] => .jsPromise),
-        "Bun.build"         : .function([.object()] => .jsPromise),
+        "Bun.fetch"         : .function([.string, .opt(.object())] => .jsPromise()),
+        "Bun.build"         : .function([.object()] => .jsPromise()),
         "Bun.mmap"          : .function([.string] => .object()),
         "Bun.udpSocket"     : .function([.object()] => .jsAnything),
 
@@ -1954,12 +1956,12 @@ let bunProfile = Profile(
         "Bun.SQL"           : .function([.opt(.string)] => .jsAnything),
 
         // Stream conversions
-        "Bun.readableStreamToArray"       : .function([.jsAnything] => .jsPromise),
-        "Bun.readableStreamToArrayBuffer" : .function([.jsAnything] => .jsPromise),
-        "Bun.readableStreamToText"        : .function([.jsAnything] => .jsPromise),
-        "Bun.readableStreamToJSON"        : .function([.jsAnything] => .jsPromise),
-        "Bun.readableStreamToBlob"        : .function([.jsAnything] => .jsPromise),
-        "Bun.readableStreamToBytes"       : .function([.jsAnything] => .jsPromise),
+        "Bun.readableStreamToArray"       : .function([.jsAnything] => .jsPromise()),
+        "Bun.readableStreamToArrayBuffer" : .function([.jsAnything] => .jsPromise()),
+        "Bun.readableStreamToText"        : .function([.jsAnything] => .jsPromise()),
+        "Bun.readableStreamToJSON"        : .function([.jsAnything] => .jsPromise()),
+        "Bun.readableStreamToBlob"        : .function([.jsAnything] => .jsPromise()),
+        "Bun.readableStreamToBytes"       : .function([.jsAnything] => .jsPromise()),
 
         // Markdown
         "Bun.markdown"      : .object(withMethods: ["html", "render", "ansi"]),
@@ -1977,7 +1979,7 @@ let bunProfile = Profile(
         "Bun.RedisClient"   : .constructor([.opt(.string)] => .bunRedisClient),
 
         // Shell
-        "Bun.$"             : .function([.string] => .jsPromise),
+        "Bun.$"             : .function([.string] => .jsPromise()),
 
         // Fuzzilli integration
         "fuzzilli"          : .function([.string, .jsAnything] => .undefined),
